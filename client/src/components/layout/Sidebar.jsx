@@ -6,6 +6,7 @@ const NAV = [
   { id: 'incidents', path: '/incidents', icon: 'incidents', label: 'Incidents' },
   { id: 'investigations', path: '/investigations', icon: 'investigation', label: 'Investigations' },
   { id: 'capas', path: '/capas', icon: 'capa', label: 'CAPA' },
+  { id: 'assets', path: '/assets', icon: 'gear', label: 'Assets' },
   { id: 'reports', path: '/reports', icon: 'reports', label: 'Reports' },
   { id: 'sites', path: '/admin/sites', icon: 'factory', label: 'Sites' },
 ];
