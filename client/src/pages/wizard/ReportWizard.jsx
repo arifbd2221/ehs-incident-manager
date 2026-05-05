@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createIncident, uploadAttachments } from '../../api/incidents';
 import { getSites } from '../../api/users';
+import { listAssets } from '../../api/assets';
 import Icon from '../../components/shared/Icon';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import InjuryForm from './types/InjuryForm';
@@ -246,6 +247,8 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const [type, setType] = useState('injury');
   const [title, setTitle] = useState('');
   const [siteId, setSiteId] = useState('');
+  const [assetId, setAssetId] = useState('');
+  const [assets, setAssets] = useState([]);
   const [area, setArea] = useState('');
   const [datetime, setDatetime] = useState(new Date().toISOString().slice(0, 16));
   const [description, setDescription] = useState('');
@@ -263,6 +266,22 @@ export default function ReportWizard({ onClose, onSubmit }) {
   useEffect(() => {
     getSites().then(data => { setSites(data); if (data.length > 0) setSiteId(String(data[0].id)); });
   }, []);
+
+  // Reload assets when the site changes; reset asset selection
+  useEffect(() => {
+    if (!siteId) { setAssets([]); setAssetId(''); return; }
+    listAssets({ site_id: siteId, active: 1, limit: 200 })
+      .then(d => setAssets(d.assets || []))
+      .catch(() => setAssets([]));
+    setAssetId('');
+  }, [siteId]);
+
+  // When an asset is picked and area is empty, pre-fill area from asset location
+  useEffect(() => {
+    if (!assetId) return;
+    const a = assets.find(x => String(x.id) === String(assetId));
+    if (a && !area && a.location_description) setArea(a.location_description);
+  }, [assetId, assets]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -309,6 +328,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
       const incident = await createIncident({
         title: title.trim(), type, description,
         incident_datetime: datetime, site_id: Number(siteId),
+        asset_id: assetId ? Number(assetId) : null,
         area, likelihood, consequence, type_data: typeData,
       });
       if (files.length > 0 && incident?.id) {
@@ -451,6 +471,21 @@ export default function ReportWizard({ onClose, onSubmit }) {
                       <label className="label">Area / location</label>
                       <input className="input" value={area} onChange={e => setArea(e.target.value)} placeholder="e.g. Lab 2, Workshop B" />
                     </div>
+                  </div>
+
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label className="label">
+                      Asset (optional)
+                      {assets.length === 0 && siteId && <span className="helper" style={{ marginLeft: 8, fontSize: 11 }}>No assets registered for this site yet</span>}
+                    </label>
+                    <select className="select" value={assetId} onChange={e => setAssetId(e.target.value)} disabled={assets.length === 0}>
+                      <option value="">— No specific asset —</option>
+                      {assets.map(a => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} · {a.asset_type}{a.location_description ? ` · ${a.location_description}` : ''}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -615,6 +650,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
                       <span className="lbl">Location</span>
                       <span className="val">{siteName}{area ? ` — ${area}` : ''}</span>
                     </div>
+                    {assetId && (
+                      <div className="wiz-review-row">
+                        <span className="lbl">Asset</span>
+                        <span className="val">{assets.find(a => String(a.id) === String(assetId))?.name || '—'}</span>
+                      </div>
+                    )}
                     <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 8, paddingTop: 8 }}>
                       <div className="wiz-review-row">
                         <span className="lbl">Severity</span>
