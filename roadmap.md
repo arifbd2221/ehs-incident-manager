@@ -61,6 +61,45 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
   - FE editor modal: commit `cab263c`
   - FE dynamic form + display: commit `da0e3fe`
 
+## Phase 3 — Productionization (user-driven backlog, captured 2026-05-06)
+
+User observations after clicking through the Phase 2 build. Treat as an
+actual app, not a hackathon. Order shifts based on user direction; nothing
+here ships without explicit go-ahead.
+
+### Navigation / pages
+- [ ] **P3-N1** **Site details page** — /sites/:id with assets, incidents, work_hours, regulatory subs scoped to that site.
+- [ ] **P3-N2** **Document folder structure** — folders/sub-folders for documents (currently a flat list keyed by `document_type` only).
+- [ ] **P3-N3** **Document preview** — inline PDF/image preview without leaving the page.
+
+### Cross-entity linking + history
+- [ ] **P3-L1** **Back-tracking everywhere** — "where is this referenced?" on inspections / CAPAs / incidents / assets / docs. The `entity_links` table already exists; need consistent surfacing.
+- [ ] **P3-L2** **Media on investigations** — attachments card on investigation detail (parallel to the incident one).
+
+### Audit
+- [ ] **P3-A1** **Proper activity logging** — wider coverage (every mutation writes a row), consistent shape, filterable by entity / actor / action / timestamp window.
+
+### Org / multi-tenancy
+- [ ] **P3-O1** **Concept of organization** — proper multi-tenant model. Today there's a single org row in the seed; needs sign-up, invite flows, switching, isolation tests.
+- [ ] **P3-O2** **Org + site members management** — see who belongs where, move users between sites, role changes with audit, invite-by-email.
+
+### AI assistance
+- [ ] **P3-AI1** **Auto-fill investigation (AI + manual modes)** — five-Why suggestions, root-cause prompts, contributing-factors checklist, recommended CAPAs.
+- [ ] **P3-AI2** **Prompt-driven autofill** — system asks targeted questions ("Was the press locked out?"), user answers free-text, AI normalizes into structured fields.
+
+### Operational features
+- [ ] **P3-OP1** **Asset maintenance** — schedules, due dates, last-done, escalations to CAPA when overdue.
+- [ ] **P3-OP2** **Inspection module** — full inspection lifecycle (templates → schedule → run → findings → CAPAs).
+- [ ] **P3-OP3** **Templates** — reusable templates for inspections, investigations, CAPAs, and the incident wizard.
+- [ ] **P3-OP4** **Scheduling** — recurring inspections, calibrations, training, walkthroughs; calendar view + reminders.
+
+### Onboarding + data import
+- [ ] **P3-OB1** **User onboarding flow** — first-login walkthrough, sample data toggle, role-tailored "what to do first".
+- [ ] **P3-OB2** **CSV import** — users, sites, assets, work_hours, etc. With dry-run + error report.
+- [ ] **P3-OB3** **Document versioning** — supersede a doc with a new file while keeping the audit trail of prior revisions.
+
+---
+
 ## Backlog — productionization UX (treat this as an actual app, not just demo polish)
 
 These came out of the post-Wave-4 review. The shared theme is **"the incident record lives — investigators keep it accurate as facts emerge, every change is auditable."** OSHA 1904.33 explicitly expects amendments within the 5-year retention window, so none of this is a recordkeeping risk as long as the activity log captures who/what/when.
