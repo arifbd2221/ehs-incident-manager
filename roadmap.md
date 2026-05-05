@@ -107,7 +107,7 @@ These came out of the post-Wave-4 review. The shared theme is **"the incident re
 ### Editable Incident Detail (one cohesive bundle)
 
 - [x] **UX-A** **Post-report attachments** — add + delete with audit. Photos surface hours/days later; capturing them at submission only is a real gap. — commit `ba14826`
-- [ ] **UX-B** **Inline notes on activity timeline** — `POST /incidents/:id/note` writes one `activity_log` row with `action='note'` + free text. Renders in the existing timeline UI. Single biggest investigation-quality win — turns a passive system log into an actual investigation tool ("Spoke with site mgr — no PPE was issued").
+- [x] **UX-B** **Inline notes on activity timeline** — `POST /incidents/:id/note` + composer + distinct amber styling for note rows + Cmd/Ctrl+Enter to post + optimistic prepend. Commit `31f8be7`.
 - [ ] **UX-C** **Editable description / area / department / body parts** on the detail page. PATCH already supports all of these BE-side; UI is what's missing. Use field-level edit affordances rather than a giant edit-mode toggle.
 - [ ] **UX-D** **Add/edit witnesses post-creation** — witnesses surface late. Currently captured at submission only. Small route + a witnesses card with add/edit/remove.
 - [ ] **UX-E** **Severity override UI** — BE already wires `severity_override` / `severity_override_by` / `severity_override_reason` and writes a `severity_overridden` activity_log entry. UI is missing — needs a small modal: new severity, required reason, confirm. Triage often needs to bump severity after seeing photos.
