@@ -87,6 +87,7 @@ router.post('/', async (req, res, next) => {
   const {
     title, type, description, incident_datetime, site_id, area, specific_location,
     department, shift, likelihood, consequence, type_data, immediate_actions_taken,
+    asset_id,
     witnesses: witnessData,
   } = req.body;
 
@@ -95,6 +96,18 @@ router.post('/', async (req, res, next) => {
   }
 
   const orgId = req.user.org_id;
+
+  // Validate asset belongs to user's org + matches the chosen site (if provided)
+  let resolvedAssetId = null;
+  if (asset_id) {
+    const a = db.prepare('SELECT id, site_id FROM assets WHERE id = ? AND org_id = ? AND active = 1').get(asset_id, orgId);
+    if (!a) return res.status(404).json({ error: 'Asset not found in your organization' });
+    if (a.site_id !== Number(site_id)) {
+      return res.status(400).json({ error: 'Asset does not belong to the chosen site' });
+    }
+    resolvedAssetId = a.id;
+  }
+
   const incidentNumber = nextIncidentNumber();
   const { severity, track } = calculateSeverityAndTrack(likelihood, consequence, type);
 
@@ -108,17 +121,17 @@ router.post('/', async (req, res, next) => {
   const result = db.prepare(`
     INSERT INTO incidents (
       incident_number, org_id, site_id, title, type, description, incident_datetime,
-      area, specific_location, department, shift,
+      area, specific_location, department, shift, asset_id,
       severity, likelihood, consequence, track,
       status, reported_by,
       osha_recordable, osha_recordability_type,
       riddor_reportable, riddor_category,
       type_data, immediate_actions_taken,
       closed_at, closed_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     incidentNumber, orgId, site_id, title, type, description || '', incident_datetime,
-    area || null, specific_location || null, department || null, shift || null,
+    area || null, specific_location || null, department || null, shift || null, resolvedAssetId,
     severity, likelihood ?? null, consequence ?? null, track,
     status, req.user.id,
     osha.recordable ? 1 : 0, osha.type,

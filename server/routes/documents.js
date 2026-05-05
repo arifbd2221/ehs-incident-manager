@@ -1,0 +1,187 @@
+// server/routes/documents.js — standalone document library.
+//
+// Distinct from /api/attachments (which attaches files directly to a single
+// incident/investigation/CAPA via the `attachments` table). Documents are
+// org-level reusable assets — SDS sheets, manuals, policies, photos —
+// that can be linked to multiple entities via entity_links.
+//
+// GET    /api/documents                  list (filters: document_type, active, q)
+// GET    /api/documents/:id              detail (includes linked_entities)
+// POST   /api/documents                  multipart upload + metadata (elevated)
+// PATCH  /api/documents/:id              update metadata (elevated)
+// DELETE /api/documents/:id              soft-delete (elevated)
+// GET    /api/documents/:id/download     stream the underlying file
+
+import { Router } from 'express';
+import { join } from 'path';
+import { unlinkSync } from 'fs';
+import db from '../db/connection.js';
+import { upload, uploadDir } from '../middleware/upload.js';
+import { nextDocumentNumber } from '../services/numbering.js';
+import { listLinksTouching, LINKABLE_TYPES } from '../services/entity_links.js';
+
+const router = Router();
+
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
+
+const DOCUMENT_TYPES = new Set(['sds', 'manual', 'policy', 'photo', 'video', 'log', 'certificate', 'other']);
+
+const PARENT_TABLES = {
+  incident: 'incidents',
+  investigation: 'investigations',
+  capa: 'capas',
+  asset: 'assets',
+  document: 'documents',
+};
+
+router.get('/', (req, res) => {
+  const { document_type, active, q, page = 1, limit = 100 } = req.query;
+  const orgId = req.user.org_id;
+
+  const where = ['d.org_id = ?'];
+  const params = [orgId];
+
+  if (document_type) { where.push('d.document_type = ?'); params.push(document_type); }
+  if (active !== undefined && active !== '') { where.push('d.active = ?'); params.push(Number(active) ? 1 : 0); }
+  if (q) {
+    where.push('(d.name LIKE ? OR d.document_number LIKE ?)');
+    const like = `%${q}%`;
+    params.push(like, like);
+  }
+
+  const whereClause = where.join(' AND ');
+  const offset = (Number(page) - 1) * Number(limit);
+
+  const total = db.prepare(`SELECT COUNT(*) as c FROM documents d WHERE ${whereClause}`).get(...params).c;
+  const documents = db.prepare(`
+    SELECT d.*, u.name as uploaded_by_name, u.initials as uploaded_by_initials
+    FROM documents d
+    LEFT JOIN users u ON u.id = d.uploaded_by
+    WHERE ${whereClause}
+    ORDER BY d.active DESC, d.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, Number(limit), offset);
+
+  res.json({ documents, total, page: Number(page), limit: Number(limit) });
+});
+
+router.get('/:id', (req, res) => {
+  const doc = db.prepare(`
+    SELECT d.*, u.name as uploaded_by_name, u.initials as uploaded_by_initials
+    FROM documents d
+    LEFT JOIN users u ON u.id = d.uploaded_by
+    WHERE d.id = ? AND d.org_id = ?
+  `).get(req.params.id, req.user.org_id);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+  // Linked entities (any direction) — annotated with display info.
+  const rawLinks = listLinksTouching({ entity_type: 'document', entity_id: doc.id });
+  const linked = [];
+  for (const l of rawLinks) {
+    const otherType = l.is_source ? l.target_type : l.source_type;
+    const otherId = l.is_source ? l.target_id : l.source_id;
+    const table = PARENT_TABLES[otherType];
+    if (!table) continue;
+    const labelCol = otherType === 'incident' ? 'incident_number'
+      : otherType === 'investigation' ? 'investigation_number'
+      : otherType === 'capa' ? 'capa_number'
+      : otherType === 'asset' ? 'asset_number'
+      : 'name';
+    const titleCol = otherType === 'document' ? null : 'title';
+    const cols = [labelCol === 'name' ? 'name' : `${labelCol} as label`, titleCol].filter(Boolean).join(', ');
+    const row = db.prepare(`SELECT id, ${cols}, org_id FROM ${table} WHERE id = ?`).get(otherId);
+    if (row && row.org_id === req.user.org_id) {
+      linked.push({
+        link_id: l.id,
+        link_role: l.link_role,
+        type: otherType,
+        id: row.id,
+        label: row.label || row.name,
+        title: row.title || null,
+      });
+    }
+  }
+  doc.linked_entities = linked;
+  res.json(doc);
+});
+
+router.post('/', upload.single('file'), (req, res) => {
+  if (!isElevated(req.user)) {
+    if (req.file) try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
+    return res.status(403).json({ error: 'Worker role cannot upload documents.' });
+  }
+
+  if (!req.file) return res.status(400).json({ error: 'A file is required' });
+  const { name, document_type } = req.body;
+
+  if (!document_type || !DOCUMENT_TYPES.has(document_type)) {
+    try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
+    return res.status(400).json({ error: `document_type must be one of: ${[...DOCUMENT_TYPES].join(', ')}` });
+  }
+
+  const number = nextDocumentNumber();
+  const finalName = (name && name.trim()) || req.file.originalname;
+  const fileUrl = `/uploads/${req.file.filename}`;
+
+  const result = db.prepare(`
+    INSERT INTO documents (document_number, org_id, name, document_type, file_url, stored_filename, mime_type, size_bytes, uploaded_by, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `).run(number, req.user.org_id, finalName, document_type, fileUrl, req.file.filename, req.file.mimetype, req.file.size, req.user.id);
+
+  const doc = db.prepare(`
+    SELECT d.*, u.name as uploaded_by_name, u.initials as uploaded_by_initials
+    FROM documents d LEFT JOIN users u ON u.id = d.uploaded_by
+    WHERE d.id = ?
+  `).get(result.lastInsertRowid);
+  res.status(201).json(doc);
+});
+
+router.patch('/:id', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot edit documents.' });
+  const doc = db.prepare('SELECT * FROM documents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+  const updatable = ['name', 'document_type', 'active'];
+  const sets = [];
+  const params = [];
+  for (const key of updatable) {
+    if (req.body[key] !== undefined) {
+      if (key === 'document_type' && !DOCUMENT_TYPES.has(req.body[key])) {
+        return res.status(400).json({ error: `document_type must be one of: ${[...DOCUMENT_TYPES].join(', ')}` });
+      }
+      sets.push(`${key} = ?`);
+      params.push(key === 'active' ? (req.body[key] ? 1 : 0) : req.body[key]);
+    }
+  }
+  if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
+  sets.push("updated_at = datetime('now')");
+  params.push(doc.id);
+  db.prepare(`UPDATE documents SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  const updated = db.prepare(`
+    SELECT d.*, u.name as uploaded_by_name, u.initials as uploaded_by_initials
+    FROM documents d LEFT JOIN users u ON u.id = d.uploaded_by
+    WHERE d.id = ?
+  `).get(doc.id);
+  res.json(updated);
+});
+
+router.delete('/:id', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot delete documents.' });
+  const doc = db.prepare('SELECT * FROM documents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+  // Soft-delete; keep the file on disk so historical links don't break.
+  db.prepare("UPDATE documents SET active = 0, updated_at = datetime('now') WHERE id = ?").run(doc.id);
+  res.json({ success: true, soft_deleted: true });
+});
+
+router.get('/:id/download', (req, res) => {
+  const doc = db.prepare('SELECT * FROM documents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  if (!doc.stored_filename) return res.status(404).json({ error: 'No file on disk for this document' });
+  res.download(join(uploadDir, doc.stored_filename), doc.name || doc.stored_filename);
+});
+
+export default router;

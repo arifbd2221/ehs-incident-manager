@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
 import { nextInvestigationNumber, nextCapaNumber } from '../services/numbering.js';
+import { listLinksTouching } from '../services/entity_links.js';
 
 const router = Router();
 
@@ -76,6 +77,27 @@ router.get('/:id', (req, res) => {
   inv.five_whys = db.prepare('SELECT * FROM five_whys WHERE investigation_id = ? ORDER BY level').all(inv.id);
 
   inv.attachments = db.prepare("SELECT * FROM attachments WHERE entity_type = 'investigation' AND entity_id = ?").all(inv.id);
+
+  // Linked documents from the document library (any direction via entity_links)
+  const docLinks = listLinksTouching({ entity_type: 'investigation', entity_id: inv.id })
+    .filter(l => (l.is_source ? l.target_type : l.source_type) === 'document');
+  if (docLinks.length > 0) {
+    const ids = docLinks.map(l => l.is_source ? l.target_id : l.source_id);
+    const placeholders = ids.map(() => '?').join(',');
+    const docs = db.prepare(`
+      SELECT d.*, u.name as uploaded_by_name, u.initials as uploaded_by_initials
+      FROM documents d LEFT JOIN users u ON u.id = d.uploaded_by
+      WHERE d.id IN (${placeholders}) AND d.org_id = ?
+    `).all(...ids, req.user.org_id);
+    const byId = new Map(docs.map(d => [d.id, d]));
+    inv.linked_documents = docLinks.map(l => {
+      const docId = l.is_source ? l.target_id : l.source_id;
+      const doc = byId.get(docId);
+      return doc ? { ...doc, link_id: l.id, link_role: l.link_role } : null;
+    }).filter(Boolean);
+  } else {
+    inv.linked_documents = [];
+  }
 
   inv.activity = db.prepare(`
     SELECT al.*, u.name as user_name, u.initials as user_initials

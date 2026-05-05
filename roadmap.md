@@ -5,22 +5,24 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 ## Wave 1 — Foundation
 
 - [x] **T1.1** Migration runner + `_schema_migrations` table (commit `c7d0be4`)
-- [x] **T1.2** Bump multer → 2.x + install `@anthropic-ai/sdk` (local, uncommitted)
-- [x] **T1.3** Migration 001 — 9 new tables + 25 risk_matrix rows (local, uncommitted)
-- [x] **T1.4** Migration 002 — incident column adds + `reported_by` rebuild (local, uncommitted)
-- [x] **T1.5** Migration 003 — capa polymorphic + `investigation_id` rebuild + CHECK (local, uncommitted)
+- [x] **T1.2** Bump multer → 2.x + install `@anthropic-ai/sdk` (commit `6f56829`)
+- [x] **T1.3** Migration 001 — 9 new tables + 25 risk_matrix rows (commit `d3a4a27`)
+- [x] **T1.4** Migration 002 — incident column adds + `reported_by` rebuild (commit `c2c2494`)
+- [x] **T1.5** Migration 003 — capa polymorphic + `investigation_id` rebuild + CHECK (commit `07944db`)
 
 ## Wave 2 — Site / Asset / Document / EntityLink
 
-- [x] **T2.1** Site CRUD (`POST/PATCH/DELETE /api/sites`) (local, uncommitted)
-- [x] **F2.1** Sites admin page + `api/sites.js` + Sidebar nav (local, uncommitted)
-- [ ] **T2.2** Asset CRUD
-- [ ] **F2.2** Assets module pages + nav + routing
-- [ ] **T2.3** EntityLink endpoints + service + asset-detail enrichment
-- [ ] **F2.3** Site → Area → Asset cascade in wizard (drop `specific_location`)
-- [ ] **T2.4** Document module (CRUD + multipart upload + linking)
-- [ ] **F2.4** Documents library page + upload modal + nav
-- [ ] **F2.5** Document linking on investigation evidence
+- [x] **T2.1** Site CRUD (`POST/PATCH/DELETE /api/sites`) (commit `6a881c1`)
+- [x] **F2.1** Sites admin page + `api/sites.js` + Sidebar nav (commit `d4786a8`)
+- [x] **T2.2** Asset CRUD (commit `982c39c`)
+- [x] **F2.2** Assets module pages + nav + routing (commit `907a3b4`)
+- [x] **T2.2b** Custom asset categories (`/api/asset-categories` + migration 004 + auto-seed trigger) (commit `982c39c`)
+- [x] **F2.2b** Asset detail rebuild (tabs, edit-in-place, archive/restore actions) + category picker w/ "+ New" inline (commit `907a3b4`)
+- [x] **T2.3** EntityLink endpoints + service + asset-detail enrichment (commit `982c39c`)
+- [x] **F2.3** Site → Asset cascade in wizard + incidents POST accepts `asset_id`
+- [x] **T2.4** Document module (CRUD + multipart upload + linking via entity_links)
+- [x] **F2.4** Documents library page + upload modal + nav
+- [x] **F2.5** Document linking on investigation evidence + investigation GET includes `linked_documents`
 
 ## Wave 3 — Incident extensions
 
@@ -53,8 +55,16 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 - [ ] **F6.1** 300A sign-off button on Reports page
 - [ ] **F6.2** End-to-end demo path walkthrough in browser
 
+## Wave 7 — Deferred enhancements (post-demo / time permitting)
+
+- [ ] **E7.1** **Custom fields per asset type** — SafetyCulture-style. New `asset_category_fields` table (field_name, field_type, required, options, order). `assets.custom_fields` JSON. UI: define fields when creating/editing a category; render fields when creating an asset of that type; display on detail page. Enables asset-type-specific data capture (Forklift → capacity/power-source; Chemical → CAS-number/SDS-link; etc.)
+
+## Known issues (investigate later, not blocking)
+
+- [ ] **BUG-001** "Failed to create category" error when using the inline `+ Add new category…` flow in the AssetsList modal. Backend `POST /api/asset-categories` works via curl (returns 201 + `{id, name, ...}`); confirmed reactivation + 409 paths. Likely candidates: (a) Vite proxy not forwarding `Origin` header on POST while a JWT is in localStorage, (b) async state race after `refreshCategories()` blocks the dropdown selection, (c) duplicate check vs default seeded categories — user may have hit "Machine"/"Vehicle" which already exist and the 409 message isn't surfacing in the modal correctly. Repro path: Assets → New asset → Type dropdown → "+ Add new category…" → enter name → Save. Check browser devtools → Network tab for the actual response. Patch in the next polish pass alongside the design-token alignment.
+
 ---
 
-**Progress: 1 / 32 committed · 7 / 32 done locally** (Wave 1 + Sites BE/FE in sync)
+**Progress: Wave 2 complete · 19 / 32 done locally** (Wave 1 + entire Wave 2). Next: **Wave 3 — Incident extensions** (T3.1 service foundations + body map wiring + anonymous + stop-work + recordability).
 
 See `plan-phase-2.md` for full design rationale, acceptance criteria, risks, and migration strategy.
