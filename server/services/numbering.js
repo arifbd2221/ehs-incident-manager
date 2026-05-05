@@ -34,3 +34,21 @@ export function nextRiddorNumber() {
   const next = (row?.maxn || 0) + 1;
   return `RDR-${year}-${String(next).padStart(3, '0')}`;
 }
+
+export function nextAssetNumber() {
+  const year = new Date().getFullYear();
+  const row = db.prepare(
+    "SELECT MAX(CAST(SUBSTR(asset_number, -5) AS INTEGER)) as maxn FROM assets WHERE asset_number LIKE ?"
+  ).get(`AST-${year}-%`);
+  const next = (row?.maxn || 0) + 1;
+  return `AST-${year}-${String(next).padStart(5, '0')}`;
+}
+
+export function nextDocumentNumber() {
+  const year = new Date().getFullYear();
+  const row = db.prepare(
+    "SELECT MAX(CAST(SUBSTR(document_number, -5) AS INTEGER)) as maxn FROM documents WHERE document_number LIKE ?"
+  ).get(`DOC-${year}-%`);
+  const next = (row?.maxn || 0) + 1;
+  return `DOC-${year}-${String(next).padStart(5, '0')}`;
+}
