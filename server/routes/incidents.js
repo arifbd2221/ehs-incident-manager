@@ -409,14 +409,19 @@ router.post('/voice-extract', async (req, res, next) => {
       userId: req.user.id,
     });
 
+    // entity_type='system' (pre-incident, no incident_id yet); the
+    // extraction_id is captured in metadata. The activity_log CHECK only
+    // allows incident/investigation/capa/system, so 'system' is the right
+    // bucket for a transcription event that hasn't tied to an incident yet.
     db.prepare(`
       INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
-      VALUES (?, 'voice_extraction', ?, 'extracted', ?, ?, ?)
+      VALUES (?, 'system', NULL, 'voice_extracted', ?, ?, ?)
     `).run(
-      req.user.org_id, result.extraction_id,
+      req.user.org_id,
       `voice transcript extracted (${result.transcript_hash.slice(0, 8)}…)`,
       req.user.id,
       JSON.stringify({
+        extraction_id: result.extraction_id,
         transcript_hash: result.transcript_hash,
         extracted_type: result.extracted_fields.type,
         missing_required: result.missing_required,
