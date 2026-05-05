@@ -5,12 +5,16 @@ import { nextInvestigationNumber, nextCapaNumber } from '../services/numbering.j
 const router = Router();
 
 router.get('/', (req, res) => {
-  const { status, site_id, page = 1, limit = 50 } = req.query;
+  const { status, site_id, search, page = 1, limit = 50 } = req.query;
   const orgId = req.user.org_id;
 
   let where = ['inv.org_id = ?'];
   let params = [orgId];
 
+  if (search) {
+    where.push("(inv.investigation_number LIKE ? OR i.title LIKE ? OR inv.findings LIKE ? OR inv.root_cause_summary LIKE ?)");
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+  }
   if (status) { where.push('inv.status = ?'); params.push(status); }
   if (site_id) { where.push('i.site_id = ?'); params.push(Number(site_id)); }
 

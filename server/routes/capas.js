@@ -4,12 +4,16 @@ import db from '../db/connection.js';
 const router = Router();
 
 router.get('/', (req, res) => {
-  const { status, owner_id, overdue, page = 1, limit = 50 } = req.query;
+  const { status, owner_id, overdue, search, page = 1, limit = 50 } = req.query;
   const orgId = req.user.org_id;
 
   let where = ['c.org_id = ?'];
   let params = [orgId];
 
+  if (search) {
+    where.push("(c.capa_number LIKE ? OR c.title LIKE ? OR c.description LIKE ?)");
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
   if (status) { where.push('c.status = ?'); params.push(status); }
   if (owner_id) { where.push('c.owner_id = ?'); params.push(Number(owner_id)); }
   if (overdue === '1') { where.push("c.due_date < datetime('now') AND c.status NOT IN ('closed')"); }
