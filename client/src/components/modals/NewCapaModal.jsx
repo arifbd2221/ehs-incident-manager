@@ -20,6 +20,11 @@ const todayPlus = (days) => {
   return d.toISOString().slice(0, 10);
 };
 
+// Severity → priority mapping for auto-fill from a selected incident.
+// Loosely tracks the routing palette: S1/S2 → urgent CAPA, S3 → high signal,
+// S4/S5 → routine. The user can override before submit.
+const PRIORITY_FROM_SEVERITY = { 1: 'critical', 2: 'critical', 3: 'high', 4: 'medium', 5: 'low' };
+
 export default function NewCapaModal({ onCancel, onCreated }) {
   const [source, setSource] = useState('proactive');
   const [users, setUsers] = useState([]);
@@ -56,6 +61,24 @@ export default function NewCapaModal({ onCancel, onCreated }) {
       (i.title || '').toLowerCase().includes(q)
     ).slice(0, 25);
   }, [incidents, incidentSearch]);
+
+  const selectedIncident = useMemo(
+    () => incidents.find(i => String(i.id) === String(incidentId)) || null,
+    [incidents, incidentId],
+  );
+
+  // Auto-fill from the selected incident. Replaces title/description/priority
+  // each time the user picks a different incident (predictable for demos —
+  // no hidden "did you edit this?" tracking). Also reflects the selection
+  // back into the search field so the chip shows what was picked even after
+  // a re-render.
+  useEffect(() => {
+    if (!selectedIncident) return;
+    setTitle(`Address: ${selectedIncident.title}`);
+    setDescription(selectedIncident.description || '');
+    setPriority(PRIORITY_FROM_SEVERITY[selectedIncident.severity] || 'medium');
+    setIncidentSearch(`${selectedIncident.incident_number} · ${selectedIncident.title}`);
+  }, [selectedIncident]);
 
   const canSubmit = (() => {
     if (!title.trim() || !ownerId || !verifierId || !dueDate) return false;
@@ -132,25 +155,49 @@ export default function NewCapaModal({ onCancel, onCreated }) {
           {source === 'incident' && (
             <div className="field">
               <label className="label">Incident <span className="req">*</span></label>
-              <input
-                className="input"
-                placeholder="Search by number or title"
-                value={incidentSearch}
-                onChange={e => setIncidentSearch(e.target.value)}
-              />
-              <select
-                className="select"
-                style={{ marginTop: 8 }}
-                value={incidentId}
-                onChange={e => setIncidentId(e.target.value)}
-              >
-                <option value="">— select an incident —</option>
-                {filteredIncidents.map(i => (
-                  <option key={i.id} value={i.id}>
-                    {i.incident_number} · {i.title} · Sev {i.severity}
-                  </option>
-                ))}
-              </select>
+              {selectedIncident ? (
+                <div className="ncap-inc-chip">
+                  <div className="ncap-inc-chip-icon"><Icon name="incidents" size={14}/></div>
+                  <div className="ncap-inc-chip-body">
+                    <div className="ncap-inc-chip-num">{selectedIncident.incident_number}</div>
+                    <div className="ncap-inc-chip-title">{selectedIncident.title}</div>
+                    <div className="ncap-inc-chip-meta">
+                      Sev {selectedIncident.severity} · Track {selectedIncident.track}
+                      {selectedIncident.site_name ? ` · ${selectedIncident.site_name}` : ''}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="ncap-inc-chip-clear"
+                    onClick={() => { setIncidentId(''); setIncidentSearch(''); }}
+                    title="Pick a different incident"
+                  >
+                    <Icon name="close" size={14}/>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    className="input"
+                    placeholder="Search by number or title"
+                    value={incidentSearch}
+                    onChange={e => setIncidentSearch(e.target.value)}
+                  />
+                  <select
+                    className="select"
+                    style={{ marginTop: 8 }}
+                    value={incidentId}
+                    onChange={e => setIncidentId(e.target.value)}
+                  >
+                    <option value="">— select an incident —</option>
+                    {filteredIncidents.map(i => (
+                      <option key={i.id} value={i.id}>
+                        {i.incident_number} · {i.title} · Sev {i.severity}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
           )}
 

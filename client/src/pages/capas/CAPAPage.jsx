@@ -278,11 +278,23 @@ export default function CAPAPage() {
                       <div className="capa-kcard-source">
                         {c.source_type === 'proactive' ? (
                           <><Icon name="leaf" size={11}/>Proactive</>
-                        ) : c.source_type === 'incident' ? (
-                          <><Icon name="incidents" size={11}/>From <b>{c.incident_number}</b></>
-                        ) : (
-                          <><Icon name="investigation" size={11}/>From <b>{c.investigation_number}</b></>
-                        )}
+                        ) : c.source_type === 'incident' && c.incident_id ? (
+                          <>
+                            <Icon name="incidents" size={11}/>From{' '}
+                            <a
+                              className="capa-kcard-source-link"
+                              onClick={e => { e.stopPropagation(); navigate(`/incidents/${c.incident_id}`); }}
+                            >{c.incident_number}</a>
+                          </>
+                        ) : c.investigation_id ? (
+                          <>
+                            <Icon name="investigation" size={11}/>From{' '}
+                            <a
+                              className="capa-kcard-source-link"
+                              onClick={e => { e.stopPropagation(); navigate(`/investigations/${c.investigation_id}`); }}
+                            >{c.investigation_number}</a>
+                          </>
+                        ) : null}
                       </div>
                       <div className="capa-kcard-progress">
                         <div className="capa-kcard-progress-head">
@@ -332,9 +344,19 @@ export default function CAPAPage() {
                 </span>
               </span>
               <span className="capa-list-ref">
-                {c.source_type === 'proactive' ? 'Proactive'
-                  : c.source_type === 'incident' ? c.incident_number
-                  : c.investigation_number}
+                {c.source_type === 'proactive' ? (
+                  'Proactive'
+                ) : c.source_type === 'incident' && c.incident_id ? (
+                  <a
+                    className="capa-list-source-link"
+                    onClick={e => { e.stopPropagation(); navigate(`/incidents/${c.incident_id}`); }}
+                  >{c.incident_number}</a>
+                ) : c.investigation_id ? (
+                  <a
+                    className="capa-list-source-link"
+                    onClick={e => { e.stopPropagation(); navigate(`/investigations/${c.investigation_id}`); }}
+                  >{c.investigation_number}</a>
+                ) : '—'}
               </span>
               <span><span className="capa-kcard-av av-owner" style={{ width: 24, height: 24, fontSize: 9 }}>{c.owner_initials}</span></span>
               <span><span className="capa-kcard-av av-verifier" style={{ width: 24, height: 24, fontSize: 9, marginLeft: 0 }}>{c.verifier_initials}</span></span>
