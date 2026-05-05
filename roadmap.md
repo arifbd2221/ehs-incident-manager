@@ -54,9 +54,12 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 - [x] **F6.1** 300A sign-off button on Reports page — commit `511dab9`
 - [ ] **F6.2** End-to-end demo path walkthrough in browser — *manual; run `SEED_FORCE=1 node db/seed.js`, then click through the 10 beats per plan-phase-2.md §5*
 
-## Wave 7 — Deferred enhancements (post-demo / time permitting)
+## Wave 7 — Deferred enhancements
 
-- [ ] **E7.1** **Custom fields per asset type** — SafetyCulture-style. New `asset_category_fields` table (field_name, field_type, required, options, order). `assets.custom_fields` JSON. UI: define fields when creating/editing a category; render fields when creating an asset of that type; display on detail page.
+- [x] **E7.1** **Custom fields per asset type** — SafetyCulture-style. Migration 005 + asset_category_fields table + assets.custom_fields JSON + CRUD endpoints + validation hook + FE category-fields editor + dynamic form rendering on asset create/edit + display card on detail.
+  - BE: commit `d4d4b2b`
+  - FE editor modal: commit `cab263c`
+  - FE dynamic form + display: commit `da0e3fe`
 
 ## Backlog — productionization UX (treat this as an actual app, not just demo polish)
 
