@@ -104,10 +104,21 @@ router.post('/', (req, res) => {
     return res.status(403).json({ error: 'Worker role cannot create assets.' });
   }
 
-  const { site_id, name, location_description, serial_number, description } = req.body;
+  const { site_id, name, location_description, serial_number, description, display_id } = req.body;
 
   if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
   if (!site_id) return res.status(400).json({ error: 'site_id is required' });
+  if (!display_id || !display_id.trim()) {
+    return res.status(400).json({ error: 'display_id (unique identifier) is required' });
+  }
+
+  // Per-org uniqueness for the user-controlled identifier. The DB has a
+  // partial unique index too, but failing here gives a friendlier message.
+  const dupe = db.prepare('SELECT id FROM assets WHERE org_id = ? AND display_id = ?')
+    .get(req.user.org_id, display_id.trim());
+  if (dupe) {
+    return res.status(409).json({ error: `Another asset already uses identifier "${display_id.trim()}"` });
+  }
 
   const cat = resolveCategory(req.user.org_id, req.body);
   if (cat.error) return res.status(400).json({ error: cat.error });
@@ -130,10 +141,10 @@ router.post('/', (req, res) => {
 
   const number = nextAssetNumber();
   const result = db.prepare(`
-    INSERT INTO assets (asset_number, org_id, site_id, name, asset_type, asset_category_id, location_description, serial_number, description, custom_fields, active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    INSERT INTO assets (asset_number, display_id, org_id, site_id, name, asset_type, asset_category_id, location_description, serial_number, description, custom_fields, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
   `).run(
-    number, req.user.org_id, site_id, name.trim(),
+    number, display_id.trim(), req.user.org_id, site_id, name.trim(),
     cat.asset_type, cat.asset_category_id,
     location_description || null, serial_number || null, description || null,
     customFieldsJson,
@@ -161,6 +172,20 @@ router.patch('/:id', (req, res) => {
   const updatable = ['name', 'location_description', 'serial_number', 'description', 'site_id', 'active'];
   const sets = [];
   const params = [];
+
+  // display_id: required field, but we only validate it if the caller is
+  // changing it. Empty string would un-set the identifier, which we reject.
+  if (req.body.display_id !== undefined) {
+    const newId = String(req.body.display_id || '').trim();
+    if (!newId) return res.status(400).json({ error: 'display_id (unique identifier) cannot be empty' });
+    if (newId !== asset.display_id) {
+      const dupe = db.prepare('SELECT id FROM assets WHERE org_id = ? AND display_id = ? AND id != ?')
+        .get(req.user.org_id, newId, asset.id);
+      if (dupe) return res.status(409).json({ error: `Another asset already uses identifier "${newId}"` });
+    }
+    sets.push('display_id = ?');
+    params.push(newId);
+  }
 
   for (const key of updatable) {
     if (req.body[key] !== undefined) {
