@@ -235,7 +235,12 @@
   letter-spacing: 0.03em;
 }
 .inv-kflag.kf-riddor { background: #fef2f2; color: #dc2626; }
+.inv-kflag.kf-riddor .kf-dot { animation: dotBlink 1.2s ease-in-out infinite; }
 .inv-kflag.kf-capa { background: #fffbeb; color: #d97706; }
+.inv-kflag.kf-capa .kf-dot {
+  --dot-glow: rgba(217, 119, 6, 0.4);
+  animation: dotPulse 2.5s infinite;
+}
 .inv-kflag .kf-dot {
   width: 5px;
   height: 5px;
@@ -333,11 +338,22 @@
   border-radius: 50%;
 }
 .inv-list-lane.ln-pending { background: #f3f4f6; color: #6b7280; }
-.inv-list-lane.ln-pending .ln-dot { background: #9ca3af; }
+.inv-list-lane.ln-pending .ln-dot {
+  background: #9ca3af;
+  animation: dotBreathe 2.5s ease-in-out infinite;
+}
 .inv-list-lane.ln-progress { background: #eff6ff; color: #2563eb; }
-.inv-list-lane.ln-progress .ln-dot { background: #2563eb; }
+.inv-list-lane.ln-progress .ln-dot {
+  background: #2563eb;
+  --dot-glow: rgba(37, 99, 235, 0.4);
+  animation: dotPulse 2s infinite;
+}
 .inv-list-lane.ln-capa { background: #fffbeb; color: #d97706; }
-.inv-list-lane.ln-capa .ln-dot { background: #d97706; }
+.inv-list-lane.ln-capa .ln-dot {
+  background: #d97706;
+  --dot-glow: rgba(217, 119, 6, 0.4);
+  animation: dotPulse 2.5s infinite;
+}
 .inv-list-lane.ln-closed { background: #f0fdf4; color: #16a34a; }
 .inv-list-lane.ln-closed .ln-dot { background: #16a34a; }
 
@@ -842,7 +858,14 @@
   text-transform: uppercase;
 }
 .invd-capa-status.cs-open { background: #eff6ff; color: #2563eb; }
+.invd-capa-status.cs-open .cs-dot {
+  --dot-glow: rgba(37, 99, 235, 0.4);
+  animation: dotPulse 2s infinite;
+}
 .invd-capa-status.cs-verify { background: #fffbeb; color: #d97706; }
+.invd-capa-status.cs-verify .cs-dot {
+  animation: dotBreathe 2.5s ease-in-out infinite;
+}
 .invd-capa-status.cs-closed { background: #f0fdf4; color: #16a34a; }
 .invd-capa-status .cs-dot {
   width: 5px;

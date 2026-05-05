@@ -406,6 +406,21 @@ body {
   white-space: nowrap;
 }
 .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* Shared status-dot animations — used by incidents, investigations, CAPAs, profile */
+@keyframes dotPulse {
+  0% { box-shadow: 0 0 0 0 var(--dot-glow); }
+  70% { box-shadow: 0 0 0 5px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes dotBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+@keyframes dotBreathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.7); opacity: 0.5; }
+}
 .pill-success { background: var(--sds-success-bg); color: var(--sds-success); }
 .pill-warn { background: var(--sds-warning-bg); color: var(--sds-warning); }
 .pill-err { background: var(--sds-error-bg); color: var(--sds-error); }
@@ -1127,6 +1142,8 @@ body {
 .prof-active-dot {
   display: inline-block; width: 8px; height: 8px; border-radius: 50%;
   background: #22c55e; margin-right: 6px; vertical-align: middle;
+  --dot-glow: rgba(34, 197, 94, 0.4);
+  animation: dotPulse 2s infinite;
 }
 .prof-fields { display: flex; flex-direction: column; gap: 12px; }
 .prof-field label {

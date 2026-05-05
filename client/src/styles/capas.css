@@ -387,6 +387,9 @@
   text-transform: uppercase;
 }
 .capa-kcard-flag.kf-overdue { background: #fef2f2; color: #dc2626; }
+.capa-kcard-flag.kf-overdue .kf-dot {
+  animation: dotBlink 1.2s ease-in-out infinite;
+}
 .capa-kcard-flag .kf-dot {
   width: 5px; height: 5px; border-radius: 50%;
   background: currentColor;
@@ -406,8 +409,19 @@
   background: currentColor;
 }
 .capa-kcard-lane.kl-pending { background: #f3f4f6; color: #6b7280; }
+.capa-kcard-lane.kl-pending .kl-dot {
+  animation: dotBreathe 2.5s ease-in-out infinite;
+}
 .capa-kcard-lane.kl-progress { background: #eff6ff; color: #2563eb; }
+.capa-kcard-lane.kl-progress .kl-dot {
+  --dot-glow: rgba(37, 99, 235, 0.4);
+  animation: dotPulse 2s infinite;
+}
 .capa-kcard-lane.kl-verify { background: #fffbeb; color: #d97706; }
+.capa-kcard-lane.kl-verify .kl-dot {
+  --dot-glow: rgba(217, 119, 6, 0.4);
+  animation: dotPulse 2.5s infinite;
+}
 .capa-kcard-lane.kl-closed { background: #f0fdf4; color: #16a34a; }
 
 /* ---- LIST VIEW ---- */

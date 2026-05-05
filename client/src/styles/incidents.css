@@ -386,20 +386,26 @@
 .inc-card-status.st-new { background: #f0fdf4; color: #16a34a; }
 .inc-card-status.st-new .st-dot {
   background: #16a34a;
-  box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4);
-  animation: statusPulse 2s infinite;
-}
-@keyframes statusPulse {
-  0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4); }
-  70% { box-shadow: 0 0 0 5px rgba(22, 163, 74, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+  --dot-glow: rgba(22, 163, 74, 0.4);
+  animation: dotPulse 2s infinite;
 }
 .inc-card-status.st-investigating { background: #eff6ff; color: #2563eb; }
-.inc-card-status.st-investigating .st-dot { background: #2563eb; }
+.inc-card-status.st-investigating .st-dot {
+  background: #2563eb;
+  --dot-glow: rgba(37, 99, 235, 0.4);
+  animation: dotPulse 2s infinite;
+}
 .inc-card-status.st-triage { background: #fefce8; color: #ca8a04; }
-.inc-card-status.st-triage .st-dot { background: #ca8a04; }
+.inc-card-status.st-triage .st-dot {
+  background: #ca8a04;
+  animation: dotBreathe 2.5s ease-in-out infinite;
+}
 .inc-card-status.st-capa { background: #fdf4ff; color: #a855f7; }
-.inc-card-status.st-capa .st-dot { background: #a855f7; }
+.inc-card-status.st-capa .st-dot {
+  background: #a855f7;
+  --dot-glow: rgba(168, 85, 247, 0.4);
+  animation: dotPulse 2.5s infinite;
+}
 .inc-card-status.st-closed { background: #f3f4f6; color: #6b7280; }
 .inc-card-status.st-closed .st-dot { background: #9ca3af; }
 
