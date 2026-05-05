@@ -28,9 +28,9 @@ export default function Sidebar() {
         </div>
       ))}
       <div style={{ flex: 1 }} />
-      <div className={`nav-item ${isActive('/settings') ? 'active' : ''}`} onClick={() => navigate('/settings')}>
-        <Icon name="gear" size={22} />
-        <div className="lbl">Settings</div>
+      <div className={`nav-item ${isActive('/profile') ? 'active' : ''}`} onClick={() => navigate('/profile')}>
+        <Icon name="person" size={22} />
+        <div className="lbl">Profile</div>
       </div>
     </aside>
   );

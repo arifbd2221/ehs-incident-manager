@@ -52,10 +52,54 @@ router.post('/login', (req, res) => {
 
 router.get('/me', authMiddleware, (req, res) => {
   const user = db.prepare(
-    'SELECT id, org_id, site_id, email, name, initials, role, department, job_title FROM users WHERE id = ?'
+    'SELECT id, org_id, site_id, email, name, initials, role, department, job_title, created_at FROM users WHERE id = ?'
   ).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({ user });
+});
+
+router.get('/sites', (req, res) => {
+  const sites = db.prepare('SELECT id, name FROM sites ORDER BY name').all();
+  res.json({ sites });
+});
+
+router.patch('/profile', authMiddleware, (req, res) => {
+  const { name, department, job_title, site_id } = req.body;
+  const sets = [];
+  const params = [];
+
+  if (name && name.trim()) {
+    sets.push('name = ?', 'initials = ?');
+    params.push(name.trim(), name.trim().split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase());
+  }
+  if (department !== undefined) { sets.push('department = ?'); params.push(department || null); }
+  if (job_title !== undefined) { sets.push('job_title = ?'); params.push(job_title || null); }
+  if (site_id !== undefined) { sets.push('site_id = ?'); params.push(site_id || null); }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+  params.push(req.user.id);
+  db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  const user = db.prepare(
+    'SELECT id, org_id, site_id, email, name, initials, role, department, job_title, created_at FROM users WHERE id = ?'
+  ).get(req.user.id);
+  const token = generateToken(user);
+  res.json({ token, user });
+});
+
+router.post('/password', authMiddleware, (req, res) => {
+  const { current_password, new_password } = req.body;
+  if (!current_password || !new_password) return res.status(400).json({ error: 'Current and new password are required' });
+  if (new_password.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+
+  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+  if (!row || !bcrypt.compareSync(current_password, row.password_hash)) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(new_password, 10), req.user.id);
+  res.json({ message: 'Password updated successfully' });
 });
 
 export default router;

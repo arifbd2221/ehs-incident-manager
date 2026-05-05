@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, Link } from 'react-router-dom';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { user, login } = useAuth();
   const navigate = useNavigate();
+
+  if (user) return <Navigate to="/" replace />;
   const [email, setEmail] = useState('elena@sdsmanager.com');
   const [password, setPassword] = useState('password123');
   const [error, setError] = useState('');
@@ -16,7 +18,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/');
+      navigate('/', { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed');
     } finally {
@@ -53,6 +55,10 @@ export default function Login() {
             ) : 'Sign in'}
           </button>
         </form>
+
+        <div className="reg-footer">
+          Don't have an account? <Link to="/register">Create one</Link>
+        </div>
 
         <div className="login-demo">
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Demo accounts:</div>

@@ -1,10 +1,169 @@
-export default function Settings() {
+import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { changePassword, getSites } from '../api/auth';
+import Icon from '../components/shared/Icon';
+
+export default function Profile() {
+  const { user, updateUser, logout } = useAuth();
+  const [sites, setSites] = useState([]);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState({ type: '', text: '' });
+  const [form, setForm] = useState({ name: '', department: '', job_title: '', site_id: '' });
+
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pw, setPw] = useState({ current: '', next: '', confirm: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState({ type: '', text: '' });
+
+  useEffect(() => { getSites().then(d => setSites(d.sites || [])).catch(() => {}); }, []);
+
+  useEffect(() => {
+    if (user) setForm({ name: user.name || '', department: user.department || '', job_title: user.job_title || '', site_id: user.site_id || '' });
+  }, [user]);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    if (!form.name.trim()) return setMsg({ type: 'error', text: 'Name is required' });
+    setSaving(true);
+    setMsg({ type: '', text: '' });
+    try {
+      await updateUser(form);
+      setMsg({ type: 'ok', text: 'Profile updated' });
+      setEditing(false);
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.error || 'Update failed' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditing(false);
+    setMsg({ type: '', text: '' });
+    if (user) setForm({ name: user.name || '', department: user.department || '', job_title: user.job_title || '', site_id: user.site_id || '' });
+  };
+
+  const handlePwSubmit = async (e) => {
+    e.preventDefault();
+    setPwMsg({ type: '', text: '' });
+    if (pw.next.length < 8) return setPwMsg({ type: 'error', text: 'New password must be at least 8 characters' });
+    if (pw.next !== pw.confirm) return setPwMsg({ type: 'error', text: 'Passwords do not match' });
+    setPwSaving(true);
+    try {
+      await changePassword(pw.current, pw.next);
+      setPwMsg({ type: 'ok', text: 'Password changed successfully' });
+      setPw({ current: '', next: '', confirm: '' });
+    } catch (err) {
+      setPwMsg({ type: 'error', text: err.response?.data?.error || 'Password change failed' });
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  if (!user) return null;
+  const siteName = sites.find(s => s.id === user.site_id)?.name;
+  const joined = user.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—';
+
   return (
-    <div className="page">
-      <h1 className="page-h">Settings</h1>
-      <p className="page-sub">System configuration and preferences.</p>
-      <div className="card card-pad" style={{ marginTop: 16 }}>
-        <div className="text-mute">Settings will be available in a future update.</div>
+    <div className="page prof-page">
+      <div className="prof-header">
+        <div className="prof-avatar">{user.initials || '??'}</div>
+        <div className="prof-identity">
+          <h1 className="prof-name">{user.name}</h1>
+          <p className="prof-meta">{user.role?.replace('_', ' ')} {user.department ? `· ${user.department}` : ''}</p>
+          <p className="prof-email">{user.email}</p>
+        </div>
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-secondary btn-sm prof-logout" onClick={logout}>
+          <Icon name="export" size={16} />Sign out
+        </button>
+      </div>
+
+      {msg.text && <div className={`prof-msg ${msg.type}`}>{msg.text}</div>}
+
+      <div className="prof-grid">
+        <section className="prof-section">
+          <div className="prof-sec-h">
+            <Icon name="person" size={18} color="var(--sds-brand-primary)" />
+            <span>Personal information</span>
+            {!editing && <button className="btn btn-tertiary btn-sm" onClick={() => setEditing(true)}><Icon name="edit" size={14} />Edit</button>}
+          </div>
+
+          {editing ? (
+            <div className="prof-fields">
+              <div className="prof-field">
+                <label>Full name <span className="req">*</span></label>
+                <input className="input" value={form.name} onChange={e => set('name', e.target.value)} />
+              </div>
+              <div className="prof-field-row">
+                <div className="prof-field">
+                  <label>Job title</label>
+                  <input className="input" value={form.job_title} onChange={e => set('job_title', e.target.value)} />
+                </div>
+                <div className="prof-field">
+                  <label>Department</label>
+                  <input className="input" value={form.department} onChange={e => set('department', e.target.value)} />
+                </div>
+              </div>
+              <div className="prof-field">
+                <label>Site</label>
+                <select className="input" value={form.site_id} onChange={e => set('site_id', e.target.value)}>
+                  <option value="">No site</option>
+                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div className="prof-actions">
+                <button className="btn btn-secondary btn-sm" onClick={handleCancel}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
+                  {saving ? <><span className="login-spinner" />Saving...</> : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="prof-info">
+              <div className="prof-row"><span className="prof-lbl">Name</span><span className="prof-val">{user.name}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Email</span><span className="prof-val">{user.email}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Job title</span><span className="prof-val">{user.job_title || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Department</span><span className="prof-val">{user.department || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Site</span><span className="prof-val">{siteName || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Role</span><span className="prof-val prof-role">{user.role?.replace('_', ' ')}</span></div>
+            </div>
+          )}
+        </section>
+
+        <div className="prof-side">
+          <section className="prof-section">
+            <div className="prof-sec-h">
+              <Icon name="shield" size={18} color="var(--sds-brand-primary)" />
+              <span>Account</span>
+            </div>
+            <div className="prof-info">
+              <div className="prof-row"><span className="prof-lbl">Joined</span><span className="prof-val">{joined}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Status</span><span className="prof-val"><span className="prof-active-dot" />Active</span></div>
+            </div>
+          </section>
+
+          <section className="prof-section">
+            <div className="prof-sec-h" style={{ cursor: 'pointer' }} onClick={() => setPwOpen(v => !v)}>
+              <Icon name="gear" size={18} color="var(--sds-brand-primary)" />
+              <span>Change password</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--sds-fg-tertiary)" style={{ marginLeft: 'auto', transform: pwOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 200ms ease' }}><path d="M7 10l5 5 5-5z"/></svg>
+            </div>
+            {pwOpen && (
+              <form className="prof-pw" onSubmit={handlePwSubmit}>
+                {pwMsg.text && <div className={`prof-msg sm ${pwMsg.type}`}>{pwMsg.text}</div>}
+                <div className="prof-field"><label>Current password</label><input className="input" type="password" value={pw.current} onChange={e => setPw(p => ({ ...p, current: e.target.value }))} /></div>
+                <div className="prof-field"><label>New password</label><input className="input" type="password" value={pw.next} onChange={e => setPw(p => ({ ...p, next: e.target.value }))} placeholder="Min. 8 characters" /></div>
+                <div className="prof-field"><label>Confirm new password</label><input className="input" type="password" value={pw.confirm} onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))} /></div>
+                <button className={`btn btn-primary btn-sm ${pwSaving ? 'login-loading' : ''}`} type="submit" disabled={pwSaving}>
+                  {pwSaving ? <><span className="login-spinner" />Changing...</> : 'Update password'}
+                </button>
+              </form>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   );

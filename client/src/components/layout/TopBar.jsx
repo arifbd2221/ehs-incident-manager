@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../shared/Icon';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { getNotifications, markAllRead } from '../../api/notifications';
 
 export default function TopBar() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { setWizardOpen } = useApp();
   const location = useLocation();
+  const navigate = useNavigate();
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -31,7 +32,8 @@ export default function TopBar() {
     if (p.startsWith('/investigations')) return 'Investigations';
     if (p.startsWith('/capas')) return 'CAPA';
     if (p.startsWith('/reports')) return 'Reports';
-    return 'Settings';
+    if (p.startsWith('/profile')) return 'Profile';
+    return 'Page';
   };
 
   return (
@@ -80,7 +82,7 @@ export default function TopBar() {
             </>
           )}
         </div>
-        <div className="avatar" onClick={logout} title="Click to logout">{user?.initials || '??'}</div>
+        <div className="avatar" onClick={() => navigate('/profile')} title="View profile">{user?.initials || '??'}</div>
       </div>
       <div className="page-strip">
         <div className="crumbs">SDS Manager / EHS / <b>{crumb()}</b></div>

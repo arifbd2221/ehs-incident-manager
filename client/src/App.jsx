@@ -4,6 +4,7 @@ import { useApp } from './context/AppContext';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import IncidentsList from './pages/incidents/IncidentsList';
 import IncidentDetail from './pages/incidents/IncidentDetail';
@@ -43,6 +44,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/incidents" element={<IncidentsList />} />
@@ -52,7 +54,7 @@ export default function App() {
         <Route path="/capas" element={<CAPAPage />} />
         <Route path="/capas/:id" element={<CAPADetail />} />
         <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/profile" element={<Settings />} />
       </Route>
     </Routes>
   );
