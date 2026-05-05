@@ -24,7 +24,7 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 - [x] **F2.4** Documents library page + upload modal + nav — commit `d1540c4` (later redesigned upstream by `b27b352`)
 - [x] **F2.5** Document linking on investigation evidence — commit `0837e2a`
 
-## Wave 3 — Incident extensions (7/9 done)
+## Wave 3 — Incident extensions ✅ complete
 
 - [x] **T3.1** Service foundations: `body_parts.js` + recordability/riddor split + `auto_classify.js` — commit `7053b7b` (severity-floor refinement in `661e9b0`)
 - [x] **T3.2** `incidents.js` POST extends: `body_parts_affected`, `is_anonymous`, `prior_incidents_count` + new `POST /classify-preview` endpoint — commit `302cf7a`
@@ -33,8 +33,8 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 - [x] **F3.1** Body map wiring (`InjuryForm` uses `BodyMap3D`) — commit `73db417`
 - [x] **F3.2** Anonymous toggle in wizard Step 1 — commit `73db417`
 - [x] **F3.4** Trending banner + auto-classification suggestion on wizard Step 2 — commit `73db417`
-- [ ] **T3.4** `POST /incidents/:id/recordability-verify` (5-gate decision)
-- [ ] **F3.5** EHS recordability verification card on incident detail
+- [x] **T3.4** `POST /incidents/:id/recordability-verify` (5-gate decision) — commit `29d390e`
+- [x] **F3.5** EHS recordability verification card on incident detail — commit `2aa3e3b`
 
 ## Wave 4 — CAPA polymorphic
 
@@ -82,4 +82,4 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 3. `git fetch origin && git status` — confirm branch state vs `origin/main`.
 4. `cd server && rm -f db/incident_management.db db/*.db-wal db/*.db-shm && node db/seed.js && cd .. && npm run dev` — clean reset + boot.
 5. Login as `elena@sdsmanager.com / password123`. Quick sanity click: Dashboard, Sites, Assets, Documents, Investigations, Wizard.
-6. **Next task**: T3.4 (recordability-verify endpoint) + F3.5 (EHS verification card on incident detail) — paired BE+FE chunk.
+6. **Next task**: T4.1 (CAPA polymorphic — `POST /capas` + `POST /incidents/:id/create-capa` + assign-capa source_type) — start of Wave 4.
