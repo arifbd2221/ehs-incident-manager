@@ -41,11 +41,11 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 - [x] **T4.1** CAPA polymorphic: `POST /capas` + `POST /incidents/:id/create-capa` + assign-capa source_type — commit `465a5dd`
 - [x] **F4.1** "+ New CAPA" button with source picker on CAPA list — commit `18eeb68`
 
-## Wave 5 — Voice intake
+## Wave 5 — Voice intake ✅ complete
 
-- [ ] **T5.1** `services/voice_extract.js` (Anthropic SDK + tool-use schema)
-- [ ] **T5.2** `POST /incidents/voice-extract` endpoint + `voice_extractions` write + activity log
-- [ ] **F5.1** Voice intake confirmation flow (existing Web Speech wires to backend)
+- [x] **T5.1** `services/voice_extract.js` (Anthropic SDK + tool-use schema) — commit `5d5d98e`
+- [x] **T5.2** `POST /incidents/voice-extract` endpoint + `voice_extractions` write + activity log — commit `8b5f609`
+- [x] **F5.1** Voice intake confirmation flow (Web Speech transcribes in browser, BE extracts structure) — commit `108f08f`
 
 ## Wave 6 — Polish + seed
 
@@ -107,4 +107,4 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 3. `git fetch origin && git status` — confirm branch state vs `origin/main`.
 4. `cd server && rm -f db/incident_management.db db/*.db-wal db/*.db-shm && node db/seed.js && cd .. && npm run dev` — clean reset + boot.
 5. Login as `elena@sdsmanager.com / password123`. Quick sanity click: Dashboard, Sites, Assets, Documents, Investigations, Wizard.
-6. **Next task**: T5.1 (`services/voice_extract.js` — Anthropic SDK + tool-use schema) — start of Wave 5.
+6. **Next task**: Wave 6 begins — T6.1 (multer 2.x cleanup + OSHA 300 injury_type granularity + FK error scrubbing), then T6.2/T6.3 (demo seed) and F6.1 (300A sign-off).
