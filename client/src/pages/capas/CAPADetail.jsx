@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCapa, updateCapa, completeCapa, verifyCapa, rejectCapa } from '../../api/capas';
 import Icon from '../../components/shared/Icon';
@@ -311,11 +312,12 @@ export default function CAPADetail() {
       </div>
 
       {/* Toast */}
-      {toast && (
+      {toast && createPortal(
         <div className="capd-toast">
           <span className="toast-check"><Icon name="check" size={12}/></span>
           {toast}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

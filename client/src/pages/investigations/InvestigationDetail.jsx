@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation } from '../../api/investigations';
 import { listDocuments } from '../../api/documents';
@@ -74,9 +75,9 @@ export default function InvestigationDetail() {
     try {
       await createLink({ source_type: 'investigation', source_id: Number(id), target_type: 'document', target_id: doc.id, link_role: 'evidence' });
       load();
-      setToast({ kind: 'ok', text: `Linked "${doc.name}"` });
+      showToast(`Linked "${doc.name}"`);
     } catch (e) {
-      setToast({ kind: 'err', text: e.response?.data?.error || 'Link failed' });
+      showToast(e.response?.data?.error || 'Link failed');
     } finally {
       setDocLinking(false);
     }
@@ -476,11 +477,11 @@ export default function InvestigationDetail() {
         </div>
       </div>
 
-      {/* Modals */}
-      {modal === 'close' && <CloseInvestigationModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleClose}/>}
-      {modal === 'capa' && <AssignCapaModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAssignCapa}/>}
+      {/* Modals — portal to escape .page transform */}
+      {modal === 'close' && createPortal(<CloseInvestigationModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
+      {modal === 'capa' && createPortal(<AssignCapaModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAssignCapa}/>, document.body)}
 
-      {docModalOpen && (
+      {docModalOpen && createPortal(
         <div className="docs-modal-backdrop" onClick={closeDocModal}>
           <div className="docs-modal" onClick={e => e.stopPropagation()} style={{ width: 640, maxHeight: 'calc(100vh - 64px)' }}>
             <div className="docs-modal-h">
@@ -530,15 +531,17 @@ export default function InvestigationDetail() {
               <button className="btn btn-secondary" onClick={closeDocModal}>Done</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Toast */}
-      {toast && (
+      {toast && createPortal(
         <div className="invd-toast">
           <span className="toast-check"><Icon name="check" size={12}/></span>
-          {typeof toast === 'string' ? toast : toast.text}
-        </div>
+          {toast}
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getIncident, assignIncident, escalateIncident, closeIncident } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
@@ -411,8 +412,8 @@ export default function IncidentDetail() {
         </div>
       </div>
 
-      {/* Lightbox */}
-      {lightbox.open && imageAttachments.length > 0 && (
+      {/* Lightbox — portal to escape .page transform */}
+      {lightbox.open && imageAttachments.length > 0 && createPortal(
         <div className="idet-lightbox" onClick={() => setLightbox({ open: false, index: 0 })}>
           <button className="idet-lb-close" onClick={() => setLightbox({ open: false, index: 0 })}>
             <Icon name="close" size={18}/>
@@ -449,20 +450,22 @@ export default function IncidentDetail() {
               <span className="idet-lb-counter">{lightbox.index + 1} of {imageAttachments.length}</span>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Modals */}
-      {modal === 'assign' && <AssignModal incident={r} onCancel={() => setModal(null)} onConfirm={handleAssign}/>}
-      {modal === 'escalate' && <EscalateModal incident={r} onCancel={() => setModal(null)} onConfirm={handleEscalate}/>}
-      {modal === 'close' && <CloseModal incident={r} onCancel={() => setModal(null)} onConfirm={handleClose}/>}
+      {/* Modals — portal to escape .page transform */}
+      {modal === 'assign' && createPortal(<AssignModal incident={r} onCancel={() => setModal(null)} onConfirm={handleAssign}/>, document.body)}
+      {modal === 'escalate' && createPortal(<EscalateModal incident={r} onCancel={() => setModal(null)} onConfirm={handleEscalate}/>, document.body)}
+      {modal === 'close' && createPortal(<CloseModal incident={r} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
 
       {/* Toast */}
-      {toast && (
+      {toast && createPortal(
         <div className="idet-toast">
           <span className="toast-icon"><Icon name="check" size={13}/></span>
           {toast}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
