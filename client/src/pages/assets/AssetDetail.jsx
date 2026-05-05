@@ -63,6 +63,7 @@ export default function AssetDetail() {
     }
     setForm({
       name: asset.name || '',
+      display_id: asset.display_id || '',
       site_id: asset.site_id || '',
       asset_type: asset.asset_type || '',
       asset_category_id: asset.asset_category_id || '',
@@ -128,7 +129,8 @@ export default function AssetDetail() {
 
   const handleSave = async (e) => {
     e?.preventDefault();
-    if (!form.name?.trim()) { setMsg({ type: 'error', text: 'Name is required' }); setSection('identity'); return; }
+    if (!form.name?.trim()) { setMsg({ type: 'error', text: 'Display name is required' }); setSection('identity'); return; }
+    if (!form.display_id?.trim()) { setMsg({ type: 'error', text: 'Unique identifier is required' }); setSection('identity'); return; }
     setSaving(true);
     setMsg({ type: '', text: '' });
     try {
@@ -175,7 +177,12 @@ export default function AssetDetail() {
 
       <div className="asset-detail-h">
         <div className="asset-detail-h-left">
-          <div className="asset-detail-num">{asset.asset_number}</div>
+          <div className="asset-detail-num">
+            {asset.display_id || asset.asset_number}
+            {asset.display_id && asset.display_id !== asset.asset_number && (
+              <span className="asset-detail-num-sys"> · {asset.asset_number}</span>
+            )}
+          </div>
           <h1 className="asset-detail-name">
             {asset.name}
             {!asset.active && <span className="asset-badge-archived">archived</span>}
@@ -218,7 +225,8 @@ export default function AssetDetail() {
         <div className="asset-detail-grid">
           <div className="card card-pad">
             <div className="card-h"><Icon name="info" size={16} /> Identification</div>
-            <div className="kv"><div className="kv-k">Number</div><div className="kv-v">{asset.asset_number}</div></div>
+            <div className="kv"><div className="kv-k">Unique identifier</div><div className="kv-v">{asset.display_id || '—'}</div></div>
+            <div className="kv"><div className="kv-k">System number</div><div className="kv-v" style={{ fontFamily: 'SF Mono, Menlo, monospace', fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>{asset.asset_number}</div></div>
             <div className="kv"><div className="kv-k">Name</div><div className="kv-v">{asset.name}</div></div>
             <div className="kv"><div className="kv-k">Type</div><div className="kv-v">{asset.asset_type || '—'}{asset.category_name ? '' : ' (custom)'}</div></div>
             <div className="kv"><div className="kv-k">Serial</div><div className="kv-v">{asset.serial_number || '—'}</div></div>
@@ -335,12 +343,24 @@ export default function AssetDetail() {
             <div className="am-body">
               {section === 'identity' && (
                 <div className="am-section" key="identity">
-                  <div className="am-field" style={{ animationDelay: '0ms' }}>
-                    <label className="am-label">Asset name <span className="req">*</span></label>
-                    <input className={`am-input${!form.name?.trim() && msg.type === 'error' ? ' am-input-err' : ''}`} value={form.name || ''} onChange={e => set('name', e.target.value)} autoFocus />
+                  <div className="am-sys-banner" style={{ animationDelay: '0ms' }}>
+                    <Icon name="shield" size={13}/>
+                    <span>System fields — required regardless of asset type</span>
                   </div>
-                  <div className="am-field" style={{ animationDelay: '60ms' }}>
-                    <label className="am-label">Type / category</label>
+
+                  <div className="am-field-row" style={{ animationDelay: '40ms' }}>
+                    <div className="am-field am-field-half">
+                      <label className="am-label">Display name <span className="req">*</span></label>
+                      <input className={`am-input${!form.name?.trim() && msg.type === 'error' ? ' am-input-err' : ''}`} value={form.name || ''} onChange={e => set('name', e.target.value)} autoFocus placeholder="e.g. Hydraulic Press #4" />
+                    </div>
+                    <div className="am-field am-field-half">
+                      <label className="am-label">Unique identifier <span className="req">*</span></label>
+                      <input className={`am-input${!form.display_id?.trim() && msg.type === 'error' ? ' am-input-err' : ''}`} value={form.display_id || ''} onChange={e => set('display_id', e.target.value)} placeholder="e.g. INV-PRESS-04" />
+                    </div>
+                  </div>
+
+                  <div className="am-field" style={{ animationDelay: '80ms' }}>
+                    <label className="am-label">Asset type</label>
                     {!newCatOpen ? (
                       <div className="am-cat-grid">
                         {categories.map(c => (
@@ -360,9 +380,9 @@ export default function AssetDetail() {
                       </div>
                     )}
                   </div>
-                  <div className="am-field" style={{ animationDelay: '120ms' }}>
-                    <label className="am-label">Serial number <span className="am-label-hint">optional</span></label>
-                    <input className="am-input" value={form.serial_number || ''} onChange={e => set('serial_number', e.target.value)} />
+                  <div className="am-field" style={{ animationDelay: '140ms' }}>
+                    <label className="am-label">Manufacturer serial number <span className="am-label-hint">optional</span></label>
+                    <input className="am-input" value={form.serial_number || ''} onChange={e => set('serial_number', e.target.value)} placeholder="e.g. SN-2024-04821" />
                   </div>
                 </div>
               )}

@@ -354,6 +354,18 @@
   flex-direction: column;
   gap: 6px;
 }
+.am-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  animation: amFieldIn 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.am-field-half { animation: none; }
+.am-helper {
+  font-size: 11px;
+  color: var(--sds-fg-tertiary);
+  margin-top: 2px;
+}
 .am-label {
   font-size: 12px;
   font-weight: 600;
@@ -367,6 +379,26 @@
   font-weight: 400;
   color: var(--sds-fg-tertiary);
   font-size: 11px;
+}
+
+/* System-fields banner — sets the "always required regardless of type" tone */
+.am-sys-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(98, 109, 249, 0.06), rgba(139, 92, 246, 0.06));
+  border: 1px solid rgba(98, 109, 249, 0.18);
+  color: var(--sds-brand-primary);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  animation: amFieldIn 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@media (max-width: 600px) {
+  .am-field-row { grid-template-columns: 1fr; }
 }
 
 /* Input */
@@ -730,6 +762,11 @@ select.am-input {
   color: var(--sds-text-secondary);
   font-family: 'SF Mono', monospace;
   margin-bottom: 4px;
+}
+.asset-detail-num-sys {
+  color: var(--sds-fg-tertiary);
+  font-weight: 400;
+  opacity: 0.75;
 }
 .asset-detail-name {
   font-size: 26px;
