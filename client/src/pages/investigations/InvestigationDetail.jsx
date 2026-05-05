@@ -482,26 +482,33 @@ export default function InvestigationDetail() {
       {modal === 'capa' && createPortal(<AssignCapaModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAssignCapa}/>, document.body)}
 
       {docModalOpen && createPortal(
-        <div className="docs-modal-backdrop" onClick={closeDocModal}>
-          <div className="docs-modal" onClick={e => e.stopPropagation()} style={{ width: 640, maxHeight: 'calc(100vh - 64px)' }}>
-            <div className="docs-modal-h">
-              <h2>Link a document from the library</h2>
+        <div className="modal-backdrop" onClick={closeDocModal}>
+          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+            <div className="modal-h">
+              <div>
+                <div className="modal-title">Link a document from the library</div>
+                <div className="modal-sub">Search and link existing documents as evidence</div>
+              </div>
               <button className="icon-btn" onClick={closeDocModal}><Icon name="close" size={18}/></button>
             </div>
-            <div className="docs-modal-body" style={{ paddingTop: 16 }}>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                <input className="input" placeholder="Search by name or number…" value={docSearch} onChange={e => setDocSearch(e.target.value)} />
-                <select className="input" style={{ width: 160 }} value={docTypeFilter} onChange={e => setDocTypeFilter(e.target.value)}>
-                  <option value="">All types</option>
-                  <option value="sds">SDS</option>
-                  <option value="manual">Manual</option>
-                  <option value="policy">Policy</option>
-                  <option value="photo">Photo</option>
-                  <option value="video">Video</option>
-                  <option value="log">Log</option>
-                  <option value="certificate">Certificate</option>
-                  <option value="other">Other</option>
-                </select>
+            <div className="modal-body">
+              <div className="field-row">
+                <div className="field" style={{ flex: 1 }}>
+                  <input className="input" placeholder="Search by name or number…" value={docSearch} onChange={e => setDocSearch(e.target.value)} />
+                </div>
+                <div className="field" style={{ width: 160 }}>
+                  <select className="input" value={docTypeFilter} onChange={e => setDocTypeFilter(e.target.value)}>
+                    <option value="">All types</option>
+                    <option value="sds">SDS</option>
+                    <option value="manual">Manual</option>
+                    <option value="policy">Policy</option>
+                    <option value="photo">Photo</option>
+                    <option value="video">Video</option>
+                    <option value="log">Log</option>
+                    <option value="certificate">Certificate</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
               </div>
               {filteredDocs.length === 0 ? (
                 <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)', textAlign: 'center', padding: 32 }}>
@@ -527,7 +534,7 @@ export default function InvestigationDetail() {
                 </div>
               )}
             </div>
-            <div className="docs-modal-actions" style={{ padding: '16px 22px' }}>
+            <div className="modal-f">
               <button className="btn btn-secondary" onClick={closeDocModal}>Done</button>
             </div>
           </div>
