@@ -18,6 +18,7 @@ import siteRoutes from './routes/sites.js';
 import assetRoutes from './routes/assets.js';
 import assetCategoryRoutes from './routes/asset_categories.js';
 import linkRoutes from './routes/links.js';
+import documentRoutes from './routes/documents.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -64,6 +65,7 @@ app.use('/api/sites', authMiddleware, siteRoutes);
 app.use('/api/assets', authMiddleware, assetRoutes);
 app.use('/api/asset-categories', authMiddleware, assetCategoryRoutes);
 app.use('/api/links', authMiddleware, linkRoutes);
+app.use('/api/documents', authMiddleware, documentRoutes);
 
 app.use('/uploads', express.static(join(__dirname, 'uploads')));
 
