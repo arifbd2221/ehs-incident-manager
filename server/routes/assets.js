@@ -14,6 +14,7 @@ import { Router } from 'express';
 import db from '../db/connection.js';
 import { nextAssetNumber } from '../services/numbering.js';
 import { incidentsLinkedToAsset } from '../services/entity_links.js';
+import { loadFieldsForCategory, validateCustomFields } from '../services/custom_fields.js';
 
 const router = Router();
 
@@ -85,6 +86,16 @@ router.get('/:id', (req, res) => {
   if (!asset) return res.status(404).json({ error: 'Asset not found' });
 
   asset.linked_incidents = incidentsLinkedToAsset(asset.id, req.user.org_id);
+  asset.custom_fields = JSON.parse(asset.custom_fields || '{}');
+  // Surface the active category's field definitions so the FE can render
+  // the same form on detail without a second roundtrip.
+  asset.category_fields = asset.asset_category_id
+    ? loadFieldsForCategory(asset.asset_category_id).map(f => ({
+        ...f,
+        options: f.options ? JSON.parse(f.options) : null,
+        is_required: !!f.is_required,
+      }))
+    : [];
   res.json(asset);
 });
 
@@ -104,14 +115,28 @@ router.post('/', (req, res) => {
   const site = db.prepare('SELECT id FROM sites WHERE id = ? AND org_id = ?').get(site_id, req.user.org_id);
   if (!site) return res.status(404).json({ error: 'Site not found in your organization' });
 
+  // Validate per-category custom fields if a category is in play.
+  let customFieldsJson = '{}';
+  if (cat.asset_category_id) {
+    const definitions = loadFieldsForCategory(cat.asset_category_id);
+    if (definitions.length > 0) {
+      const { values, errors } = validateCustomFields(definitions, req.body.custom_fields || {});
+      if (errors.length > 0) {
+        return res.status(400).json({ error: errors.join(' · '), field_errors: errors });
+      }
+      customFieldsJson = JSON.stringify(values);
+    }
+  }
+
   const number = nextAssetNumber();
   const result = db.prepare(`
-    INSERT INTO assets (asset_number, org_id, site_id, name, asset_type, asset_category_id, location_description, serial_number, description, active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    INSERT INTO assets (asset_number, org_id, site_id, name, asset_type, asset_category_id, location_description, serial_number, description, custom_fields, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
   `).run(
     number, req.user.org_id, site_id, name.trim(),
     cat.asset_type, cat.asset_category_id,
-    location_description || null, serial_number || null, description || null
+    location_description || null, serial_number || null, description || null,
+    customFieldsJson,
   );
 
   const asset = db.prepare(`
@@ -149,11 +174,32 @@ router.patch('/:id', (req, res) => {
   }
 
   // Handle asset_type / asset_category_id together (resolve through helper)
+  let resolvedCategoryId = asset.asset_category_id;
   if (req.body.asset_type !== undefined || req.body.asset_category_id !== undefined) {
     const cat = resolveCategory(req.user.org_id, req.body);
     if (cat.error) return res.status(400).json({ error: cat.error });
     sets.push('asset_type = ?'); params.push(cat.asset_type);
     sets.push('asset_category_id = ?'); params.push(cat.asset_category_id);
+    resolvedCategoryId = cat.asset_category_id;
+  }
+
+  // Custom fields: if the request supplies them, validate against the
+  // resolved category's defs (supports both same-category edits and category
+  // switches in the same PATCH).
+  if (req.body.custom_fields !== undefined) {
+    if (resolvedCategoryId) {
+      const definitions = loadFieldsForCategory(resolvedCategoryId);
+      const { values, errors } = validateCustomFields(definitions, req.body.custom_fields || {});
+      if (errors.length > 0) {
+        return res.status(400).json({ error: errors.join(' · '), field_errors: errors });
+      }
+      sets.push('custom_fields = ?');
+      params.push(JSON.stringify(values));
+    } else {
+      // No category → custom fields are not applicable; clear them.
+      sets.push('custom_fields = ?');
+      params.push('{}');
+    }
   }
 
   if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
