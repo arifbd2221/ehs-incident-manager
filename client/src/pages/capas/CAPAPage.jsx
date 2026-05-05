@@ -3,9 +3,13 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getCapas, updateCapa, completeCapa, verifyCapa, rejectCapa } from '../../api/capas';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import NewCapaModal from '../../components/modals/NewCapaModal';
 import { formatDateShort } from '../../utils/time';
 import '../../styles/capas.css';
+
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 const CAPA_LANES = [
   { id: 'pending', title: 'Pending', color: '#7E7E8C', desc: 'Assigned, not started yet' },
@@ -26,6 +30,9 @@ const ALLOWED_MOVES = {
 export default function CAPAPage() {
   const navigate = useNavigate();
   const { refreshKey } = useApp();
+  const { user } = useAuth();
+  const canCreate = ELEVATED_ROLES.has(user?.role);
+  const [showNew, setShowNew] = useState(false);
   const [capas, setCapas] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
@@ -162,6 +169,11 @@ export default function CAPAPage() {
             </button>
           </div>
           <button className="inv-export-btn"><Icon name="export" size={14}/>Export</button>
+          {canCreate && (
+            <button className="ncap-new-btn" onClick={() => setShowNew(true)}>
+              <Icon name="plus" size={14}/>New CAPA
+            </button>
+          )}
         </div>
       </div>
 
@@ -264,7 +276,13 @@ export default function CAPAPage() {
                       </div>
                       <div className="capa-kcard-title">{c.title}</div>
                       <div className="capa-kcard-source">
-                        <Icon name="investigation" size={11}/>From <b>{c.investigation_number}</b>
+                        {c.source_type === 'proactive' ? (
+                          <><Icon name="leaf" size={11}/>Proactive</>
+                        ) : c.source_type === 'incident' ? (
+                          <><Icon name="incidents" size={11}/>From <b>{c.incident_number}</b></>
+                        ) : (
+                          <><Icon name="investigation" size={11}/>From <b>{c.investigation_number}</b></>
+                        )}
                       </div>
                       <div className="capa-kcard-progress">
                         <div className="capa-kcard-progress-head">
@@ -313,7 +331,11 @@ export default function CAPAPage() {
                   <span className="kt-dot"/>{c.type === 'corrective' ? 'Corr.' : 'Prev.'}
                 </span>
               </span>
-              <span className="capa-list-ref">{c.investigation_number}</span>
+              <span className="capa-list-ref">
+                {c.source_type === 'proactive' ? 'Proactive'
+                  : c.source_type === 'incident' ? c.incident_number
+                  : c.investigation_number}
+              </span>
               <span><span className="capa-kcard-av av-owner" style={{ width: 24, height: 24, fontSize: 9 }}>{c.owner_initials}</span></span>
               <span><span className="capa-kcard-av av-verifier" style={{ width: 24, height: 24, fontSize: 9, marginLeft: 0 }}>{c.verifier_initials}</span></span>
               <span>
@@ -341,6 +363,19 @@ export default function CAPAPage() {
           <span className="toast-check"><Icon name="check" size={12}/></span>
           {toast}
         </div>,
+        document.body
+      )}
+
+      {/* New CAPA modal */}
+      {showNew && createPortal(
+        <NewCapaModal
+          onCancel={() => setShowNew(false)}
+          onCreated={(c) => {
+            setShowNew(false);
+            showToast(`Created ${c.capa_number}`);
+            load();
+          }}
+        />,
         document.body
       )}
     </div>
