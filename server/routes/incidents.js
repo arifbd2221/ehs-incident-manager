@@ -143,6 +143,10 @@ router.post('/', async (req, res, next) => {
     body_parts_affected,
     is_anonymous,
     witnesses: witnessData,
+    voice_extraction_id,
+    voice_user_confirmed,
+    voice_user_edited,
+    voice_user_rejected,
   } = req.body;
 
   if (!title || !type || !site_id || !incident_datetime) {
@@ -175,6 +179,16 @@ router.post('/', async (req, res, next) => {
   const cleanedBodyParts = parseBodyParts(body_parts_affected);
   const bodyPartsJson = JSON.stringify(cleanedBodyParts);
 
+  // Validate voice_extraction_id is one of the requester's extractions if
+  // supplied. Quietly null it out if it doesn't belong — no need to 400 the
+  // whole submission over a stale link.
+  let resolvedVoiceExtractionId = null;
+  if (voice_extraction_id) {
+    const ve = db.prepare('SELECT id FROM voice_extractions WHERE id = ? AND created_by = ?')
+      .get(voice_extraction_id, req.user.id);
+    if (ve) resolvedVoiceExtractionId = ve.id;
+  }
+
   const incidentNumber = nextIncidentNumber();
   const { severity, track } = calculateSeverityAndTrack(likelihood, consequence, type);
 
@@ -199,8 +213,9 @@ router.post('/', async (req, res, next) => {
       osha_recordable, osha_recordability_type,
       riddor_reportable, riddor_category,
       type_data, immediate_actions_taken,
+      voice_extraction_id,
       closed_at, closed_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     incidentNumber, orgId, site_id, title, type, description || '', incident_datetime,
     area || null, specific_location || null, department || null, shift || null, resolvedAssetId,
@@ -209,11 +224,31 @@ router.post('/', async (req, res, next) => {
     osha.recordable ? 1 : 0, osha.type,
     riddor.reportable ? 1 : 0, riddor.category || null,
     JSON.stringify(type_data || {}), immediate_actions_taken || null,
+    resolvedVoiceExtractionId,
     autoClose ? new Date().toISOString() : null,
     autoClose ? 'Auto-closed (Track C)' : null
   );
 
   const incidentId = result.lastInsertRowid;
+
+  // Record the user's confirm/edit/reject decisions on the voice extraction
+  // row so audit can show how much of the AI's suggestion was kept verbatim.
+  if (resolvedVoiceExtractionId) {
+    db.prepare(`
+      UPDATE voice_extractions
+      SET incident_id = ?,
+          user_confirmed_fields = ?,
+          user_edited_fields = ?,
+          user_rejected_fields = ?
+      WHERE id = ?
+    `).run(
+      incidentId,
+      JSON.stringify(Array.isArray(voice_user_confirmed) ? voice_user_confirmed : []),
+      JSON.stringify(Array.isArray(voice_user_edited) ? voice_user_edited : []),
+      JSON.stringify(Array.isArray(voice_user_rejected) ? voice_user_rejected : []),
+      resolvedVoiceExtractionId,
+    );
+  }
 
   if (witnessData && Array.isArray(witnessData)) {
     const insertWitness = db.prepare('INSERT INTO witnesses (incident_id, name, contact) VALUES (?, ?, ?)');

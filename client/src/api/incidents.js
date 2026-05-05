@@ -18,3 +18,6 @@ export const uploadAttachments = (entityType, entityId, files) => {
 };
 
 export const deleteAttachment = (id) => api.delete(`/attachments/${id}`).then(r => r.data);
+
+export const voiceExtract = (transcript) =>
+  api.post('/incidents/voice-extract', { transcript }).then(r => r.data);
