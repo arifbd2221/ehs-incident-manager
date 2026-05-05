@@ -28,7 +28,7 @@ export default function Sidebar() {
         </div>
       ))}
       <div style={{ flex: 1 }} />
-      <div className="nav-item" onClick={() => navigate('/settings')}>
+      <div className={`nav-item ${isActive('/settings') ? 'active' : ''}`} onClick={() => navigate('/settings')}>
         <Icon name="gear" size={22} />
         <div className="lbl">Settings</div>
       </div>

@@ -1,27 +1,49 @@
 import Icon from '../../../components/shared/Icon';
+import BodyMap3D from '../../../components/shared/BodyMap3D';
+import '../../../styles/bodymap.css';
 
-const BodyMap = ({ selected, onToggle }) => {
-  const parts = [
-    ['head', 'M100 8a14 14 0 1 1 0 28 14 14 0 0 1 0-28z'],
-    ['neck', 'M93 36h14v8H93z'],
-    ['torso', 'M70 44h60l-4 50H74z'],
-    ['lArm', 'M64 46l-10 56 12 2 8-52z'],
-    ['rArm', 'M136 46l10 56-12 2-8-52z'],
-    ['lLeg', 'M82 96h16l-2 70H78z'],
-    ['rLeg', 'M102 96h16l4 70h-22z'],
-    ['lFoot', 'M76 168h22v8H72z'],
-    ['rFoot', 'M102 168h22v8h-26z'],
-  ];
-  return (
-    <div className="bodymap">
-      <svg viewBox="0 0 200 180">
-        {parts.map(([id, d]) => (
-          <path key={id} d={d} className={`part ${selected.includes(id) ? 'sel' : ''}`} onClick={() => onToggle(id)}/>
-        ))}
-      </svg>
-    </div>
-  );
-};
+const PPE_ITEMS = [
+  { name: 'Gloves', color: '#22c55e', bg: 'rgba(34,197,94,0.1)', icon: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.5 9V3.5a1.5 1.5 0 0 1 3 0V9"/><path d="M9.5 9V2a1.5 1.5 0 0 1 3 0v7"/><path d="M12.5 9V3.5a1.5 1.5 0 0 1 3 0V9"/>
+      <path d="M15.5 9V5.5a1.5 1.5 0 0 1 3 0V13a7 7 0 0 1-7 7h-1a7 7 0 0 1-7-7V9.5a1.5 1.5 0 0 1 3 0V9"/>
+    </svg>
+  )},
+  { name: 'Goggles', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', icon: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 10a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"/>
+      <path d="M10 12h4"/><circle cx="7" cy="11" r="2"/><circle cx="17" cy="11" r="2"/>
+      <path d="M2 10l-1-2"/><path d="M22 10l1-2"/>
+    </svg>
+  )},
+  { name: 'Lab coat', color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', icon: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 2l-4 5v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7l-4-5"/>
+      <path d="M8 2v4"/><path d="M16 2v4"/><path d="M12 10v6"/><path d="M10 13h4"/>
+    </svg>
+  )},
+  { name: 'Face shield', color: '#0ea5e9', bg: 'rgba(14,165,233,0.1)', icon: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8a8 8 0 0 1 16 0"/><path d="M4 8v5a8 8 0 0 0 16 0V8"/>
+      <path d="M6 8h12v3a6 6 0 0 1-12 0z" strokeOpacity="0.5"/>
+      <line x1="4" y1="5" x2="20" y2="5"/>
+    </svg>
+  )},
+  { name: 'Respirator', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', icon: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 12a6 6 0 0 1 12 0v2a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4z"/>
+      <path d="M9 15h6"/><path d="M6 12H4a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h2"/>
+      <path d="M18 12h2a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-2"/>
+      <path d="M8 8l-2-3"/><path d="M16 8l2-3"/>
+    </svg>
+  )},
+  { name: 'Hard hat', color: '#ef4444', bg: 'rgba(239,68,68,0.1)', icon: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 16h20"/><path d="M4 16v-2a8 8 0 0 1 16 0v2"/>
+      <path d="M12 4v4"/><path d="M9 16v2a3 3 0 0 0 6 0v-2"/>
+    </svg>
+  )},
+];
 
 export default function InjuryForm({ data, onChange }) {
   const bodyParts = data.body_parts || [];
@@ -41,11 +63,10 @@ export default function InjuryForm({ data, onChange }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24 }}>
         <div>
           <div className="label mb-8">Body part affected</div>
-          <BodyMap selected={bodyParts} onToggle={toggleBody}/>
-          <div className="helper" style={{ textAlign: 'center', marginTop: 6 }}>Selected: <b>{bodyParts.length || 'none'}</b></div>
+          <BodyMap3D selected={bodyParts} onToggle={toggleBody}/>
         </div>
         <div className="col gap-16">
           <div className="field">
@@ -85,12 +106,24 @@ export default function InjuryForm({ data, onChange }) {
       <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
         <div className="card-h"><Icon name="shield" size={18} color="var(--sds-brand-primary)"/>PPE worn at time of incident</div>
         <div className="ppe-grid">
-          {[['Gloves','GL'],['Goggles','GG'],['Lab coat','LC'],['Face shield','FS'],['Respirator','RS'],['Hard hat','HH']].map(([n, a]) => (
-            <div key={n} className={`ppe ${ppe.includes(n) ? 'on' : ''}`} onClick={() => togglePpe(n)}>
-              <div className="ic">{a}</div>
-              <div className="nm">{n}</div>
-            </div>
-          ))}
+          {PPE_ITEMS.map(item => {
+            const isOn = ppe.includes(item.name);
+            return (
+              <div
+                key={item.name}
+                className={`ppe ${isOn ? 'on' : ''}`}
+                onClick={() => togglePpe(item.name)}
+                style={{
+                  '--ppe-color': item.color,
+                  '--ppe-bg': item.bg,
+                }}
+              >
+                <div className="ppe-icon">{item.icon}</div>
+                <div className="ppe-name">{item.name}</div>
+                {isOn && <div className="ppe-check"><Icon name="check" size={10} /></div>}
+              </div>
+            );
+          })}
         </div>
       </div>
     </>

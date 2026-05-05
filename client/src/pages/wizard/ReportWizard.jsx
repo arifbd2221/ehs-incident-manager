@@ -95,6 +95,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const [files, setFiles] = useState([]);
   const [sites, setSites] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [stepDir, setStepDir] = useState('forward');
   const fileInputRef = useRef(null);
   const [removingIdx, setRemovingIdx] = useState(null);
   const [imageUrls, setImageUrls] = useState({});
@@ -236,6 +237,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
           </div>
 
           <div className="wiz-body">
+            <div key={step} className={`wiz-step-anim ${stepDir}`}>
             {/* STEP 0 — What happened */}
             {step === 0 && (
               <>
@@ -400,9 +402,9 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     />
                     <div className="wiz-risk-result">
                       <div className="wiz-rr-label">Auto-classified</div>
-                      <div className={`wiz-rr-sev rs${sev}`}>S{sev}</div>
-                      <div className="wiz-rr-name">{SEV_NAMES[sev]}</div>
-                      <div className={`wiz-rr-track rt${track.toLowerCase()}`}>Track {track}</div>
+                      <div key={sev} className={`wiz-rr-sev rs${sev}`}>S{sev}</div>
+                      <div key={`n-${sev}`} className="wiz-rr-name">{SEV_NAMES[sev]}</div>
+                      <div key={`t-${track}`} className={`wiz-rr-track rt${track.toLowerCase()}`}>Track {track}</div>
                     </div>
                   </div>
                 </div>
@@ -564,6 +566,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                 </div>
               </>
             )}
+            </div>
           </div>
 
           {/* Footer */}
@@ -575,12 +578,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
               {step === 2 && 'Review everything before submitting. This action cannot be undone.'}
             </div>
             {step > 0 && (
-              <button className="btn btn-tertiary" onClick={() => setStep(s => s - 1)}>
+              <button className="btn btn-tertiary" onClick={() => { setStepDir('back'); setStep(s => s - 1); }}>
                 <Icon name="arrowL" size={14} />Back
               </button>
             )}
             {step < 2 && (
-              <button className="btn btn-primary" disabled={!canContinue} onClick={() => setStep(s => s + 1)}>
+              <button className="btn btn-primary" disabled={!canContinue} onClick={() => { setStepDir('forward'); setStep(s => s + 1); }}>
                 Continue<Icon name="arrow" size={14} />
               </button>
             )}

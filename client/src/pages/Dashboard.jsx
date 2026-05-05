@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDashboard } from '../api/dashboard';
 import { useAuth } from '../context/AuthContext';
@@ -7,6 +7,26 @@ import Icon from '../components/shared/Icon';
 import { TYPES, typeOf } from '../components/shared/Badges';
 import { timeAgo, formatDate } from '../utils/time';
 import '../styles/dashboard.css';
+
+function useCountUp(end, duration = 800, decimals = 0) {
+  const [val, setVal] = useState(0);
+  const rafRef = useRef();
+  useEffect(() => {
+    if (end == null) return;
+    const target = typeof end === 'number' ? end : parseFloat(end) || 0;
+    if (target === 0) { setVal(0); return; }
+    const start = performance.now();
+    const tick = (now) => {
+      const t = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setVal(parseFloat((eased * target).toFixed(decimals)));
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [end, duration, decimals]);
+  return val;
+}
 
 function DonutChart({ data, size = 160, strokeWidth = 22 }) {
   const total = data.reduce((s, d) => s + d.value, 0) || 1;
@@ -57,6 +77,11 @@ function MiniBar({ pct, color }) {
       }} />
     </div>
   );
+}
+
+function KpiValue({ value, decimals = 0 }) {
+  const animated = useCountUp(value, 900, decimals);
+  return <>{decimals > 0 ? animated.toFixed(decimals) : animated}</>;
 }
 
 const ACTION_MAP = {
@@ -161,12 +186,12 @@ export default function Dashboard() {
 
       {/* KPI Row */}
       <div className="kpi-row">
-        <div className="kpi-card kpi-trir">
+        <div className="kpi-card kpi-trir kpi-clickable" onClick={() => navigate('/reports')}>
           <div className="kpi-top">
             <div className="kpi-label">TRIR &middot; YTD</div>
             <div className="kpi-icon"><Icon name="reports" size={18} /></div>
           </div>
-          <div className="kpi-val">{kpis.trir?.toFixed(2) || '0.00'}</div>
+          <div className="kpi-val"><KpiValue value={kpis.trir || 0} decimals={2} /></div>
           <div className="kpi-foot">
             <span className={`kpi-target ${trirOk ? 'good' : 'bad'}`}>
               {trirOk ? '✓' : '↑'} Target {trirTarget.toFixed(2)}
@@ -174,21 +199,21 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="kpi-card kpi-dart">
+        <div className="kpi-card kpi-dart kpi-clickable" onClick={() => navigate('/reports')}>
           <div className="kpi-top">
             <div className="kpi-label">DART &middot; YTD</div>
             <div className="kpi-icon"><Icon name="person" size={18} /></div>
           </div>
-          <div className="kpi-val">{kpis.dart?.toFixed(2) || '0.00'}</div>
+          <div className="kpi-val"><KpiValue value={kpis.dart || 0} decimals={2} /></div>
           <div className="kpi-foot">Days away / restricted / transfer</div>
         </div>
 
-        <div className="kpi-card kpi-open">
+        <div className="kpi-card kpi-open kpi-clickable" onClick={() => navigate('/incidents')}>
           <div className="kpi-top">
             <div className="kpi-label">Open incidents</div>
             <div className="kpi-icon"><Icon name="incidents" size={18} /></div>
           </div>
-          <div className="kpi-val">{kpis.openIncidents || 0}</div>
+          <div className="kpi-val"><KpiValue value={kpis.openIncidents || 0} /></div>
           <div className="kpi-foot">
             <span style={{ fontWeight: 600, color: '#dc2626' }}>{tc.A || 0}</span> Track A
             <span style={{ color: 'var(--sds-border)' }}>&middot;</span>
@@ -198,12 +223,12 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="kpi-card kpi-overdue">
+        <div className="kpi-card kpi-overdue kpi-clickable" onClick={() => navigate('/capas')}>
           <div className="kpi-top">
             <div className="kpi-label">Overdue CAPAs</div>
             <div className="kpi-icon"><Icon name="warning" size={18} /></div>
           </div>
-          <div className="kpi-val">{kpis.overdueCAPAs || 0}</div>
+          <div className="kpi-val"><KpiValue value={kpis.overdueCAPAs || 0} /></div>
           <div className="kpi-foot">
             {kpis.overdueCAPAs > 0
               ? <span className="kpi-target bad">Needs attention</span>

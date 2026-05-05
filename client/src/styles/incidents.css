@@ -224,15 +224,24 @@
   overflow: hidden;
   cursor: pointer;
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  animation: cardIn 300ms ease both;
+  animation: cardIn 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
+.inc-card:nth-child(1) { animation-delay: 0ms; }
+.inc-card:nth-child(2) { animation-delay: 40ms; }
+.inc-card:nth-child(3) { animation-delay: 80ms; }
+.inc-card:nth-child(4) { animation-delay: 120ms; }
+.inc-card:nth-child(5) { animation-delay: 160ms; }
+.inc-card:nth-child(n+6) { animation-delay: 200ms; }
 .inc-card:hover {
   border-color: transparent;
   transform: translateY(-2px);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
 }
+.inc-card:active {
+  transform: scale(0.99);
+}
 @keyframes cardIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -375,7 +384,16 @@
   border-radius: 50%;
 }
 .inc-card-status.st-new { background: #f0fdf4; color: #16a34a; }
-.inc-card-status.st-new .st-dot { background: #16a34a; }
+.inc-card-status.st-new .st-dot {
+  background: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4);
+  animation: statusPulse 2s infinite;
+}
+@keyframes statusPulse {
+  0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4); }
+  70% { box-shadow: 0 0 0 5px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
 .inc-card-status.st-investigating { background: #eff6ff; color: #2563eb; }
 .inc-card-status.st-investigating .st-dot { background: #2563eb; }
 .inc-card-status.st-triage { background: #fefce8; color: #ca8a04; }
@@ -498,6 +516,21 @@
 .idet-back:hover {
   background: rgba(98, 109, 249, 0.06);
   gap: 10px;
+}
+
+/* Cascade entrance */
+.idet-back { animation: idetCascade 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.idet-header { animation: idetCascade 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 40ms; }
+.idet-alert { animation: idetCascade 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 80ms; }
+.idet-main .idet-card:nth-child(1) { animation: idetCascade 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 120ms; }
+.idet-main .idet-card:nth-child(2) { animation: idetCascade 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 180ms; }
+.idet-main .idet-card:nth-child(3) { animation: idetCascade 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 240ms; }
+.idet-side .idet-card:nth-child(1) { animation: idetCascade 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 140ms; }
+.idet-side .idet-card:nth-child(2) { animation: idetCascade 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 200ms; }
+.idet-side .idet-card:nth-child(3) { animation: idetCascade 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 260ms; }
+@keyframes idetCascade {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Sticky header */
@@ -959,6 +992,16 @@
   gap: 12px;
   padding: 14px 0;
   position: relative;
+  animation: tlItemIn 300ms ease both;
+}
+.idet-tl-item:nth-child(1) { animation-delay: 300ms; }
+.idet-tl-item:nth-child(2) { animation-delay: 360ms; }
+.idet-tl-item:nth-child(3) { animation-delay: 420ms; }
+.idet-tl-item:nth-child(4) { animation-delay: 480ms; }
+.idet-tl-item:nth-child(5) { animation-delay: 540ms; }
+@keyframes tlItemIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 .idet-tl-item:not(:last-child) {
   border-bottom: 1px solid #fafafa;

@@ -543,6 +543,18 @@
   border-radius: 14px;
   overflow: hidden;
   transition: box-shadow 200ms;
+  animation: invdCardIn 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.invd-main .invd-card:nth-child(1) { animation-delay: 80ms; }
+.invd-main .invd-card:nth-child(2) { animation-delay: 140ms; }
+.invd-main .invd-card:nth-child(3) { animation-delay: 200ms; }
+.invd-main .invd-card:nth-child(4) { animation-delay: 260ms; }
+.invd-side .invd-card:nth-child(1) { animation-delay: 100ms; }
+.invd-side .invd-card:nth-child(2) { animation-delay: 160ms; }
+.invd-side .invd-card:nth-child(3) { animation-delay: 220ms; }
+@keyframes invdCardIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .invd-card:hover {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
@@ -588,6 +600,16 @@
   grid-template-columns: 42px 1fr;
   gap: 14px;
   position: relative;
+  animation: whyDrawIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.invd-why-row:nth-child(1) { animation-delay: 100ms; }
+.invd-why-row:nth-child(2) { animation-delay: 200ms; }
+.invd-why-row:nth-child(3) { animation-delay: 300ms; }
+.invd-why-row:nth-child(4) { animation-delay: 400ms; }
+.invd-why-row:nth-child(5) { animation-delay: 500ms; }
+@keyframes whyDrawIn {
+  from { opacity: 0; transform: translateX(-16px) scale(0.96); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
 }
 .invd-why-row:not(:last-child) {
   padding-bottom: 16px;
@@ -600,6 +622,13 @@
   bottom: 0;
   width: 2px;
   background: linear-gradient(180deg, #e0e7ff, transparent);
+  animation: whyLineGrow 400ms ease both;
+  animation-delay: inherit;
+  transform-origin: top;
+}
+@keyframes whyLineGrow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
 }
 .invd-why-num {
   width: 42px;
