@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation } from '../../api/investigations';
 import Icon from '../../components/shared/Icon';
@@ -370,16 +371,17 @@ export default function InvestigationDetail() {
         </div>
       </div>
 
-      {/* Modals */}
-      {modal === 'close' && <CloseInvestigationModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleClose}/>}
-      {modal === 'capa' && <AssignCapaModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAssignCapa}/>}
+      {/* Modals — portal to escape .page transform */}
+      {modal === 'close' && createPortal(<CloseInvestigationModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
+      {modal === 'capa' && createPortal(<AssignCapaModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAssignCapa}/>, document.body)}
 
       {/* Toast */}
-      {toast && (
+      {toast && createPortal(
         <div className="invd-toast">
           <span className="toast-check"><Icon name="check" size={12}/></span>
           {toast}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
