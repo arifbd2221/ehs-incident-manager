@@ -4,11 +4,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getIncident, assignIncident, escalateIncident, closeIncident } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
+import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
+import { useAuth } from '../../context/AuthContext';
 import { timeAgo, formatDate } from '../../utils/time';
 import AssignModal from './modals/AssignModal';
 import EscalateModal from './modals/EscalateModal';
 import CloseModal from './modals/CloseModal';
 import '../../styles/incidents.css';
+
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 const tlDotClass = (action) => {
   if (action === 'created') return 'tl-created';
@@ -38,6 +42,8 @@ const fileTypeInfo = (a) => {
 export default function IncidentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canVerify = ELEVATED_ROLES.has(user?.role);
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
@@ -409,6 +415,10 @@ export default function IncidentDetail() {
               </div>
             </div>
           </div>
+
+          {canVerify && (r.type === 'injury' || r.type === 'illness') && (
+            <RecordabilityVerifyCard incident={r} onVerified={load}/>
+          )}
         </div>
       </div>
 

@@ -7,6 +7,7 @@ export const updateIncident = (id, data) => api.patch(`/incidents/${id}`, data).
 export const assignIncident = (id, data) => api.post(`/incidents/${id}/assign`, data).then(r => r.data);
 export const escalateIncident = (id, data) => api.post(`/incidents/${id}/escalate`, data).then(r => r.data);
 export const closeIncident = (id, data) => api.post(`/incidents/${id}/close`, data).then(r => r.data);
+export const verifyRecordability = (id, gates) => api.post(`/incidents/${id}/recordability-verify`, gates).then(r => r.data);
 
 export const uploadAttachments = (entityType, entityId, files) => {
   const form = new FormData();
