@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createIncident, uploadAttachments } from '../../api/incidents';
 import { getSites } from '../../api/users';
 import Icon from '../../components/shared/Icon';
@@ -112,6 +112,121 @@ function RiskMatrix({ likelihood, consequence, onPick }) {
         </span>
       ))}
       <div className="rm-x-title">← Consequence</div>
+    </div>
+  );
+}
+
+const EXAMPLE_TITLES = [
+  "Worker slipped on wet floor in loading bay B",
+  "Forklift collision with racking in Warehouse 3",
+  "Chemical splash during IBC transfer — sulfuric acid",
+  "Contractor struck overhead pipe on scissor lift",
+  "Grinding disc shattered during metal finishing",
+  "H₂S alarm triggered in confined space inspection",
+  "Delivery truck struck fire hydrant in east lot",
+  "Operator dizzy after coating booth ventilation failure",
+  "Hydraulic line burst on press machine — hot fluid spray",
+  "Scaffolding plank fell from level 3 in high winds",
+];
+
+const EXAMPLE_DESCRIPTIONS = [
+  "Worker slipped on wet floor near loading bay B while carrying chemical drums. Left ankle twisted on impact, first aid administered on site.",
+  "Forklift reversed into racking in Warehouse 3 during shift changeover. Upper pallet fell approximately 3 metres, narrowly missing a pedestrian worker.",
+  "Chemical splash occurred during transfer from IBC to mixing vessel. Sulfuric acid contacted operator's forearm above the glove line.",
+  "Contractor struck overhead pipe while operating scissor lift at full extension in Building C maintenance corridor. Hard hat cracked on impact.",
+  "Grinding disc shattered during metal finishing operation. Fragments struck the safety guard and one piece ricocheted past the operator's face shield.",
+  "Gas detector alarm triggered in confined space during tank inspection. Two workers evacuated immediately; hydrogen sulfide reading peaked at 15 ppm.",
+  "Delivery truck reversed over a kerb barrier and struck a fire hydrant in the east parking area. Water main ruptured, no injuries reported.",
+  "Operator reported dizziness and nausea after 2 hours in the coating booth. Ventilation checks showed exhaust fan was operating at 40% capacity.",
+  "Hydraulic line burst on press machine during production run. Hot fluid sprayed across the work area; operator sustained minor burns to left hand.",
+  "Scaffolding plank dislodged on level 3 of construction site during high winds. Plank fell to ground level, landing in a barricaded exclusion zone.",
+];
+
+const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+function SmartInput({ value, onChange, examples, multiline, className, autoFocus, rows }) {
+  const [phIdx, setPhIdx] = useState(() => Math.floor(Math.random() * examples.length));
+  const [phVisible, setPhVisible] = useState(true);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const inputRef = useRef(null);
+  const baseTextRef = useRef('');
+
+  useEffect(() => {
+    if (value) return;
+    const interval = setInterval(() => {
+      setPhVisible(false);
+      setTimeout(() => {
+        setPhIdx(i => (i + 1) % examples.length);
+        setPhVisible(true);
+      }, 400);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [value, examples.length]);
+
+  const toggleMic = useCallback(() => {
+    if (!SpeechRecognition) return;
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      return;
+    }
+    baseTextRef.current = value;
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+    let finalTranscript = '';
+    rec.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+        else interim = e.results[i][0].transcript;
+      }
+      const base = baseTextRef.current;
+      const separator = base && !base.endsWith(' ') ? ' ' : '';
+      onChange(base + separator + finalTranscript + interim);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recognitionRef.current = rec;
+    rec.start();
+    setListening(true);
+    inputRef.current?.focus();
+  }, [listening, value, onChange]);
+
+  useEffect(() => {
+    return () => { if (recognitionRef.current) recognitionRef.current.stop(); };
+  }, []);
+
+  const Tag = multiline ? 'textarea' : 'input';
+  const extraProps = multiline ? { rows: rows || 4 } : { type: 'text' };
+
+  return (
+    <div className={`desc-input-wrap ${multiline ? '' : 'desc-input-single'}`}>
+      <Tag
+        ref={inputRef}
+        className={className || (multiline ? 'textarea' : 'input')}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        autoFocus={autoFocus}
+        {...extraProps}
+      />
+      {!value && (
+        <div className={`desc-placeholder ${phVisible ? 'visible' : ''}`}>
+          {examples[phIdx]}
+        </div>
+      )}
+      {SpeechRecognition && (
+        <button
+          type="button"
+          className={`desc-mic ${listening ? 'recording' : ''}`}
+          onClick={toggleMic}
+          title={listening ? 'Stop recording' : 'Voice input'}
+        >
+          <Icon name="mic" size={16} />
+          {listening && <span className="desc-mic-pulse" />}
+        </button>
+      )}
     </div>
   );
 }
@@ -286,11 +401,11 @@ export default function ReportWizard({ onClose, onSubmit }) {
             {/* STEP 0 — What happened */}
             {step === 0 && (
               <>
-                <input
-                  className="wiz-title-input"
+                <SmartInput
                   value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  placeholder="What happened? Give a short, specific title..."
+                  onChange={setTitle}
+                  examples={EXAMPLE_TITLES}
+                  className="wiz-title-input"
                   autoFocus
                 />
 
@@ -344,10 +459,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     <div className="wiz-sh-icon"><Icon name="edit" size={16} /></div>
                     Description
                   </div>
-                  <textarea className="textarea" value={description} onChange={e => setDescription(e.target.value)}
-                    placeholder="Describe in detail — what happened, who was involved, what were the immediate circumstances..."
-                    rows={4}
-                  />
+                  <SmartInput value={description} onChange={setDescription} examples={EXAMPLE_DESCRIPTIONS} multiline rows={4} />
                 </div>
 
                 <div className="wiz-section">
