@@ -1,0 +1,409 @@
+// AssetTypesModal.jsx — manage asset types (categories) and their fields.
+//
+// Two-pane layout:
+//   - Left: list of asset types with a field-count badge and Default tag
+//     for the 6 predefined types. "+ New asset type" affordance below.
+//   - Right: the selected type's field definitions, plus an inline
+//     "Add field" form. Each field can be toggled required or removed.
+//
+// Internally categories === asset types. The user-facing copy says
+// "asset type" because that's the semantic concept (the thing that has
+// fields), and matches SafetyCulture's terminology.
+//
+// Phase 2 W7 E7.1.
+
+import { useState, useEffect, useMemo } from 'react';
+import Icon from '../shared/Icon';
+import {
+  listAssetCategories,
+  createAssetCategory,
+  deleteAssetCategory,
+  listCategoryFields,
+  addCategoryField,
+  updateCategoryField,
+  deleteCategoryField,
+} from '../../api/asset_categories';
+
+// Names that come pre-loaded via migration 004. Used to mark them as
+// Default in the UI; we still allow soft-delete with a warning so users
+// can clean up if they really want.
+const PREDEFINED_TYPES = new Set(['Machine', 'Vehicle', 'Building', 'Area', 'Tool', 'Chemical', 'Other']);
+
+const FIELD_TYPES = [
+  { id: 'text',     label: 'Short text' },
+  { id: 'textarea', label: 'Long text' },
+  { id: 'number',   label: 'Number' },
+  { id: 'date',     label: 'Date' },
+  { id: 'select',   label: 'Dropdown' },
+  { id: 'checkbox', label: 'Checkbox' },
+];
+
+const EMPTY_DRAFT = {
+  field_label: '',
+  field_type: 'text',
+  is_required: false,
+  helper_text: '',
+  options: '',
+};
+
+export default function AssetTypesModal({ onClose }) {
+  const [types, setTypes] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [fields, setFields] = useState([]);
+  const [fieldCounts, setFieldCounts] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [error, setError] = useState(null);
+
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [savingNew, setSavingNew] = useState(false);
+
+  const [draft, setDraft] = useState(EMPTY_DRAFT);
+  const [addingField, setAddingField] = useState(false);
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
+
+  const refreshTypes = async () => {
+    const list = await listAssetCategories();
+    setTypes(list);
+    return list;
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await refreshTypes();
+        if (list.length > 0) setActiveId(list[0].id);
+      } catch { /* ignore */ }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!activeId) { setFields([]); return; }
+    setLoading(true);
+    listCategoryFields(activeId)
+      .then((list) => {
+        setFields(list);
+        setFieldCounts(prev => ({ ...prev, [activeId]: list.length }));
+      })
+      .catch(() => setFields([]))
+      .finally(() => setLoading(false));
+  }, [activeId]);
+
+  // Lazy-load counts for non-active types so each list row shows an
+  // accurate field-count badge.
+  useEffect(() => {
+    types.forEach(t => {
+      if (fieldCounts[t.id] !== undefined) return;
+      listCategoryFields(t.id)
+        .then(list => setFieldCounts(prev => ({ ...prev, [t.id]: list.length })))
+        .catch(() => setFieldCounts(prev => ({ ...prev, [t.id]: 0 })));
+    });
+  }, [types]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const activeType = useMemo(
+    () => types.find(t => t.id === activeId) || null,
+    [types, activeId],
+  );
+  const isPredefined = (t) => PREDEFINED_TYPES.has(t?.name);
+
+  const handleAddType = async () => {
+    setError(null);
+    if (!newName.trim()) { setError('Name is required'); return; }
+    setSavingNew(true);
+    try {
+      const cat = await createAssetCategory({ name: newName.trim() });
+      await refreshTypes();
+      setActiveId(cat.id);
+      setFieldCounts(prev => ({ ...prev, [cat.id]: 0 }));
+      setNewName('');
+      setAdding(false);
+      showToast(`Added "${cat.name}"`);
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Failed to add asset type');
+    } finally {
+      setSavingNew(false);
+    }
+  };
+
+  const handleDeleteType = async (t) => {
+    const msg = isPredefined(t)
+      ? `"${t.name}" is a default type. Archive it anyway? (Existing assets keep working.)`
+      : `Archive asset type "${t.name}"? Existing assets keep working.`;
+    if (!confirm(msg)) return;
+    try {
+      await deleteAssetCategory(t.id);
+      const list = await refreshTypes();
+      if (activeId === t.id) setActiveId(list[0]?.id || null);
+      showToast(`Archived "${t.name}"`);
+    } catch (e) {
+      showToast(e?.response?.data?.error || 'Failed to archive');
+    }
+  };
+
+  const handleAddField = async () => {
+    setError(null);
+    if (!draft.field_label.trim()) { setError('Label is required.'); return; }
+    if (draft.field_type === 'select' && !draft.options.trim()) {
+      setError('At least one option is required for a dropdown.');
+      return;
+    }
+    setAddingField(true);
+    try {
+      const payload = {
+        field_label: draft.field_label.trim(),
+        field_type: draft.field_type,
+        is_required: !!draft.is_required,
+        helper_text: draft.helper_text.trim() || null,
+      };
+      if (draft.field_type === 'select') {
+        payload.options = draft.options.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      const created = await addCategoryField(activeId, payload);
+      setFields(prev => [...prev, created]);
+      setFieldCounts(prev => ({ ...prev, [activeId]: (prev[activeId] || 0) + 1 }));
+      setDraft(EMPTY_DRAFT);
+      showToast(`Added "${created.field_label}"`);
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Failed to add field');
+    } finally {
+      setAddingField(false);
+    }
+  };
+
+  const handleToggleRequired = async (field) => {
+    try {
+      const updated = await updateCategoryField(activeId, field.id, { is_required: !field.is_required });
+      setFields(prev => prev.map(f => f.id === field.id ? updated : f));
+    } catch (e) {
+      showToast(e?.response?.data?.error || 'Failed to update');
+    }
+  };
+
+  const handleDeleteField = async (field) => {
+    if (!confirm(`Delete field "${field.field_label}"? Existing assets keep their stored value but the field stops rendering.`)) return;
+    try {
+      await deleteCategoryField(activeId, field.id);
+      setFields(prev => prev.filter(f => f.id !== field.id));
+      setFieldCounts(prev => ({ ...prev, [activeId]: Math.max(0, (prev[activeId] || 1) - 1) }));
+      showToast(`Removed "${field.field_label}"`);
+    } catch (e) {
+      showToast(e?.response?.data?.error || 'Failed to delete');
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="atm-modal" onClick={e => e.stopPropagation()}>
+        <div className="atm-header">
+          <div>
+            <div className="atm-title">Asset types</div>
+            <div className="atm-sub">Define the categories your team registers and the fields each one captures</div>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Icon name="close" size={18}/></button>
+        </div>
+
+        <div className="atm-body">
+          {/* LEFT — type list */}
+          <div className="atm-pane atm-pane-left">
+            <div className="atm-pane-h">
+              <span>Types</span>
+              <span className="atm-count">{types.length}</span>
+            </div>
+
+            <div className="atm-type-list">
+              {types.map(t => {
+                const fc = fieldCounts[t.id];
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`atm-type-item ${t.id === activeId ? 'is-active' : ''}`}
+                    onClick={() => setActiveId(t.id)}
+                  >
+                    <span className="atm-type-dot" style={{ background: t.color || '#90A4AE' }}/>
+                    <span className="atm-type-name">{t.name}</span>
+                    {isPredefined(t) && <span className="atm-type-tag">DEFAULT</span>}
+                    <span className="atm-type-fc">{fc === undefined ? '…' : `${fc} field${fc === 1 ? '' : 's'}`}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {adding ? (
+              <div className="atm-add-type">
+                <input
+                  className="input atm-add-input"
+                  placeholder="e.g. Solar panel array"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleAddType();
+                    if (e.key === 'Escape') { setAdding(false); setNewName(''); }
+                  }}
+                  autoFocus
+                />
+                <div className="atm-add-actions">
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setAdding(false); setNewName(''); }}>Cancel</button>
+                  <button className="btn btn-primary btn-sm" onClick={handleAddType} disabled={!newName.trim() || savingNew}>
+                    {savingNew ? 'Saving…' : 'Add'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="atm-add-trigger" onClick={() => setAdding(true)}>
+                <Icon name="plus" size={14}/> New asset type
+              </button>
+            )}
+          </div>
+
+          {/* RIGHT — fields for selected type */}
+          <div className="atm-pane atm-pane-right">
+            {activeType ? (
+              <>
+                <div className="atm-pane-h atm-detail-h">
+                  <div>
+                    <div className="atm-detail-name">
+                      <span className="atm-type-dot" style={{ background: activeType.color || '#90A4AE' }}/>
+                      {activeType.name}
+                      {isPredefined(activeType) && <span className="atm-type-tag">DEFAULT</span>}
+                    </div>
+                    <div className="atm-detail-sub">
+                      Fields rendered when registering an asset of this type
+                    </div>
+                  </div>
+                  <button
+                    className="atm-detail-archive"
+                    onClick={() => handleDeleteType(activeType)}
+                    title="Archive this type"
+                  >
+                    <Icon name="close" size={14}/>
+                  </button>
+                </div>
+
+                <div className="atm-fields">
+                  {loading ? (
+                    <div className="atm-loading">Loading fields…</div>
+                  ) : fields.length === 0 ? (
+                    <div className="atm-empty">No fields yet — add one below.</div>
+                  ) : (
+                    fields.map(f => (
+                      <div className="atm-field" key={f.id}>
+                        <div className="atm-field-main">
+                          <div className="atm-field-label">
+                            {f.field_label}
+                            <span className={`atm-type-pill atm-type-${f.field_type}`}>{f.field_type}</span>
+                            {f.is_required && <span className="atm-req-pill">REQUIRED</span>}
+                          </div>
+                          {f.helper_text && <div className="atm-field-hint">{f.helper_text}</div>}
+                          {f.field_type === 'select' && Array.isArray(f.options) && (
+                            <div className="atm-field-hint">options: {f.options.join(' · ')}</div>
+                          )}
+                        </div>
+                        <div className="atm-field-actions">
+                          <button
+                            className={`atm-toggle ${f.is_required ? 'on' : ''}`}
+                            onClick={() => handleToggleRequired(f)}
+                            title={f.is_required ? 'Make optional' : 'Make required'}
+                          >
+                            {f.is_required ? 'Required' : 'Optional'}
+                          </button>
+                          <button className="atm-icon-btn" onClick={() => handleDeleteField(f)} title="Remove">
+                            <Icon name="close" size={13}/>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="atm-add-field">
+                  <div className="atm-add-field-h">
+                    <Icon name="plus" size={13}/> Add a new field to <b>{activeType.name}</b>
+                  </div>
+                  <div className="atm-add-grid">
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label className="label">Label <span className="req">*</span></label>
+                      <input
+                        className="input"
+                        placeholder="e.g. Max PSI Rating"
+                        value={draft.field_label}
+                        onChange={e => setDraft(d => ({ ...d, field_label: e.target.value }))}
+                      />
+                    </div>
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label className="label">Type</label>
+                      <select
+                        className="select"
+                        value={draft.field_type}
+                        onChange={e => setDraft(d => ({ ...d, field_type: e.target.value }))}
+                      >
+                        {FIELD_TYPES.map(t => (
+                          <option key={t.id} value={t.id}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {draft.field_type === 'select' && (
+                    <div className="field">
+                      <label className="label">Options (comma-separated) <span className="req">*</span></label>
+                      <input
+                        className="input"
+                        placeholder="Bronze, Silver, Gold"
+                        value={draft.options}
+                        onChange={e => setDraft(d => ({ ...d, options: e.target.value }))}
+                      />
+                    </div>
+                  )}
+
+                  <div className="field">
+                    <label className="label">Helper text <span className="optional">(optional)</span></label>
+                    <input
+                      className="input"
+                      placeholder="Shown under the input on the asset form"
+                      value={draft.helper_text}
+                      onChange={e => setDraft(d => ({ ...d, helper_text: e.target.value }))}
+                    />
+                  </div>
+
+                  <label className="atm-required-row">
+                    <input
+                      type="checkbox"
+                      checked={draft.is_required}
+                      onChange={e => setDraft(d => ({ ...d, is_required: e.target.checked }))}
+                    />
+                    Required when registering an asset
+                  </label>
+
+                  {error && <div className="atm-error">{error}</div>}
+
+                  <button
+                    className="btn btn-primary atm-add-field-btn"
+                    onClick={handleAddField}
+                    disabled={addingField}
+                  >
+                    <Icon name="plus" size={13}/>
+                    {addingField ? 'Adding…' : 'Add field'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="atm-empty atm-empty-large">
+                <div className="atm-empty-icon"><Icon name="settings" size={28}/></div>
+                <div>Pick an asset type on the left, or create a new one.</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="atm-footer">
+          <button className="btn btn-primary" onClick={onClose}>Done</button>
+        </div>
+
+        {toast && <div className="atm-toast"><Icon name="check" size={13}/>{toast}</div>}
+      </div>
+    </div>
+  );
+}

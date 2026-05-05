@@ -6,7 +6,7 @@ import { listAssets, createAsset, updateAsset, deleteAsset } from '../../api/ass
 import { listSites } from '../../api/sites';
 import { listAssetCategories, createAssetCategory, listCategoryFields } from '../../api/asset_categories';
 import Icon from '../../components/shared/Icon';
-import CategoryFieldsModal from '../../components/modals/CategoryFieldsModal';
+import AssetTypesModal from '../../components/modals/AssetTypesModal';
 import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
 import '../../styles/assets.css';
 
@@ -37,7 +37,7 @@ export default function AssetsList() {
   const [assets, setAssets] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [showCategoryFields, setShowCategoryFields] = useState(false);
+  const [showAssetTypes, setShowAssetTypes] = useState(false);
   const [categoryFieldDefs, setCategoryFieldDefs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('active');
@@ -256,11 +256,11 @@ export default function AssetsList() {
         {canEdit && (
           <button
             className="btn btn-secondary"
-            onClick={() => setShowCategoryFields(true)}
+            onClick={() => setShowAssetTypes(true)}
             style={{ marginRight: 8 }}
-            title="Define custom fields per category"
+            title="Define asset types and their custom fields"
           >
-            <Icon name="settings" size={14} /> Category fields
+            <Icon name="settings" size={14} /> Asset types
           </button>
         )}
         {canEdit && (
@@ -586,12 +586,12 @@ export default function AssetsList() {
         document.body
       )}
 
-      {showCategoryFields && createPortal(
-        <CategoryFieldsModal
+      {showAssetTypes && createPortal(
+        <AssetTypesModal
           onClose={() => {
-            setShowCategoryFields(false);
-            // Refresh categories in case anything was renamed (defensive — we
-            // don't currently rename here but listAssetCategories is cheap).
+            setShowAssetTypes(false);
+            // Refresh categories so any newly-added/archived type is reflected
+            // in the asset-create form's dropdown.
             listAssetCategories().then(setCategories).catch(() => {});
           }}
         />,

@@ -22,7 +22,7 @@ export default function CustomFieldsDisplay({ fields, values }) {
   return (
     <div className="card card-pad">
       <div className="card-h">
-        <Icon name="settings" size={16}/> Category details
+        <Icon name="settings" size={16}/> Asset type details
       </div>
       {fields.map(f => (
         <div className="kv" key={f.id}>

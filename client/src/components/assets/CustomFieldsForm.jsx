@@ -17,7 +17,7 @@ export default function CustomFieldsForm({ fields, values, onChange, error }) {
     <div className="cff-wrap">
       <div className="cff-header">
         <Icon name="settings" size={14}/>
-        <span>Category-specific details</span>
+        <span>Asset type details</span>
         <span className="cff-count">{fields.length} field{fields.length > 1 ? 's' : ''}</span>
       </div>
       <div className="cff-grid">
