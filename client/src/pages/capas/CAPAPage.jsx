@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { getCapas } from '../../api/capas';
+import { getCapas, updateCapa, completeCapa, verifyCapa, rejectCapa } from '../../api/capas';
 import { useApp } from '../../context/AppContext';
 import Icon from '../../components/shared/Icon';
 import { formatDateShort } from '../../utils/time';
@@ -15,6 +16,13 @@ const CAPA_LANES = [
 
 const LANE_LABELS = { pending: 'Pending', progress: 'In progress', verify: 'Pending verification', closed: 'Verified · Closed' };
 
+const ALLOWED_MOVES = {
+  pending: ['progress'],
+  progress: ['pending', 'verify'],
+  verify: ['progress', 'closed'],
+  closed: [],
+};
+
 export default function CAPAPage() {
   const navigate = useNavigate();
   const { refreshKey } = useApp();
@@ -24,13 +32,21 @@ export default function CAPAPage() {
   const [view, setView] = useState('board');
   const [tab, setTab] = useState('all');
 
-  useEffect(() => {
+  const [dragId, setDragId] = useState(null);
+  const [overCol, setOverCol] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const dragSourceCol = useRef(null);
+
+  const load = () => {
     setLoading(true);
     getCapas()
       .then(data => { setCapas(data.capas || []); setStats(data.stats || {}); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [refreshKey]);
+  };
+
+  useEffect(load, [refreshKey]);
 
   const rows = capas.filter(c => {
     if (tab === 'active') return c.status === 'pending' || c.status === 'progress';
@@ -49,6 +65,84 @@ export default function CAPAPage() {
   ];
 
   const progressClass = (c) => c.overdue ? 'pf-overdue' : c.progress >= 100 ? 'pf-done' : '';
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
+
+  const handleDragStart = (e, capa) => {
+    if (capa.status === 'closed') { e.preventDefault(); return; }
+    dragSourceCol.current = capa.status;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', capa.id);
+    requestAnimationFrame(() => setDragId(capa.id));
+  };
+
+  const handleDragOver = (e, laneId) => {
+    e.preventDefault();
+    const from = dragSourceCol.current;
+    if (!from || from === laneId) { setOverCol(null); return; }
+    if (!ALLOWED_MOVES[from]?.includes(laneId)) {
+      e.dataTransfer.dropEffect = 'none';
+      setOverCol(null);
+      return;
+    }
+    e.dataTransfer.dropEffect = 'move';
+    setOverCol(laneId);
+  };
+
+  const handleDragLeave = (e, laneId) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      if (overCol === laneId) setOverCol(null);
+    }
+  };
+
+  const handleDrop = async (e, targetLane) => {
+    e.preventDefault();
+    setOverCol(null);
+    const capaId = parseInt(e.dataTransfer.getData('text/plain'));
+    const capa = capas.find(c => c.id === capaId);
+    if (!capa || capa.status === targetLane) { setDragId(null); return; }
+
+    const from = capa.status;
+    if (!ALLOWED_MOVES[from]?.includes(targetLane)) {
+      showToast(`Cannot move from ${LANE_LABELS[from]} to ${LANE_LABELS[targetLane]}`);
+      setDragId(null);
+      return;
+    }
+
+    try {
+      if (from === 'pending' && targetLane === 'progress') {
+        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c));
+        await updateCapa(capaId, { status: 'progress' });
+        showToast('CAPA started');
+      } else if (from === 'progress' && targetLane === 'pending') {
+        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'pending' } : c));
+        await updateCapa(capaId, { status: 'pending' });
+        showToast('Moved back to pending');
+      } else if (from === 'progress' && targetLane === 'verify') {
+        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'verify', progress: 100 } : c));
+        await completeCapa(capaId, {});
+        showToast('Submitted for verification');
+      } else if (from === 'verify' && targetLane === 'progress') {
+        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c));
+        await rejectCapa(capaId, { notes: 'Needs more work' });
+        showToast('Rejected — sent back to progress');
+      } else if (from === 'verify' && targetLane === 'closed') {
+        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'closed' } : c));
+        await verifyCapa(capaId, { result: 'effective' });
+        showToast('CAPA verified & closed');
+      }
+      load();
+    } catch (err) {
+      load();
+      showToast(err.response?.data?.error || 'Failed to update CAPA');
+    }
+    setDragId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragId(null);
+    setOverCol(null);
+    dragSourceCol.current = null;
+  };
 
   return (
     <div className="page">
@@ -134,8 +228,16 @@ export default function CAPAPage() {
         <div className="capa-kanban">
           {CAPA_LANES.map(lane => {
             const cards = rows.filter(c => c.status === lane.id);
+            const isOver = overCol === lane.id;
             return (
-              <div key={lane.id} className="capa-kcol">
+              <div
+                key={lane.id}
+                className={`capa-kcol ${isOver ? 'capa-kcol-over' : ''}`}
+                style={{ '--col-accent': lane.color }}
+                onDragOver={(e) => handleDragOver(e, lane.id)}
+                onDragLeave={(e) => handleDragLeave(e, lane.id)}
+                onDrop={(e) => handleDrop(e, lane.id)}
+              >
                 <div className="capa-kcol-header">
                   <span className="capa-kcol-accent" style={{ background: lane.color }}/>
                   <span className="capa-kcol-title">{lane.title}</span>
@@ -144,7 +246,16 @@ export default function CAPAPage() {
                 <div className="capa-kcol-desc">{lane.desc}</div>
                 <div className="capa-kcol-cards">
                   {cards.map((c, idx) => (
-                    <div key={c.id} className={`capa-kcard kc-${c.type} ${c.overdue ? 'kc-overdue' : ''}`} onClick={() => navigate(`/capas/${c.id}`)} style={{ animationDelay: `${idx * 50}ms` }}>
+                    <div
+                      key={c.id}
+                      className={`capa-kcard kc-${c.type} ${c.overdue ? 'kc-overdue' : ''} ${dragId === c.id ? 'capa-dragging' : ''}`}
+                      draggable={c.status !== 'closed'}
+                      onDragStart={(e) => handleDragStart(e, c)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => navigate(`/capas/${c.id}`)}
+                      style={{ animationDelay: `${idx * 50}ms`, cursor: c.status === 'closed' ? 'pointer' : 'grab' }}
+                    >
+                      {c.status !== 'closed' && <div className="capa-kcard-grip"><Icon name="sort" size={12}/></div>}
                       <div className="capa-kcard-top">
                         <span className="capa-kcard-ref">{c.capa_number}</span>
                         <span className={`capa-kcard-type kt-${c.type}`}>
@@ -178,7 +289,9 @@ export default function CAPAPage() {
                     </div>
                   ))}
                   {cards.length === 0 && (
-                    <div style={{ padding: '20px 14px', textAlign: 'center', fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>No CAPAs</div>
+                    <div className="capa-col-empty">
+                      {isOver ? 'Drop here' : 'No CAPAs'}
+                    </div>
                   )}
                 </div>
               </div>
@@ -220,6 +333,15 @@ export default function CAPAPage() {
             <div style={{ padding: 40, textAlign: 'center', fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No CAPAs found</div>
           )}
         </div>
+      )}
+
+      {/* Toast */}
+      {toast && createPortal(
+        <div className="capd-toast">
+          <span className="toast-check"><Icon name="check" size={12}/></span>
+          {toast}
+        </div>,
+        document.body
       )}
     </div>
   );

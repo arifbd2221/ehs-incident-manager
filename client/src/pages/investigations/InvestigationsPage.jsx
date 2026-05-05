@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { getInvestigations } from '../../api/investigations';
+import { getInvestigations, updateInvestigation, closeInvestigation } from '../../api/investigations';
 import { useApp } from '../../context/AppContext';
 import Icon from '../../components/shared/Icon';
 import { SevBadge } from '../../components/shared/Badges';
@@ -16,6 +17,13 @@ const KANBAN_COLS = [
 
 const LANE_LABELS = { pending: 'Pending', progress: 'In progress', capa: 'Awaiting CAPA', closed: 'Closed' };
 
+const ALLOWED_MOVES = {
+  pending: ['progress'],
+  progress: ['pending', 'closed'],
+  capa: ['closed'],
+  closed: [],
+};
+
 export default function InvestigationsPage() {
   const navigate = useNavigate();
   const { refreshKey } = useApp();
@@ -23,15 +31,107 @@ export default function InvestigationsPage() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('kanban');
 
-  useEffect(() => {
+  const [dragId, setDragId] = useState(null);
+  const [overCol, setOverCol] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const [closeModal, setCloseModal] = useState(null);
+  const [closeReason, setCloseReason] = useState('');
+  const [closing, setClosing] = useState(false);
+
+  const dragSourceCol = useRef(null);
+
+  const load = () => {
     setLoading(true);
     getInvestigations()
       .then(data => setInvestigations(data.investigations || []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [refreshKey]);
+  };
+
+  useEffect(load, [refreshKey]);
 
   const byLane = (laneId) => investigations.filter(inv => inv.status === laneId);
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
+
+  const handleDragStart = (e, inv) => {
+    if (inv.status === 'closed') { e.preventDefault(); return; }
+    dragSourceCol.current = inv.status;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', inv.id);
+    requestAnimationFrame(() => setDragId(inv.id));
+  };
+
+  const handleDragOver = (e, colId) => {
+    e.preventDefault();
+    const from = dragSourceCol.current;
+    if (!from || from === colId) { setOverCol(null); return; }
+    if (!ALLOWED_MOVES[from]?.includes(colId)) {
+      e.dataTransfer.dropEffect = 'none';
+      setOverCol(null);
+      return;
+    }
+    e.dataTransfer.dropEffect = 'move';
+    setOverCol(colId);
+  };
+
+  const handleDragLeave = (e, colId) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      if (overCol === colId) setOverCol(null);
+    }
+  };
+
+  const handleDrop = async (e, targetCol) => {
+    e.preventDefault();
+    setOverCol(null);
+    const invId = parseInt(e.dataTransfer.getData('text/plain'));
+    const inv = investigations.find(i => i.id === invId);
+    if (!inv || inv.status === targetCol) { setDragId(null); return; }
+
+    const from = inv.status;
+    if (!ALLOWED_MOVES[from]?.includes(targetCol)) {
+      showToast(`Cannot move from ${LANE_LABELS[from]} to ${LANE_LABELS[targetCol]}`);
+      setDragId(null);
+      return;
+    }
+
+    if (targetCol === 'closed') {
+      setCloseModal(inv);
+      setCloseReason('');
+      setDragId(null);
+      return;
+    }
+
+    try {
+      setInvestigations(prev => prev.map(i => i.id === invId ? { ...i, status: targetCol } : i));
+      await updateInvestigation(invId, { status: targetCol });
+      showToast(`Moved to ${LANE_LABELS[targetCol]}`);
+    } catch {
+      load();
+      showToast('Failed to update status');
+    }
+    setDragId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragId(null);
+    setOverCol(null);
+    dragSourceCol.current = null;
+  };
+
+  const handleCloseInvestigation = async () => {
+    if (!closeModal) return;
+    setClosing(true);
+    try {
+      await closeInvestigation(closeModal.id, { reason: closeReason || 'Closed via board' });
+      showToast('Investigation closed');
+      setCloseModal(null);
+      load();
+    } catch {
+      showToast('Failed to close investigation');
+    }
+    setClosing(false);
+  };
 
   return (
     <div className="page">
@@ -76,8 +176,16 @@ export default function InvestigationsPage() {
         <div className="inv-kanban">
           {KANBAN_COLS.map(col => {
             const cards = byLane(col.id);
+            const isOver = overCol === col.id;
             return (
-              <div key={col.id} className="inv-col">
+              <div
+                key={col.id}
+                className={`inv-col ${isOver ? 'inv-col-over' : ''}`}
+                style={{ '--col-accent': col.color }}
+                onDragOver={(e) => handleDragOver(e, col.id)}
+                onDragLeave={(e) => handleDragLeave(e, col.id)}
+                onDrop={(e) => handleDrop(e, col.id)}
+              >
                 <div className="inv-col-header">
                   <span className="inv-col-accent" style={{ background: col.color }}/>
                   <span className="inv-col-title">{col.title}</span>
@@ -85,7 +193,16 @@ export default function InvestigationsPage() {
                 </div>
                 <div className="inv-col-cards">
                   {cards.map((inv, idx) => (
-                    <div key={inv.id} className={`inv-kcard ks-${inv.severity}`} onClick={() => navigate(`/investigations/${inv.id}`)} style={{ animationDelay: `${idx * 50}ms` }}>
+                    <div
+                      key={inv.id}
+                      className={`inv-kcard ks-${inv.severity} ${dragId === inv.id ? 'inv-dragging' : ''}`}
+                      draggable={inv.status !== 'closed'}
+                      onDragStart={(e) => handleDragStart(e, inv)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => navigate(`/investigations/${inv.id}`)}
+                      style={{ animationDelay: `${idx * 50}ms`, cursor: inv.status === 'closed' ? 'pointer' : 'grab' }}
+                    >
+                      {inv.status !== 'closed' && <div className="inv-kcard-grip"><Icon name="sort" size={12}/></div>}
                       <div className="inv-kcard-top">
                         <span className="inv-kcard-ref">{inv.investigation_number}</span>
                         <SevBadge s={inv.severity}/>
@@ -114,8 +231,8 @@ export default function InvestigationsPage() {
                     </div>
                   ))}
                   {cards.length === 0 && (
-                    <div style={{ padding: '20px 14px', textAlign: 'center', fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>
-                      No investigations
+                    <div className="inv-col-empty">
+                      {isOver ? 'Drop here' : 'No investigations'}
                     </div>
                   )}
                 </div>
@@ -168,6 +285,54 @@ export default function InvestigationsPage() {
             <div style={{ padding: 40, textAlign: 'center', fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No investigations</div>
           )}
         </div>
+      )}
+
+      {/* Close investigation modal */}
+      {closeModal && createPortal(
+        <div className="idet-modal-backdrop" onClick={() => setCloseModal(null)}>
+          <div className="idet-modal" onClick={e => e.stopPropagation()}>
+            <div className="idet-modal-header">
+              <div>
+                <div className="idet-modal-title">Close Investigation</div>
+                <div className="idet-modal-sub">{closeModal.investigation_number} — {closeModal.incident_title}</div>
+              </div>
+              <button className="idet-modal-close" onClick={() => setCloseModal(null)}>
+                <Icon name="close" size={14}/>
+              </button>
+            </div>
+            <div className="idet-modal-body">
+              <div className="modal-hint">
+                Closing this investigation will mark it as resolved. Please provide a brief closure reason.
+              </div>
+              <div className="form-group">
+                <label className="form-label">Closure reason</label>
+                <textarea
+                  className="form-textarea"
+                  rows={3}
+                  placeholder="Investigation findings, resolution summary..."
+                  value={closeReason}
+                  onChange={e => setCloseReason(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="idet-modal-footer">
+              <button className="modal-cancel" onClick={() => setCloseModal(null)}>Cancel</button>
+              <button className="modal-confirm" onClick={handleCloseInvestigation} disabled={closing}>
+                <Icon name="check" size={14}/>{closing ? 'Closing...' : 'Close investigation'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Toast */}
+      {toast && createPortal(
+        <div className="invd-toast">
+          <span className="toast-check"><Icon name="check" size={12}/></span>
+          {toast}
+        </div>,
+        document.body
       )}
     </div>
   );
