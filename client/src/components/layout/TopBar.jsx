@@ -6,6 +6,47 @@ import { useApp } from '../../context/AppContext';
 import { getNotifications, markAllRead } from '../../api/notifications';
 import { globalSearch } from '../../api/search';
 
+const PAGE_TIPS = {
+  '/': [
+    { icon: 'dashboard', text: 'Click any KPI card to jump directly to that section' },
+    { icon: 'plus', text: 'Report a new incident using the button in the top bar' },
+    { icon: 'clock', text: 'Recent activity updates automatically as incidents progress' },
+  ],
+  '/incidents': [
+    { icon: 'filter', text: 'Use tabs to filter incidents by status (Open, In Progress, Closed)' },
+    { icon: 'search', text: 'Search by incident number, title, site, or reporter name' },
+    { icon: 'eye', text: 'Click any incident card to view full details and timeline' },
+    { icon: 'edit', text: 'Update status and add notes from the incident detail page' },
+  ],
+  '/investigations': [
+    { icon: 'investigation', text: 'Switch between kanban board and list view using the toggle' },
+    { icon: 'person', text: 'Assign team members and a lead investigator from the detail view' },
+    { icon: 'edit', text: 'Document findings and root causes using the 5-Why analysis' },
+  ],
+  '/capas': [
+    { icon: 'capa', text: 'Track corrective and preventive actions through their lifecycle' },
+    { icon: 'warning', text: 'Overdue items show a blinking red indicator — address them first' },
+    { icon: 'check', text: 'Set progress percentage and mark actions for verification when complete' },
+  ],
+  '/reports': [
+    { icon: 'reports', text: 'Generate compliance reports for OSHA and RIDDOR submissions' },
+    { icon: 'download', text: 'Export reports as PDF for regulatory filing' },
+  ],
+  '/profile': [
+    { icon: 'edit', text: 'Click Edit to update your name, department, job title, or site' },
+    { icon: 'gear', text: 'Change your password in the collapsible section on the right' },
+    { icon: 'export', text: 'Sign out from the button in your profile header' },
+  ],
+};
+
+const SHORTCUTS = [
+  { keys: ['/'], desc: 'Focus search' },
+  { keys: ['N'], desc: 'New incident report' },
+  { keys: ['Esc'], desc: 'Close open panels' },
+  { keys: ['↑', '↓'], desc: 'Navigate search results' },
+  { keys: ['↵'], desc: 'Open selected result' },
+];
+
 const CATEGORY_META = {
   incidents:      { icon: 'incidents', label: 'Incidents',      path: '/incidents' },
   investigations: { icon: 'investigation', label: 'Investigations', path: '/investigations' },
@@ -100,6 +141,7 @@ export default function TopBar() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState({ incidents: [], investigations: [], capas: [] });
@@ -108,6 +150,25 @@ export default function TopBar() {
   const [activeIdx, setActiveIdx] = useState(-1);
   const debounceRef = useRef(null);
   const searchRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = e.target.tagName;
+      const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if (e.key === 'Escape') {
+        setHelpOpen(false);
+        setNotifOpen(false);
+        setSearchOpen(false);
+        return;
+      }
+      if (isInput) return;
+      if (e.key === '/' ) { e.preventDefault(); searchInputRef.current?.focus(); }
+      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setWizardOpen(true); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setWizardOpen]);
 
   useEffect(() => {
     getNotifications({ unread: 1 }).then(data => {
@@ -195,6 +256,7 @@ export default function TopBar() {
         <div className="search" ref={searchRef}>
           <Icon name="search" size={16} />
           <input
+            ref={searchInputRef}
             placeholder="Search incidents, investigations, CAPAs..."
             value={query}
             onChange={handleInput}
@@ -219,7 +281,7 @@ export default function TopBar() {
         <button className="btn btn-primary btn-sm" onClick={() => setWizardOpen(true)}>
           <Icon name="plus" size={16} />Report incident
         </button>
-        <button className="icon-btn" title="Help"><Icon name="help" size={20} /></button>
+        <button className={`icon-btn ${helpOpen ? 'is-open' : ''}`} title="Help" onClick={() => setHelpOpen(v => !v)}><Icon name="help" size={20} /></button>
         <div className="notif-anchor">
           <button className={`icon-btn ${notifOpen ? 'is-open' : ''}`} title="Notifications" onClick={() => setNotifOpen(v => !v)}>
             <Icon name="bell" size={20} />
@@ -255,6 +317,53 @@ export default function TopBar() {
         </div>
         <div className="avatar" onClick={() => navigate('/profile')} title="View profile">{user?.initials || '??'}</div>
       </div>
+
+      {helpOpen && (
+        <>
+          <div className="help-backdrop" onClick={() => setHelpOpen(false)} />
+          <div className="help-panel" role="dialog">
+            <div className="help-header">
+              <div>
+                <div className="help-h-title">Help & Tips</div>
+                <div className="help-h-sub">{crumb()} — quick guide</div>
+              </div>
+              <button className="icon-btn" onClick={() => setHelpOpen(false)}><Icon name="close" size={18} /></button>
+            </div>
+
+            <div className="help-body">
+              <div className="help-section">
+                <div className="help-sec-label">Tips for this page</div>
+                {(PAGE_TIPS[Object.keys(PAGE_TIPS).find(k => k === '/' ? location.pathname === '/' : location.pathname.startsWith(k))] || PAGE_TIPS['/']).map((tip, i) => (
+                  <div key={i} className="help-tip">
+                    <div className="help-tip-icon"><Icon name={tip.icon} size={15} /></div>
+                    <div className="help-tip-text">{tip.text}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="help-section">
+                <div className="help-sec-label">Keyboard shortcuts</div>
+                <div className="help-shortcuts">
+                  {SHORTCUTS.map((s, i) => (
+                    <div key={i} className="help-sc-row">
+                      <div className="help-sc-keys">{s.keys.map((k, j) => <kbd key={j}>{k}</kbd>)}</div>
+                      <div className="help-sc-desc">{s.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="help-footer">
+              <div className="help-footer-line">EHS Incident Management v1.0</div>
+              <div className="help-footer-line">
+                Need help? <a href="mailto:support@sdsmanager.com">support@sdsmanager.com</a>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="page-strip">
         <div className="crumbs">SDS Manager / EHS / <b>{crumb()}</b></div>
         <div className="grow" />
