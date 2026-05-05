@@ -201,6 +201,21 @@ export function inferSeverityFrom(input = {}) {
     if (severity > 2) reasons.push('Severity floored to S2 Major: loss of consciousness');
     severity = Math.min(severity, 2);
     if (severity <= 2) track = 'A';
+  } else if (
+    hasSpecifiedInjuryRegion(body_parts_affected) &&
+    (treatments.includes('Medical treatment') || daysAway > 0 ||
+     oshaFlags.includes('Medical treatment beyond first aid') ||
+     oshaFlags.includes('Days away from work (DART)'))
+  ) {
+    // Specified-injury region (head/face/spine) AND any medical-treatment-class
+    // outcome → at least S3 Moderate (Track B). The matrix alone undershoots
+    // because Rare × Major = S4 Minor, which doesn't reflect the real risk
+    // when the body part is high-stakes.
+    if (severity > 3) {
+      reasons.push('Severity floored to S3 Moderate: specified-injury region (head/face/spine) with medical-treatment outcome');
+      severity = 3;
+      if (track !== 'A') track = 'B';
+    }
   }
 
   // observation type: keep the cap from calculateSeverityAndTrack —
