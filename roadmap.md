@@ -59,6 +59,31 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 
 - [ ] **E7.1** **Custom fields per asset type** — SafetyCulture-style. New `asset_category_fields` table (field_name, field_type, required, options, order). `assets.custom_fields` JSON. UI: define fields when creating/editing a category; render fields when creating an asset of that type; display on detail page.
 
+## Backlog — productionization UX (treat this as an actual app, not just demo polish)
+
+These came out of the post-Wave-4 review. The shared theme is **"the incident record lives — investigators keep it accurate as facts emerge, every change is auditable."** OSHA 1904.33 explicitly expects amendments within the 5-year retention window, so none of this is a recordkeeping risk as long as the activity log captures who/what/when.
+
+### Editable Incident Detail (one cohesive bundle)
+
+- [x] **UX-A** **Post-report attachments** — add + delete with audit. Photos surface hours/days later; capturing them at submission only is a real gap. — commit `ba14826`
+- [ ] **UX-B** **Inline notes on activity timeline** — `POST /incidents/:id/note` writes one `activity_log` row with `action='note'` + free text. Renders in the existing timeline UI. Single biggest investigation-quality win — turns a passive system log into an actual investigation tool ("Spoke with site mgr — no PPE was issued").
+- [ ] **UX-C** **Editable description / area / department / body parts** on the detail page. PATCH already supports all of these BE-side; UI is what's missing. Use field-level edit affordances rather than a giant edit-mode toggle.
+- [ ] **UX-D** **Add/edit witnesses post-creation** — witnesses surface late. Currently captured at submission only. Small route + a witnesses card with add/edit/remove.
+- [ ] **UX-E** **Severity override UI** — BE already wires `severity_override` / `severity_override_by` / `severity_override_reason` and writes a `severity_overridden` activity_log entry. UI is missing — needs a small modal: new severity, required reason, confirm. Triage often needs to bump severity after seeing photos.
+
+### Quick wins (independent, can land any time)
+
+- [ ] **UX-F** **Global search jump-to in TopBar** — wire to `/api/search`, keyboard-driven dropdown ("INC-…" / "INV-…" / "CAPA-…" → enter → navigate).
+- [ ] **UX-G** **CAPA due-date color coding** on kanban cards — red <3d, amber <7d, gray else. Five-minute change, instant readability win.
+- [ ] **UX-H** **Cross-page stop-work banner** — if any incident has `stop_work_status='active'`, render a thin red bar on every protected page, not just Dashboard.
+
+### Deferred (cool but expensive — revisit only if other beats are solid)
+
+- "Similar incidents" panel on IncidentDetail (semantic match by site + body part + window).
+- OSHA 301 PDF export.
+- Trending dashboard widgets ("3 incidents at Press 4 this month, +200%").
+- Keyboard shortcuts (`?` help, `g i` incidents, `n` new incident).
+
 ## Known issues (investigate later, not blocking)
 
 - [ ] **BUG-001** "Failed to create category" error using the inline `+ Add new category…` flow in the AssetsList modal. Backend `POST /api/asset-categories` works via curl. Suspect (a) Vite proxy / Origin header mismatch on POST, (b) async state race after `refreshCategories()`, or (c) hitting a default-seeded name → 409 not surfacing properly. Note: AssetsList.jsx was redesigned upstream by `b27b352` after this bug was logged — the redesign may have already fixed it.
@@ -71,7 +96,7 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 
 ## State
 
-- **Local commits ahead of `origin/main`**: see `git log origin/main..backend` — all Wave 3 commits + roadmap updates pushed to `origin/backend`.
+- **Local commits ahead of `origin/main`**: see `git log origin/main..backend` — all Wave 3 + Wave 4 + UX-A commits pushed to `origin/backend`.
 - **Branch**: `backend`
 - **Running**: dev servers usually started via `npm run dev` from the project root (BE on `:3001`, FE on `:5173`). Demo accounts in seed.
 
