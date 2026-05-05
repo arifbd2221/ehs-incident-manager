@@ -36,10 +36,10 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 - [x] **T3.4** `POST /incidents/:id/recordability-verify` (5-gate decision) — commit `29d390e`
 - [x] **F3.5** EHS recordability verification card on incident detail — commit `2aa3e3b`
 
-## Wave 4 — CAPA polymorphic
+## Wave 4 — CAPA polymorphic ✅ complete
 
-- [ ] **T4.1** CAPA polymorphic: `POST /capas` + `POST /incidents/:id/create-capa` + assign-capa source_type
-- [ ] **F4.1** "+ New CAPA" button with source picker on CAPA list
+- [x] **T4.1** CAPA polymorphic: `POST /capas` + `POST /incidents/:id/create-capa` + assign-capa source_type — commit `465a5dd`
+- [x] **F4.1** "+ New CAPA" button with source picker on CAPA list — commit `18eeb68`
 
 ## Wave 5 — Voice intake
 
@@ -82,4 +82,4 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 3. `git fetch origin && git status` — confirm branch state vs `origin/main`.
 4. `cd server && rm -f db/incident_management.db db/*.db-wal db/*.db-shm && node db/seed.js && cd .. && npm run dev` — clean reset + boot.
 5. Login as `elena@sdsmanager.com / password123`. Quick sanity click: Dashboard, Sites, Assets, Documents, Investigations, Wizard.
-6. **Next task**: T4.1 (CAPA polymorphic — `POST /capas` + `POST /incidents/:id/create-capa` + assign-capa source_type) — start of Wave 4.
+6. **Next task**: T5.1 (`services/voice_extract.js` — Anthropic SDK + tool-use schema) — start of Wave 5.
