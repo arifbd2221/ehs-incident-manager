@@ -23,6 +23,7 @@ import {
   updateCategoryField,
   deleteCategoryField,
 } from '../../api/asset_categories';
+import { ASSET_TYPE_TEMPLATES } from '../assets/asset_type_templates';
 
 // Names that come pre-loaded via migration 004. Used to mark them as
 // Default in the UI; we still allow soft-delete with a warning so users
@@ -58,6 +59,10 @@ export default function AssetTypesModal({ onClose }) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [savingNew, setSavingNew] = useState(false);
+  // start-from picker state. mode = 'blank' | 'existing' | 'template'
+  const [startMode, setStartMode] = useState('blank');
+  const [startSourceTypeId, setStartSourceTypeId] = useState('');
+  const [startTemplateId, setStartTemplateId] = useState('');
 
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [addingField, setAddingField] = useState(false);
@@ -108,18 +113,63 @@ export default function AssetTypesModal({ onClose }) {
   );
   const isPredefined = (t) => PREDEFINED_TYPES.has(t?.name);
 
+  // Resolve the field set the new type should start with based on the
+  // user's "Start from" choice. Returns an array of field-create payloads.
+  const resolveStarterFields = async () => {
+    if (startMode === 'template' && startTemplateId) {
+      const tpl = ASSET_TYPE_TEMPLATES.find(t => t.id === startTemplateId);
+      return tpl?.fields || [];
+    }
+    if (startMode === 'existing' && startSourceTypeId) {
+      const sourceFields = await listCategoryFields(Number(startSourceTypeId));
+      // Strip ids and clone the relevant fields. Options come back parsed
+      // already; the create endpoint also expects them as arrays.
+      return sourceFields.map(f => ({
+        field_label: f.field_label,
+        field_type: f.field_type,
+        is_required: !!f.is_required,
+        helper_text: f.helper_text || null,
+        options: Array.isArray(f.options) ? f.options : (f.options ? [] : undefined),
+      }));
+    }
+    return [];
+  };
+
   const handleAddType = async () => {
     setError(null);
     if (!newName.trim()) { setError('Name is required'); return; }
     setSavingNew(true);
     try {
+      const starter = await resolveStarterFields();
+
       const cat = await createAssetCategory({ name: newName.trim() });
+
+      // Sequentially create starter fields. We don't fail the whole flow
+      // if one field create errors — better to show a partial success than
+      // lose the just-created category. Errors collected and toasted.
+      const errors = [];
+      for (const f of starter) {
+        try {
+          await addCategoryField(cat.id, f);
+        } catch (e) {
+          errors.push(`${f.field_label}: ${e?.response?.data?.error || 'failed'}`);
+        }
+      }
+
       await refreshTypes();
       setActiveId(cat.id);
-      setFieldCounts(prev => ({ ...prev, [cat.id]: 0 }));
+      setFieldCounts(prev => ({ ...prev, [cat.id]: starter.length - errors.length }));
       setNewName('');
+      setStartMode('blank');
+      setStartSourceTypeId('');
+      setStartTemplateId('');
       setAdding(false);
-      showToast(`Added "${cat.name}"`);
+      showToast(
+        starter.length > 0
+          ? `Added "${cat.name}" with ${starter.length - errors.length} starter field${starter.length - errors.length === 1 ? '' : 's'}`
+          : `Added "${cat.name}"`
+      );
+      if (errors.length > 0) setError(`Some starter fields failed: ${errors.join(' · ')}`);
     } catch (e) {
       setError(e?.response?.data?.error || 'Failed to add asset type');
     } finally {
@@ -231,27 +281,7 @@ export default function AssetTypesModal({ onClose }) {
               })}
             </div>
 
-            {adding ? (
-              <div className="atm-add-type">
-                <input
-                  className="input atm-add-input"
-                  placeholder="e.g. Solar panel array"
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleAddType();
-                    if (e.key === 'Escape') { setAdding(false); setNewName(''); }
-                  }}
-                  autoFocus
-                />
-                <div className="atm-add-actions">
-                  <button className="btn btn-secondary btn-sm" onClick={() => { setAdding(false); setNewName(''); }}>Cancel</button>
-                  <button className="btn btn-primary btn-sm" onClick={handleAddType} disabled={!newName.trim() || savingNew}>
-                    {savingNew ? 'Saving…' : 'Add'}
-                  </button>
-                </div>
-              </div>
-            ) : (
+            {!adding && (
               <button className="atm-add-trigger" onClick={() => setAdding(true)}>
                 <Icon name="plus" size={14}/> New asset type
               </button>
@@ -260,7 +290,31 @@ export default function AssetTypesModal({ onClose }) {
 
           {/* RIGHT — fields for selected type */}
           <div className="atm-pane atm-pane-right">
-            {activeType ? (
+            {adding ? (
+              <NewTypeForm
+                name={newName}
+                setName={setNewName}
+                startMode={startMode}
+                setStartMode={setStartMode}
+                startSourceTypeId={startSourceTypeId}
+                setStartSourceTypeId={setStartSourceTypeId}
+                startTemplateId={startTemplateId}
+                setStartTemplateId={setStartTemplateId}
+                existingTypes={types}
+                templates={ASSET_TYPE_TEMPLATES}
+                error={error}
+                saving={savingNew}
+                onCancel={() => {
+                  setAdding(false);
+                  setNewName('');
+                  setStartMode('blank');
+                  setStartSourceTypeId('');
+                  setStartTemplateId('');
+                  setError(null);
+                }}
+                onCreate={handleAddType}
+              />
+            ) : activeType ? (
               <>
                 <div className="atm-pane-h atm-detail-h">
                   <div>
@@ -403,6 +457,153 @@ export default function AssetTypesModal({ onClose }) {
         </div>
 
         {toast && <div className="atm-toast"><Icon name="check" size={13}/>{toast}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Inline new-type form rendered in the right pane while `adding` is true.
+// Three "Start from" cards: Blank | From an existing type | From a template.
+// On submit, the parent runs handleAddType which clones the chosen field
+// set into the new category.
+function NewTypeForm({
+  name, setName,
+  startMode, setStartMode,
+  startSourceTypeId, setStartSourceTypeId,
+  startTemplateId, setStartTemplateId,
+  existingTypes, templates,
+  error, saving,
+  onCancel, onCreate,
+}) {
+  const canCreate = !!name.trim() && (
+    startMode === 'blank' ||
+    (startMode === 'existing' && startSourceTypeId) ||
+    (startMode === 'template' && startTemplateId)
+  );
+
+  return (
+    <div className="atm-newtype">
+      <div className="atm-newtype-h">
+        <div>
+          <div className="atm-newtype-title">New asset type</div>
+          <div className="atm-newtype-sub">Pick a starting point — you can add or remove fields after creation</div>
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="label">Name <span className="req">*</span></label>
+        <input
+          className="input"
+          placeholder="e.g. Solar panel array"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          autoFocus
+        />
+      </div>
+
+      <div className="field">
+        <label className="label">Start from</label>
+        <div className="atm-start-grid">
+          <button
+            type="button"
+            className={`atm-start-card ${startMode === 'blank' ? 'is-on' : ''}`}
+            onClick={() => setStartMode('blank')}
+          >
+            <div className="atm-start-icon"><Icon name="plus" size={16}/></div>
+            <div>
+              <div className="atm-start-title">Blank</div>
+              <div className="atm-start-desc">Define every field from scratch</div>
+            </div>
+          </button>
+          <button
+            type="button"
+            className={`atm-start-card ${startMode === 'existing' ? 'is-on' : ''}`}
+            onClick={() => setStartMode('existing')}
+          >
+            <div className="atm-start-icon"><Icon name="export" size={16}/></div>
+            <div>
+              <div className="atm-start-title">From existing type</div>
+              <div className="atm-start-desc">Copy fields from one of your current types</div>
+            </div>
+          </button>
+          <button
+            type="button"
+            className={`atm-start-card ${startMode === 'template' ? 'is-on' : ''}`}
+            onClick={() => setStartMode('template')}
+          >
+            <div className="atm-start-icon"><Icon name="settings" size={16}/></div>
+            <div>
+              <div className="atm-start-title">From template</div>
+              <div className="atm-start-desc">Office, IT, lab, forklift, fire safety…</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {startMode === 'existing' && (
+        <div className="field">
+          <label className="label">Source type <span className="req">*</span></label>
+          <select
+            className="select"
+            value={startSourceTypeId}
+            onChange={e => setStartSourceTypeId(e.target.value)}
+          >
+            <option value="">— pick a type —</option>
+            {existingTypes.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <span className="helper">All current fields will be cloned into the new type</span>
+        </div>
+      )}
+
+      {startMode === 'template' && (
+        <div className="field">
+          <label className="label">Template <span className="req">*</span></label>
+          <div className="atm-tpl-grid">
+            {templates.map(tpl => (
+              <button
+                type="button"
+                key={tpl.id}
+                className={`atm-tpl-card ${startTemplateId === tpl.id ? 'is-on' : ''}`}
+                onClick={() => {
+                  setStartTemplateId(tpl.id);
+                  // helpful default: if the user hasn't named it yet, copy
+                  // the template's name as a starting point.
+                  if (!name.trim()) setName(tpl.name);
+                }}
+              >
+                <div className="atm-tpl-card-h">
+                  <span className="atm-tpl-dot" style={{ background: tpl.color }}/>
+                  <span className="atm-tpl-name">{tpl.name}</span>
+                  <span className="atm-tpl-fc">{tpl.fields.length}</span>
+                </div>
+                <div className="atm-tpl-desc">{tpl.description}</div>
+                <div className="atm-tpl-fields">
+                  {tpl.fields.slice(0, 3).map((f, i) => (
+                    <span key={i} className="atm-tpl-field-chip">{f.field_label}</span>
+                  ))}
+                  {tpl.fields.length > 3 && (
+                    <span className="atm-tpl-field-chip atm-tpl-field-chip-more">+{tpl.fields.length - 3} more</span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {error && <div className="atm-error">{error}</div>}
+
+      <div className="atm-newtype-actions">
+        <button className="btn btn-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
+        <button className="btn btn-primary" onClick={onCreate} disabled={!canCreate || saving}>
+          {saving ? 'Creating…' : (
+            <>
+              <Icon name="check" size={13}/> Create asset type
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
