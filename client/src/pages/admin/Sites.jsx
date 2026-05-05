@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { listSites, createSite, updateSite, deleteSite } from '../../api/sites';
 import Icon from '../../components/shared/Icon';
@@ -18,16 +19,47 @@ const EMPTY = {
   timezone: 'America/New_York',
 };
 
+const COUNTRIES = [
+  { code: 'US', label: 'United States', flag: '\u{1F1FA}\u{1F1F8}' },
+  { code: 'UK', label: 'United Kingdom', flag: '\u{1F1EC}\u{1F1E7}' },
+  { code: 'CA', label: 'Canada', flag: '\u{1F1E8}\u{1F1E6}' },
+  { code: 'AU', label: 'Australia', flag: '\u{1F1E6}\u{1F1FA}' },
+  { code: 'IN', label: 'India', flag: '\u{1F1EE}\u{1F1F3}' },
+  { code: 'OTHER', label: 'Other', flag: '\u{1F310}' },
+];
+
+const TIMEZONES = [
+  { value: 'America/New_York', label: 'Eastern (New York)' },
+  { value: 'America/Chicago', label: 'Central (Chicago)' },
+  { value: 'America/Denver', label: 'Mountain (Denver)' },
+  { value: 'America/Los_Angeles', label: 'Pacific (Los Angeles)' },
+  { value: 'Europe/London', label: 'GMT (London)' },
+  { value: 'Europe/Berlin', label: 'CET (Berlin)' },
+  { value: 'Asia/Singapore', label: 'SGT (Singapore)' },
+  { value: 'Asia/Kolkata', label: 'IST (Kolkata)' },
+  { value: 'Australia/Sydney', label: 'AEST (Sydney)' },
+];
+
+const SECTIONS = [
+  { key: 'general', icon: 'factory', label: 'General' },
+  { key: 'location', icon: 'location', label: 'Location' },
+  { key: 'compliance', icon: 'shield', label: 'Compliance' },
+  { key: 'workforce', icon: 'person', label: 'Workforce' },
+];
+
 export default function Sites() {
   const { user } = useAuth();
   const canEdit = ELEVATED.has(user?.role);
 
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null); // null | 'new' | site object
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
+  const [activeSection, setActiveSection] = useState('general');
+  const [success, setSuccess] = useState(false);
+  const nameRef = useRef(null);
 
   const refresh = () => {
     setLoading(true);
@@ -40,6 +72,9 @@ export default function Sites() {
     setEditing('new');
     setForm(EMPTY);
     setMsg({ type: '', text: '' });
+    setActiveSection('general');
+    setSuccess(false);
+    setTimeout(() => nameRef.current?.focus(), 150);
   };
 
   const openEdit = (site) => {
@@ -56,11 +91,14 @@ export default function Sites() {
       timezone: site.timezone || 'America/New_York',
     });
     setMsg({ type: '', text: '' });
+    setActiveSection('general');
+    setSuccess(false);
   };
 
   const close = () => {
     setEditing(null);
     setMsg({ type: '', text: '' });
+    setSuccess(false);
   };
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -68,7 +106,9 @@ export default function Sites() {
   const handleSave = async (e) => {
     e?.preventDefault();
     if (!form.name.trim()) {
-      setMsg({ type: 'error', text: 'Name is required' });
+      setMsg({ type: 'error', text: 'Site name is required' });
+      setActiveSection('general');
+      nameRef.current?.focus();
       return;
     }
     setSaving(true);
@@ -84,8 +124,8 @@ export default function Sites() {
       } else {
         await updateSite(editing.id, payload);
       }
-      refresh();
-      close();
+      setSuccess(true);
+      setTimeout(() => { refresh(); close(); }, 600);
     } catch (err) {
       setMsg({ type: 'error', text: err.response?.data?.error || 'Save failed' });
     } finally {
@@ -112,6 +152,10 @@ export default function Sites() {
     }
   };
 
+  const countryObj = COUNTRIES.find(c => c.code === form.country) || COUNTRIES[0];
+  const completeness = [form.name, form.address, form.country, form.timezone, form.naics_code || form.establishment_id || form.hse_establishment_id].filter(Boolean).length;
+  const pct = Math.round((completeness / 5) * 100);
+
   return (
     <div className="page sites-page">
       <div className="sites-header">
@@ -127,10 +171,10 @@ export default function Sites() {
         )}
       </div>
 
-      {loading && <div className="sites-loading">Loading…</div>}
+      {loading && <div className="sites-loading">Loading...</div>}
 
       {!loading && sites.length === 0 && (
-        <div className="sites-empty">No sites yet. {canEdit ? 'Click “New site” to add one.' : ''}</div>
+        <div className="sites-empty">No sites yet. {canEdit ? 'Click "New site" to add one.' : ''}</div>
       )}
 
       <div className="sites-grid">
@@ -165,89 +209,219 @@ export default function Sites() {
         ))}
       </div>
 
-      {editing !== null && (
-        <div className="sites-modal-backdrop" onClick={close}>
-          <div className="sites-modal" onClick={e => e.stopPropagation()}>
-            <div className="sites-modal-h">
-              <h2>{editing === 'new' ? 'New site' : `Edit ${editing.name}`}</h2>
-              <button className="icon-btn" onClick={close}><Icon name="close" size={18} /></button>
+      {editing !== null && createPortal(
+        <div className="modal-backdrop" onClick={close}>
+          <form className={`sm-modal${success ? ' sm-success' : ''}`} onClick={e => e.stopPropagation()} onSubmit={handleSave}>
+            {/* Header */}
+            <div className="sm-header">
+              <div className="sm-header-icon">
+                <Icon name="factory" size={20} />
+              </div>
+              <div className="sm-header-text">
+                <h2>{editing === 'new' ? 'New site' : `Edit ${editing.name}`}</h2>
+                <p>{editing === 'new' ? 'Add a new site to your organization' : 'Update site details'}</p>
+              </div>
+              <button type="button" className="sm-close" onClick={close}>
+                <Icon name="close" size={18} />
+              </button>
             </div>
-            <form className="sites-modal-body" onSubmit={handleSave}>
-              <div className="field">
-                <label className="label">Name <span className="req">*</span></label>
-                <input className="input" value={form.name} onChange={e => set('name', e.target.value)} autoFocus />
-              </div>
-              <div className="field">
-                <label className="label">Address</label>
-                <input className="input" value={form.address} onChange={e => set('address', e.target.value)} />
-              </div>
-              <div className="field-row-2">
-                <div className="field">
-                  <label className="label">Country</label>
-                  <select className="input" value={form.country} onChange={e => set('country', e.target.value)}>
-                    <option value="US">US</option>
-                    <option value="UK">UK</option>
-                    <option value="CA">CA</option>
-                    <option value="AU">AU</option>
-                    <option value="IN">IN</option>
-                    <option value="OTHER">Other</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label className="label">Time zone</label>
-                  <select className="input" value={form.timezone} onChange={e => set('timezone', e.target.value)}>
-                    <option value="America/New_York">America/New_York</option>
-                    <option value="America/Chicago">America/Chicago</option>
-                    <option value="America/Denver">America/Denver</option>
-                    <option value="America/Los_Angeles">America/Los_Angeles</option>
-                    <option value="Europe/London">Europe/London</option>
-                    <option value="Europe/Berlin">Europe/Berlin</option>
-                    <option value="Asia/Singapore">Asia/Singapore</option>
-                    <option value="Asia/Kolkata">Asia/Kolkata</option>
-                    <option value="Australia/Sydney">Australia/Sydney</option>
-                  </select>
-                </div>
-              </div>
-              <div className="field-row-2">
-                <div className="field">
-                  <label className="label">NAICS code (US)</label>
-                  <input className="input" value={form.naics_code} onChange={e => set('naics_code', e.target.value)} placeholder="e.g. 325199" />
-                </div>
-                <div className="field">
-                  <label className="label">OSHA establishment ID</label>
-                  <input className="input" value={form.establishment_id} onChange={e => set('establishment_id', e.target.value)} />
-                </div>
-              </div>
-              <div className="field">
-                <label className="label">HSE establishment ID (UK)</label>
-                <input className="input" value={form.hse_establishment_id} onChange={e => set('hse_establishment_id', e.target.value)} />
-              </div>
-              <div className="field-row-2">
-                <div className="field">
-                  <label className="label">Annual avg. employees</label>
-                  <input className="input" type="number" min="0" value={form.annual_avg_employees}
-                    onChange={e => set('annual_avg_employees', e.target.value)} />
-                </div>
-                <div className="field">
-                  <label className="label">Total hours worked / yr</label>
-                  <input className="input" type="number" min="0" value={form.total_hours_worked}
-                    onChange={e => set('total_hours_worked', e.target.value)} />
-                </div>
-              </div>
 
-              {msg.text && (
-                <div className={`sites-msg sites-msg-${msg.type}`}>{msg.text}</div>
+            {/* Progress bar */}
+            <div className="sm-progress">
+              <div className="sm-progress-bar" style={{ width: `${pct}%` }} />
+              <span className="sm-progress-label">{pct}% complete</span>
+            </div>
+
+            {/* Section tabs */}
+            <div className="sm-tabs">
+              {SECTIONS.map(s => (
+                <button
+                  key={s.key}
+                  type="button"
+                  className={`sm-tab${activeSection === s.key ? ' active' : ''}`}
+                  onClick={() => setActiveSection(s.key)}
+                >
+                  <Icon name={s.icon} size={16} />
+                  <span>{s.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Body */}
+            <div className="sm-body">
+              {/* General */}
+              {activeSection === 'general' && (
+                <div className="sm-section" key="general">
+                  <div className="sm-field" style={{ animationDelay: '0ms' }}>
+                    <label className="sm-label">Site name <span className="req">*</span></label>
+                    <input
+                      ref={nameRef}
+                      className={`sm-input${!form.name.trim() && msg.type === 'error' ? ' sm-input-err' : ''}`}
+                      value={form.name}
+                      onChange={e => set('name', e.target.value)}
+                      placeholder="e.g. Cleveland Manufacturing Plant"
+                    />
+                  </div>
+                  <div className="sm-field" style={{ animationDelay: '50ms' }}>
+                    <label className="sm-label">Country</label>
+                    <div className="sm-country-grid">
+                      {COUNTRIES.map(c => (
+                        <button
+                          key={c.code}
+                          type="button"
+                          className={`sm-country-btn${form.country === c.code ? ' active' : ''}`}
+                          onClick={() => set('country', c.code)}
+                        >
+                          <span className="sm-country-flag">{c.flag}</span>
+                          <span className="sm-country-code">{c.code}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="sm-field" style={{ animationDelay: '100ms' }}>
+                    <label className="sm-label">Time zone</label>
+                    <select className="sm-input" value={form.timezone} onChange={e => set('timezone', e.target.value)}>
+                      {TIMEZONES.map(tz => (
+                        <option key={tz.value} value={tz.value}>{tz.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               )}
 
-              <div className="sites-modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={close}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'Saving…' : (editing === 'new' ? 'Create site' : 'Save changes')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              {/* Location */}
+              {activeSection === 'location' && (
+                <div className="sm-section" key="location">
+                  <div className="sm-field" style={{ animationDelay: '0ms' }}>
+                    <label className="sm-label">Street address</label>
+                    <input
+                      className="sm-input"
+                      value={form.address}
+                      onChange={e => set('address', e.target.value)}
+                      placeholder="123 Industrial Blvd, Cleveland, OH 44114"
+                    />
+                  </div>
+                  <div className="sm-location-preview" style={{ animationDelay: '50ms' }}>
+                    <div className="sm-loc-icon"><Icon name="location" size={24} /></div>
+                    <div className="sm-loc-details">
+                      <span className="sm-loc-country">{countryObj.flag} {countryObj.label}</span>
+                      <span className="sm-loc-addr">{form.address || 'No address provided'}</span>
+                      <span className="sm-loc-tz"><Icon name="clock" size={12} /> {form.timezone}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Compliance */}
+              {activeSection === 'compliance' && (
+                <div className="sm-section" key="compliance">
+                  <div className="sm-compliance-note" style={{ animationDelay: '0ms' }}>
+                    <Icon name="info" size={16} />
+                    <span>Compliance IDs are used for OSHA 300 Log and UK HSE RIDDOR reporting.</span>
+                  </div>
+                  <div className="sm-field" style={{ animationDelay: '50ms' }}>
+                    <label className="sm-label">NAICS code <span className="sm-label-hint">US industry classification</span></label>
+                    <input
+                      className="sm-input"
+                      value={form.naics_code}
+                      onChange={e => set('naics_code', e.target.value)}
+                      placeholder="e.g. 325199"
+                    />
+                  </div>
+                  <div className="sm-row-2" style={{ animationDelay: '100ms' }}>
+                    <div className="sm-field">
+                      <label className="sm-label">OSHA establishment ID</label>
+                      <input
+                        className="sm-input"
+                        value={form.establishment_id}
+                        onChange={e => set('establishment_id', e.target.value)}
+                        placeholder="e.g. 12-3456"
+                      />
+                    </div>
+                    <div className="sm-field">
+                      <label className="sm-label">HSE establishment ID <span className="sm-label-hint">UK</span></label>
+                      <input
+                        className="sm-input"
+                        value={form.hse_establishment_id}
+                        onChange={e => set('hse_establishment_id', e.target.value)}
+                        placeholder="e.g. HSE-12345"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Workforce */}
+              {activeSection === 'workforce' && (
+                <div className="sm-section" key="workforce">
+                  <div className="sm-row-2" style={{ animationDelay: '0ms' }}>
+                    <div className="sm-field sm-field-stat">
+                      <label className="sm-label">Annual avg. employees</label>
+                      <div className="sm-stat-input">
+                        <Icon name="person" size={18} />
+                        <input
+                          className="sm-input"
+                          type="number"
+                          min="0"
+                          value={form.annual_avg_employees}
+                          onChange={e => set('annual_avg_employees', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="sm-field sm-field-stat">
+                      <label className="sm-label">Total hours worked / yr</label>
+                      <div className="sm-stat-input">
+                        <Icon name="clock" size={18} />
+                        <input
+                          className="sm-input"
+                          type="number"
+                          min="0"
+                          value={form.total_hours_worked}
+                          onChange={e => set('total_hours_worked', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  {(Number(form.annual_avg_employees) > 0 && Number(form.total_hours_worked) > 0) && (
+                    <div className="sm-workforce-calc" style={{ animationDelay: '50ms' }}>
+                      <div className="sm-calc-item">
+                        <span className="sm-calc-val">{Math.round(Number(form.total_hours_worked) / Number(form.annual_avg_employees)).toLocaleString()}</span>
+                        <span className="sm-calc-lbl">hrs / employee</span>
+                      </div>
+                      <div className="sm-calc-divider" />
+                      <div className="sm-calc-item">
+                        <span className="sm-calc-val">{(Number(form.total_hours_worked) / 200000).toFixed(2)}</span>
+                        <span className="sm-calc-lbl">OSHA rate factor</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {msg.text && (
+                <div className={`sm-msg sm-msg-${msg.type}`}>
+                  <Icon name={msg.type === 'error' ? 'warning' : 'check'} size={16} />
+                  {msg.text}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="sm-footer">
+              <button type="button" className="btn btn-tertiary" onClick={close}>Cancel</button>
+              <button type="submit" className="btn btn-primary btn-lg" disabled={saving || success}>
+                {success ? (
+                  <><Icon name="check" size={16} /> Saved</>
+                ) : saving ? (
+                  <><span className="sm-spinner" /> Saving...</>
+                ) : (
+                  editing === 'new' ? 'Create site' : 'Save changes'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>,
+        document.body
       )}
     </div>
   );
