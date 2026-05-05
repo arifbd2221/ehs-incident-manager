@@ -5,6 +5,7 @@ import { calculateSeverityAndTrack, shouldAutoClose, inferSeverityFrom } from '.
 import { determineOshaRecordability, determineRiddorReportability, calculateDeadline } from '../services/regulatory.js';
 import { verifyOshaRecordability } from '../services/recordability.js';
 import { parseBodyParts } from '../services/body_parts.js';
+import { createCapaRow } from './capas.js';
 
 const router = Router();
 
@@ -552,6 +553,37 @@ router.post('/:id/stop-work-cancel', (req, res) => {
 // can either confirm or override the original guess; both are stored on the
 // incident plus a structured activity_log entry with the gate trail.
 // =============================================================================
+
+// Direct CAPA creation from an incident (pre-investigation path). Sets
+// source_type='incident' and skips the investigation step. Elevated only.
+router.post('/:id/create-capa', (req, res) => {
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Worker role cannot create CAPAs.' });
+  }
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  try {
+    const capaId = createCapaRow({
+      orgId: req.user.org_id,
+      sourceType: 'incident',
+      investigationId: null,
+      incidentId: incident.id,
+      body: req.body,
+      userId: req.user.id,
+    });
+    const capa = db.prepare(`
+      SELECT c.*, src_inc.incident_number as incident_number
+      FROM capas c
+      LEFT JOIN incidents src_inc ON src_inc.id = c.incident_id
+      WHERE c.id = ?
+    `).get(capaId);
+    res.status(201).json(capa);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    throw err;
+  }
+});
 
 router.post('/:id/recordability-verify', (req, res) => {
   if (!isElevated(req.user)) {
