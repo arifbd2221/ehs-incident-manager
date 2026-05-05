@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createIncident, uploadAttachments } from '../../api/incidents';
 import { getSites } from '../../api/users';
 import { listAssets } from '../../api/assets';
+import api from '../../api/client';
 import Icon from '../../components/shared/Icon';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import InjuryForm from './types/InjuryForm';
@@ -263,6 +264,17 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const [removingIdx, setRemovingIdx] = useState(null);
   const [imageUrls, setImageUrls] = useState({});
 
+  // Anonymous reporting toggle (per locked decision #10).
+  // Disabled when type is injury/illness — those identify a person and
+  // are blocked at the backend.
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const anonymousAllowed = type !== 'injury' && type !== 'illness';
+
+  // Auto-classification preview (locked #14) + trending banner data (#16).
+  // Fetched whenever the cascade fields settle. Lets Step 2 pre-fill the
+  // matrix selection AND show "N prior incidents at this asset/area" banner.
+  const [classifyPreview, setClassifyPreview] = useState(null);
+
   useEffect(() => {
     getSites().then(data => { setSites(data); if (data.length > 0) setSiteId(String(data[0].id)); });
   }, []);
@@ -282,6 +294,23 @@ export default function ReportWizard({ onClose, onSubmit }) {
     const a = assets.find(x => String(x.id) === String(assetId));
     if (a && !area && a.location_description) setArea(a.location_description);
   }, [assetId, assets]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch classify-preview whenever cascade fields settle. Used for the
+  // trending banner (prior_incidents_90d) and to suggest a matrix cell.
+  useEffect(() => {
+    if (!siteId || !type) { setClassifyPreview(null); return; }
+    const handle = setTimeout(() => {
+      api.post('/incidents/classify-preview', {
+        type,
+        type_data: typeData,
+        body_parts_affected: typeData?.body_parts || [],
+        asset_id: assetId ? Number(assetId) : null,
+        site_id: Number(siteId),
+        area: area || null,
+      }).then(r => setClassifyPreview(r.data)).catch(() => setClassifyPreview(null));
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [siteId, assetId, area, type, typeData]);
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -325,11 +354,23 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
+      // Bridge: type-specific forms (InjuryForm, IllnessForm) store body_parts
+      // inside type_data. The backend reads body_parts_affected from the
+      // top-level POST body (added in T3.2). Hoist it.
+      const bodyParts = Array.isArray(typeData?.body_parts) ? typeData.body_parts : [];
+
+      // Anonymous reporting (per locked decision #10) is disabled for
+      // injury/illness — backend rejects, but the toggle is also disabled
+      // in the UI for those types. Defensive double-check here.
+      const allowAnon = type !== 'injury' && type !== 'illness';
+
       const incident = await createIncident({
         title: title.trim(), type, description,
         incident_datetime: datetime, site_id: Number(siteId),
         asset_id: assetId ? Number(assetId) : null,
         area, likelihood, consequence, type_data: typeData,
+        body_parts_affected: bodyParts,
+        is_anonymous: allowAnon && isAnonymous ? true : false,
       });
       if (files.length > 0 && incident?.id) {
         await uploadAttachments('incident', incident.id, files);
@@ -497,6 +538,38 @@ export default function ReportWizard({ onClose, onSubmit }) {
                   <SmartInput value={description} onChange={setDescription} examples={EXAMPLE_DESCRIPTIONS} multiline rows={4} />
                 </div>
 
+                {/* Anonymous reporting toggle — disabled for injury / illness
+                    because those identify a person and are blocked at the BE
+                    (locked decision #10). */}
+                <div className="wiz-section">
+                  <label className="wiz-anon-row" style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    padding: 12, borderRadius: 'var(--sds-radius-md)',
+                    background: anonymousAllowed ? 'var(--sds-bg-surface-alt)' : 'rgba(0,0,0,0.03)',
+                    border: '1px solid var(--sds-border)',
+                    cursor: anonymousAllowed ? 'pointer' : 'not-allowed',
+                    opacity: anonymousAllowed ? 1 : 0.6,
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={isAnonymous && anonymousAllowed}
+                      onChange={(e) => setIsAnonymous(e.target.checked)}
+                      disabled={!anonymousAllowed}
+                      style={{ marginTop: 2 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--sds-fg-primary)' }}>
+                        Submit anonymously
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)', marginTop: 2 }}>
+                        {anonymousAllowed
+                          ? "Your identity will not be linked to this report — even though you're signed in, we won't store who submitted it."
+                          : `Not available for ${type} reports — these require identifying the affected person for OSHA recordkeeping.`}
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
                 <div className="wiz-section">
                   <div className="wiz-section-h">
                     <div className="wiz-sh-icon"><Icon name="file" size={16} /></div>
@@ -571,6 +644,51 @@ export default function ReportWizard({ onClose, onSubmit }) {
             {/* STEP 1 — Details & risk */}
             {step === 1 && (
               <>
+                {/* Trending banner — visible whenever the cascade settled with
+                    >= 1 prior incident at this asset/area in the last 90 days
+                    (locked decision #16). */}
+                {classifyPreview && classifyPreview.prior_incidents_90d > 0 && (
+                  <div className="wiz-trend-banner">
+                    <div className="wiz-trend-icon"><Icon name="warning" size={18} /></div>
+                    <div className="wiz-trend-text">
+                      <strong>{classifyPreview.prior_incidents_90d} prior incident{classifyPreview.prior_incidents_90d > 1 ? 's' : ''}</strong>
+                      {' '}at this {assetId ? 'asset' : 'site/area'} in the last 90 days.
+                      {classifyPreview.prior_incidents_12mo > classifyPreview.prior_incidents_90d &&
+                        ` (${classifyPreview.prior_incidents_12mo} in the last 12 months.)`}
+                      {' '}This pattern raises the likelihood band — review carefully.
+                    </div>
+                  </div>
+                )}
+
+                {/* Auto-classification suggestion (locked decision #14). The
+                    matrix below is still user-driven; this surfaces what the
+                    rule engine would pick so the user can adopt it with one
+                    click or override. */}
+                {classifyPreview && classifyPreview.suggested_severity != null && (
+                  <div className="wiz-suggest-banner">
+                    <div className="wiz-suggest-icon"><Icon name="pulse" size={18} /></div>
+                    <div className="wiz-suggest-text">
+                      <strong>Suggested: S{classifyPreview.suggested_severity} · Track {classifyPreview.suggested_track}</strong>
+                      <div style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)', marginTop: 2 }}>
+                        {classifyPreview.reasoning}
+                      </div>
+                    </div>
+                    {(likelihood !== classifyPreview.suggested_likelihood ||
+                      consequence !== classifyPreview.suggested_consequence) && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => {
+                          setLikelihood(classifyPreview.suggested_likelihood);
+                          setConsequence(classifyPreview.suggested_consequence);
+                        }}
+                      >
+                        Apply
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <div className="wiz-section">
                   <div className="wiz-section-h">
                     <div className="wiz-sh-icon" style={{ background: typeOf(type)?.color || 'var(--sds-brand-primary)' }}>
