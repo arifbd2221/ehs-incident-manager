@@ -3,6 +3,7 @@ import db from '../db/connection.js';
 import { nextIncidentNumber, nextInvestigationNumber, nextRiddorNumber } from '../services/numbering.js';
 import { calculateSeverityAndTrack, shouldAutoClose, inferSeverityFrom } from '../services/classification.js';
 import { determineOshaRecordability, determineRiddorReportability, calculateDeadline } from '../services/regulatory.js';
+import { verifyOshaRecordability } from '../services/recordability.js';
 import { parseBodyParts } from '../services/body_parts.js';
 
 const router = Router();
@@ -99,11 +100,13 @@ router.get('/:id', (req, res) => {
   const incident = db.prepare(`
     SELECT i.*, s.name as site_name, s.country as site_country,
            u.name as reporter_name, u.initials as reporter_initials,
-           a.name as assignee_name, a.initials as assignee_initials
+           a.name as assignee_name, a.initials as assignee_initials,
+           vu.name as verified_by_name, vu.initials as verified_by_initials
     FROM incidents i
     LEFT JOIN sites s ON s.id = i.site_id
     LEFT JOIN users u ON u.id = i.reported_by
     LEFT JOIN users a ON a.id = i.assigned_to
+    LEFT JOIN users vu ON vu.id = i.osha_recordable_verified_by
     WHERE i.id = ? AND i.org_id = ?
   `).get(req.params.id, req.user.org_id);
 
@@ -538,6 +541,112 @@ router.post('/:id/stop-work-cancel', (req, res) => {
 
   const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
   res.json(updated);
+});
+
+// =============================================================================
+// EHS recordability verification (per locked decision #1, hybrid path)
+//
+// Reporter form provides a fast `osha_recordable` guess at submission time.
+// This endpoint runs the full 5-gate decision tree and stamps the verifying
+// EHS Manager + timestamp on the incident. Elevated roles only. The verifier
+// can either confirm or override the original guess; both are stored on the
+// incident plus a structured activity_log entry with the gate trail.
+// =============================================================================
+
+router.post('/:id/recordability-verify', (req, res) => {
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can verify OSHA recordability.' });
+  }
+
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  if (incident.type !== 'injury' && incident.type !== 'illness') {
+    return res.status(400).json({ error: 'Recordability verification only applies to injury or illness incidents.' });
+  }
+
+  const decision = verifyOshaRecordability(req.body || {});
+
+  const nowIso = new Date().toISOString();
+  db.prepare(`
+    UPDATE incidents
+    SET osha_recordable = ?,
+        osha_recordability_type = ?,
+        osha_recordable_verified_by = ?,
+        osha_recordable_verified_at = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(
+    decision.recordable ? 1 : 0,
+    decision.type,
+    req.user.id,
+    nowIso,
+    incident.id,
+  );
+
+  const summary = decision.recordable
+    ? `verified OSHA recordable as ${decision.type}`
+    : `verified NOT OSHA recordable${decision.failed_gate ? ` (gate: ${decision.failed_gate})` : ''}`;
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+    VALUES (?, 'incident', ?, 'recordability_verified', ?, ?, ?)
+  `).run(
+    incident.org_id, incident.id,
+    `${summary} for ${incident.incident_number}`,
+    req.user.id,
+    JSON.stringify({
+      recordable: decision.recordable,
+      type: decision.type,
+      reasoning: decision.reasoning,
+      failed_gate: decision.failed_gate,
+      gates: req.body || {},
+    }),
+  );
+
+  // 300 Log row management: if newly recordable and no row yet, insert one;
+  // if previously recordable but now not, the existing row is left in place
+  // (reverts handled by EHS via the OSHA log UI — out of scope for verify).
+  if (decision.recordable) {
+    const existing = db.prepare('SELECT id FROM osha_300_log WHERE incident_id = ?').get(incident.id);
+    if (!existing) {
+      const year = new Date(incident.incident_datetime).getFullYear();
+      const maxCase = db.prepare('SELECT MAX(case_number) as m FROM osha_300_log WHERE site_id = ? AND calendar_year = ?').get(incident.site_id, year);
+      const caseNum = (maxCase?.m || 0) + 1;
+      const td = JSON.parse(incident.type_data || '{}');
+
+      db.prepare(`
+        INSERT INTO osha_300_log (
+          org_id, site_id, incident_id, calendar_year, case_number,
+          employee_name, job_title, injury_date, location, description,
+          classification_death, classification_days_away, classification_job_transfer, classification_other,
+          injury_type
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        incident.org_id, incident.site_id, incident.id, year, caseNum,
+        td.injured_person?.name || td.affected_person?.name || 'Unknown',
+        td.injured_person?.job_title || td.affected_person?.job_title || null,
+        incident.incident_datetime, incident.area || null, incident.description || incident.title,
+        decision.type === 'death' ? 1 : 0,
+        decision.type === 'days_away' ? 1 : 0,
+        decision.type === 'job_transfer' ? 1 : 0,
+        decision.type === 'other_recordable' ? 1 : 0,
+        incident.type === 'injury' ? 'injury' : 'all_other',
+      );
+    }
+  }
+
+  const updated = db.prepare(`
+    SELECT i.*, vu.name as verified_by_name, vu.initials as verified_by_initials
+    FROM incidents i
+    LEFT JOIN users vu ON vu.id = i.osha_recordable_verified_by
+    WHERE i.id = ?
+  `).get(incident.id);
+
+  res.json({
+    incident: updated,
+    decision,
+  });
 });
 
 router.patch('/:id', (req, res) => {
