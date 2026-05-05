@@ -195,6 +195,20 @@ CREATE INDEX IF NOT EXISTS idx_capas_investigation ON capas(investigation_id);
 CREATE INDEX IF NOT EXISTS idx_capas_status ON capas(status);
 CREATE INDEX IF NOT EXISTS idx_capas_owner ON capas(owner_id);
 
+CREATE TRIGGER IF NOT EXISTS capa_owner_verifier_distinct_insert
+BEFORE INSERT ON capas
+WHEN NEW.owner_id = NEW.verifier_id
+BEGIN
+  SELECT RAISE(ABORT, 'CAPA owner and verifier must be different people');
+END;
+
+CREATE TRIGGER IF NOT EXISTS capa_owner_verifier_distinct_update
+BEFORE UPDATE ON capas
+WHEN NEW.owner_id = NEW.verifier_id
+BEGIN
+  SELECT RAISE(ABORT, 'CAPA owner and verifier must be different people');
+END;
+
 CREATE TABLE IF NOT EXISTS activity_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   org_id INTEGER NOT NULL REFERENCES organizations(id),

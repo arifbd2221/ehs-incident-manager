@@ -29,7 +29,11 @@ router.get('/', (req, res) => {
 });
 
 router.patch('/:id/read', (req, res) => {
-  db.prepare('UPDATE notifications SET is_read = 1 WHERE id = ?').run(req.params.id);
+  const notif = db.prepare(
+    'SELECT id FROM notifications WHERE id = ? AND org_id = ? AND (user_id IS NULL OR user_id = ?)'
+  ).get(req.params.id, req.user.org_id, req.user.id);
+  if (!notif) return res.status(404).json({ error: 'Notification not found' });
+  db.prepare('UPDATE notifications SET is_read = 1 WHERE id = ?').run(notif.id);
   res.json({ success: true });
 });
 

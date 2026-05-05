@@ -1,10 +1,28 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
-import { nextIncidentNumber } from '../services/numbering.js';
+import { nextIncidentNumber, nextInvestigationNumber, nextRiddorNumber } from '../services/numbering.js';
 import { calculateSeverityAndTrack, shouldAutoClose } from '../services/classification.js';
 import { determineOshaRecordability, determineRiddorReportability, calculateDeadline } from '../services/regulatory.js';
 
 const router = Router();
+
+// Roles that may mutate severity/track/regulatory/assignment.
+// Phase 2 collapses these to worker/ehs_manager/site_admin.
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
+
+const RESTRICTED_FIELDS = new Set([
+  'severity', 'track', 'status', 'assigned_to',
+  'triage_due', 'triage_notes',
+  'osha_recordable', 'osha_recordability_type', 'osha_days_away', 'osha_days_restricted',
+  'riddor_reportable',
+]);
+
+function trackForSeverity(severity) {
+  if (severity <= 2) return 'A';
+  if (severity === 3) return 'B';
+  return 'C';
+}
 
 router.get('/', (req, res) => {
   const { type, severity, status, site_id, track, search, page = 1, limit = 50 } = req.query;
@@ -145,7 +163,7 @@ router.post('/', async (req, res, next) => {
       orgId, site_id, incidentId, year, caseNum,
       td.injured_person?.name || td.affected_person?.name || 'Unknown',
       td.injured_person?.job_title || td.affected_person?.job_title || null,
-      incident_datetime, area || null, title,
+      incident_datetime, area || null, description || title,
       osha.type === 'death' ? 1 : 0,
       osha.type === 'days_away' ? 1 : 0,
       osha.type === 'job_transfer' ? 1 : 0,
@@ -155,7 +173,6 @@ router.post('/', async (req, res, next) => {
   }
 
   if (riddor.reportable) {
-    const { nextRiddorNumber } = await import('../services/numbering.js');
     const riddorNum = nextRiddorNumber();
     const deadline = calculateDeadline(incident_datetime, riddor.writtenDeadlineDays);
 
@@ -190,6 +207,14 @@ router.patch('/:id', (req, res) => {
     'osha_recordable', 'osha_recordability_type', 'osha_days_away', 'osha_days_restricted',
     'riddor_reportable', 'immediate_actions_taken', 'area', 'specific_location', 'department'];
 
+  const requestedRestricted = updatable.filter(k => RESTRICTED_FIELDS.has(k) && req.body[k] !== undefined);
+  if (requestedRestricted.length > 0 && !isElevated(req.user)) {
+    return res.status(403).json({
+      error: 'Worker role cannot modify severity, track, status, assignment, or regulatory fields.',
+      restricted_fields: requestedRestricted,
+    });
+  }
+
   const sets = [];
   const params = [];
   for (const key of updatable) {
@@ -203,6 +228,20 @@ router.patch('/:id', (req, res) => {
     params.push(JSON.stringify(req.body.type_data));
   }
 
+  // Severity override: capture audit trail, recompute track if not explicitly set.
+  const severityChanged = req.body.severity !== undefined && Number(req.body.severity) !== incident.severity;
+  if (severityChanged) {
+    const newSeverity = Number(req.body.severity);
+    const reason = req.body.severity_override_reason || req.body.reason || 'No reason provided';
+    sets.push('severity_override = ?', 'severity_override_by = ?', 'severity_override_reason = ?');
+    params.push(incident.severity, req.user.id, reason);
+    if (req.body.track === undefined) {
+      const recomputedTrack = trackForSeverity(newSeverity);
+      sets.push('track = ?');
+      params.push(recomputedTrack);
+    }
+  }
+
   if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
   sets.push("updated_at = datetime('now')");
@@ -210,12 +249,27 @@ router.patch('/:id', (req, res) => {
 
   db.prepare(`UPDATE incidents SET ${sets.join(', ')} WHERE id = ?`).run(...params);
 
+  if (severityChanged) {
+    const newSeverity = Number(req.body.severity);
+    const reason = req.body.severity_override_reason || req.body.reason || 'No reason provided';
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+      VALUES (?, 'incident', ?, 'severity_overridden', ?, ?, ?)
+    `).run(
+      incident.org_id, incident.id,
+      `severity changed Sev ${incident.severity} -> Sev ${newSeverity} - ${reason}`,
+      req.user.id,
+      JSON.stringify({ from: incident.severity, to: newSeverity, reason }),
+    );
+  }
+
   const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(req.params.id);
   updated.type_data = JSON.parse(updated.type_data || '{}');
   res.json(updated);
 });
 
 router.post('/:id/assign', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot assign incidents.' });
   const { assigned_to, triage_due, notes } = req.body;
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
@@ -236,14 +290,12 @@ router.post('/:id/assign', (req, res) => {
 });
 
 router.post('/:id/escalate', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot escalate incidents.' });
   const { lead_investigator, track, notes } = req.body;
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
 
-  const year = new Date().getFullYear();
-  const row = db.prepare("SELECT MAX(CAST(SUBSTR(investigation_number, -4) AS INTEGER)) as maxn FROM investigations WHERE investigation_number LIKE ?").get(`INV-${year}-%`);
-  const next = (row?.maxn || 0) + 1;
-  const invNumber = `INV-${year}-${String(next).padStart(4, '0')}`;
+  const invNumber = nextInvestigationNumber();
 
   const invResult = db.prepare(`
     INSERT INTO investigations (investigation_number, incident_id, org_id, lead_investigator, track, status)
@@ -275,6 +327,7 @@ router.post('/:id/escalate', (req, res) => {
 });
 
 router.post('/:id/close', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot close incidents.' });
   const { reason, notes } = req.body;
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
