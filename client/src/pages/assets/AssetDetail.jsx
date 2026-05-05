@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getAsset, updateAsset, deleteAsset } from '../../api/assets';
@@ -8,6 +9,12 @@ import Icon from '../../components/shared/Icon';
 import '../../styles/assets.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+
+const MODAL_SECTIONS = [
+  { key: 'identity', label: 'Identity', icon: 'factory' },
+  { key: 'location', label: 'Location', icon: 'location' },
+  { key: 'details', label: 'Details', icon: 'info' },
+];
 
 export default function AssetDetail() {
   const { id } = useParams();
@@ -25,7 +32,9 @@ export default function AssetDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
+  const [section, setSection] = useState('identity');
   const [newCatOpen, setNewCatOpen] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatSaving, setNewCatSaving] = useState(false);
@@ -56,12 +65,19 @@ export default function AssetDetail() {
     });
     setEditOpen(true);
     setMsg({ type: '', text: '' });
+    setSection('identity');
+    setSuccess(false);
   };
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const closeEdit = () => {
+    setEditOpen(false);
+    setNewCatOpen(false);
+    setNewCatName('');
+    setSuccess(false);
+  };
 
   const handleCategoryChange = (val) => {
     if (val === '__new__') { setNewCatOpen(true); return; }
-    if (val === '__custom__') { set('asset_category_id', ''); set('asset_type', ''); return; }
     const cat = categories.find(c => String(c.id) === String(val));
     set('asset_category_id', val);
     set('asset_type', cat?.name || '');
@@ -85,17 +101,28 @@ export default function AssetDetail() {
     }
   };
 
+  const pct = (() => {
+    let filled = 0, total = 3;
+    if ((form.name || '').trim()) filled++;
+    if (form.site_id) filled++;
+    if (form.asset_type || form.asset_category_id) filled++;
+    if (form.location_description) { total++; filled++; }
+    if (form.serial_number) { total++; filled++; }
+    if (form.description) { total++; filled++; }
+    return Math.round((filled / total) * 100);
+  })();
+
   const handleSave = async (e) => {
     e?.preventDefault();
-    if (!form.name?.trim()) return setMsg({ type: 'error', text: 'Name is required' });
+    if (!form.name?.trim()) { setMsg({ type: 'error', text: 'Name is required' }); setSection('identity'); return; }
     setSaving(true);
     setMsg({ type: '', text: '' });
     try {
       const payload = { ...form };
       if (!payload.asset_category_id) delete payload.asset_category_id;
       await updateAsset(asset.id, payload);
-      setEditOpen(false);
-      refresh();
+      setSuccess(true);
+      setTimeout(() => { closeEdit(); refresh(); }, 600);
     } catch (e) {
       setMsg({ type: 'error', text: e.response?.data?.error || 'Save failed' });
     } finally {
@@ -112,6 +139,9 @@ export default function AssetDetail() {
     try { await updateAsset(asset.id, { active: 1 }); refresh(); }
     catch (e) { alert(e.response?.data?.error || 'Restore failed'); }
   };
+
+  const siteName = sites.find(s => String(s.id) === String(form.site_id))?.name;
+  const catName = categories.find(c => String(c.id) === String(form.asset_category_id))?.name || form.asset_type;
 
   if (loading) return <div className="page assets-page"><div className="assets-loading">Loading…</div></div>;
   if (err || !asset) return (
@@ -233,7 +263,7 @@ export default function AssetDetail() {
           <div className="card card-pad asset-tab-empty">
             <Icon name="incidents" size={28} />
             <h3>No incidents linked to this asset yet</h3>
-            <p>When workers report an incident and select this asset (or once the wizard's Site → Area → Asset cascade ships in F2.3), they'll show up here.</p>
+            <p>When workers report an incident and select this asset, they'll show up here.</p>
           </div>
         )
       )}
@@ -242,7 +272,7 @@ export default function AssetDetail() {
         <div className="card card-pad asset-tab-empty">
           <Icon name="file" size={28} />
           <h3>No documents linked</h3>
-          <p>Manuals, SDS sheets, certificates, and other documents linked to this asset will appear here once the document library ships (T2.4).</p>
+          <p>Manuals, SDS sheets, certificates, and other documents linked to this asset will appear here.</p>
         </div>
       )}
 
@@ -254,83 +284,129 @@ export default function AssetDetail() {
         </div>
       )}
 
-      {editOpen && (
-        <div className="assets-modal-backdrop" onClick={() => setEditOpen(false)}>
-          <div className="assets-modal" onClick={e => e.stopPropagation()}>
-            <div className="assets-modal-h">
-              <h2>Edit {asset.name}</h2>
-              <button className="icon-btn" onClick={() => setEditOpen(false)}><Icon name="close" size={18} /></button>
-            </div>
-            <form className="assets-modal-body" onSubmit={handleSave}>
-              <div className="field">
-                <label className="label">Name <span className="req">*</span></label>
-                <input className="input" value={form.name || ''} onChange={e => set('name', e.target.value)} autoFocus />
+      {editOpen && createPortal(
+        <div className="am-backdrop" onClick={closeEdit}>
+          <form className={`am-modal${success ? ' am-success' : ''}`} onClick={e => e.stopPropagation()} onSubmit={handleSave}>
+            <div className="am-header">
+              <div className="am-header-icon"><Icon name="factory" size={20} /></div>
+              <div className="am-header-text">
+                <h2>Edit {asset.name}</h2>
+                <p>Update asset details and location</p>
               </div>
-              <div className="field-row-2">
-                <div className="field">
-                  <label className="label">Site <span className="req">*</span></label>
-                  <select className="input" value={form.site_id || ''} onChange={e => set('site_id', Number(e.target.value))}>
-                    {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+              <button type="button" className="am-close" onClick={closeEdit}><Icon name="close" size={18} /></button>
+            </div>
+
+            <div className="am-progress">
+              <div className="am-progress-bar" style={{ width: `${pct}%` }} />
+              <span className="am-progress-label">{pct}% complete</span>
+            </div>
+
+            <div className="am-tabs">
+              {MODAL_SECTIONS.map(s => (
+                <button key={s.key} type="button" className={`am-tab${section === s.key ? ' active' : ''}`} onClick={() => setSection(s.key)}>
+                  <Icon name={s.icon} size={16} /><span>{s.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="am-body">
+              {section === 'identity' && (
+                <div className="am-section" key="identity">
+                  <div className="am-field" style={{ animationDelay: '0ms' }}>
+                    <label className="am-label">Asset name <span className="req">*</span></label>
+                    <input className={`am-input${!form.name?.trim() && msg.type === 'error' ? ' am-input-err' : ''}`} value={form.name || ''} onChange={e => set('name', e.target.value)} autoFocus />
+                  </div>
+                  <div className="am-field" style={{ animationDelay: '60ms' }}>
+                    <label className="am-label">Type / category</label>
+                    {!newCatOpen ? (
+                      <div className="am-cat-grid">
+                        {categories.map(c => (
+                          <button key={c.id} type="button" className={`am-cat-btn${String(form.asset_category_id) === String(c.id) ? ' active' : ''}`} onClick={() => handleCategoryChange(String(c.id))} style={{ '--cat-color': c.color || '#626DF9' }}>
+                            <span className="am-cat-dot" style={{ background: c.color || '#626DF9' }} />{c.name}
+                          </button>
+                        ))}
+                        <button type="button" className="am-cat-btn am-cat-add" onClick={() => setNewCatOpen(true)}><Icon name="plus" size={12} />New</button>
+                      </div>
+                    ) : (
+                      <div className="am-newcat">
+                        <input className="am-input" placeholder="New category" autoFocus value={newCatName} onChange={e => setNewCatName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleNewCategorySave(); } }} />
+                        <div className="am-newcat-actions">
+                          <button type="button" className="am-btn-save" disabled={newCatSaving || !newCatName.trim()} onClick={handleNewCategorySave}><Icon name="check" size={13} />{newCatSaving ? '…' : 'Create'}</button>
+                          <button type="button" className="am-btn-cancel" onClick={() => { setNewCatOpen(false); setNewCatName(''); }}>Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="am-field" style={{ animationDelay: '120ms' }}>
+                    <label className="am-label">Serial number <span className="am-label-hint">optional</span></label>
+                    <input className="am-input" value={form.serial_number || ''} onChange={e => set('serial_number', e.target.value)} />
+                  </div>
                 </div>
-                <div className="field">
-                  <label className="label">Type</label>
-                  {!newCatOpen ? (
-                    <>
-                      <select className="input"
-                        value={form.asset_category_id || (form.asset_type ? '__custom__' : '')}
-                        onChange={e => handleCategoryChange(e.target.value)}>
-                        <option value="">Select type…</option>
-                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        <option value="__custom__">Custom…</option>
-                        {canEdit && <option value="__new__">+ Add new category…</option>}
-                      </select>
-                      {(!form.asset_category_id && form.asset_type !== '') && (
-                        <input className="input" style={{ marginTop: 6 }} placeholder="Custom type"
-                          value={form.asset_type || ''}
-                          onChange={e => set('asset_type', e.target.value)} />
-                      )}
-                    </>
-                  ) : (
-                    <div className="newcat-row">
-                      <input className="input" placeholder="New category" autoFocus
-                        value={newCatName} onChange={e => setNewCatName(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleNewCategorySave(); } }} />
-                      <button type="button" className="btn btn-primary btn-sm"
-                        disabled={newCatSaving || !newCatName.trim()}
-                        onClick={handleNewCategorySave}>
-                        {newCatSaving ? '…' : 'Save'}
-                      </button>
-                      <button type="button" className="btn btn-ghost btn-sm"
-                        onClick={() => { setNewCatOpen(false); setNewCatName(''); }}>Cancel</button>
+              )}
+
+              {section === 'location' && (
+                <div className="am-section" key="location">
+                  <div className="am-field" style={{ animationDelay: '0ms' }}>
+                    <label className="am-label">Site <span className="req">*</span></label>
+                    <div className="am-site-grid">
+                      {sites.map(s => (
+                        <button key={s.id} type="button" className={`am-site-btn${String(form.site_id) === String(s.id) ? ' active' : ''}`} onClick={() => set('site_id', s.id)}>
+                          <Icon name="factory" size={14} /><span>{s.name}</span>{s.country && <span className="am-site-country">{s.country}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="am-field" style={{ animationDelay: '60ms' }}>
+                    <label className="am-label">Location description</label>
+                    <input className="am-input" value={form.location_description || ''} onChange={e => set('location_description', e.target.value)} placeholder="e.g. Bay 3, production floor" />
+                  </div>
+                  {(siteName || form.location_description) && (
+                    <div className="am-location-preview" style={{ animationDelay: '120ms' }}>
+                      <div className="am-loc-icon"><Icon name="location" size={22} /></div>
+                      <div className="am-loc-details">
+                        <span className="am-loc-site">{siteName || 'No site selected'}</span>
+                        <span className="am-loc-desc">{form.location_description || 'No specific location'}</span>
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-              <div className="field">
-                <label className="label">Location description</label>
-                <input className="input" value={form.location_description || ''} onChange={e => set('location_description', e.target.value)} />
-              </div>
-              <div className="field">
-                <label className="label">Serial number</label>
-                <input className="input" value={form.serial_number || ''} onChange={e => set('serial_number', e.target.value)} />
-              </div>
-              <div className="field">
-                <label className="label">Description / notes</label>
-                <textarea className="input" rows="4" value={form.description || ''} onChange={e => set('description', e.target.value)} />
-              </div>
+              )}
 
-              {msg.text && <div className={`assets-msg assets-msg-${msg.type}`}>{msg.text}</div>}
+              {section === 'details' && (
+                <div className="am-section" key="details">
+                  <div className="am-field" style={{ animationDelay: '0ms' }}>
+                    <label className="am-label">Description / notes</label>
+                    <textarea className="am-input am-textarea" rows={4} value={form.description || ''} onChange={e => set('description', e.target.value)} placeholder="Specs, model details, maintenance notes…" />
+                  </div>
+                  <div className="am-summary" style={{ animationDelay: '60ms' }}>
+                    <div className="am-summary-title"><Icon name="check" size={14} /> Asset summary</div>
+                    <div className="am-summary-rows">
+                      <div className="am-summary-row"><span className="am-summary-k">Name</span><span className="am-summary-v">{form.name || '—'}</span></div>
+                      <div className="am-summary-row"><span className="am-summary-k">Type</span><span className="am-summary-v">{catName || '—'}</span></div>
+                      <div className="am-summary-row"><span className="am-summary-k">Site</span><span className="am-summary-v">{siteName || '—'}</span></div>
+                      {form.location_description && <div className="am-summary-row"><span className="am-summary-k">Location</span><span className="am-summary-v">{form.location_description}</span></div>}
+                      {form.serial_number && <div className="am-summary-row"><span className="am-summary-k">Serial</span><span className="am-summary-v mono">{form.serial_number}</span></div>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
-              <div className="assets-modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setEditOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'Saving…' : 'Save changes'}
-                </button>
+            {msg.text && (
+              <div className={`am-msg am-msg-${msg.type}`}>
+                <Icon name={msg.type === 'error' ? 'warning' : 'check'} size={14} />{msg.text}
               </div>
-            </form>
-          </div>
-        </div>
+            )}
+
+            <div className="am-footer">
+              <button type="button" className="am-btn-secondary" onClick={closeEdit}>Cancel</button>
+              <button type="submit" className="am-btn-primary" disabled={saving}>
+                {saving ? <><span className="am-spinner" /> Saving…</> : <><Icon name="check" size={14} /> Save changes</>}
+              </button>
+            </div>
+          </form>
+        </div>,
+        document.body
       )}
     </div>
   );
