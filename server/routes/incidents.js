@@ -6,6 +6,7 @@ import { determineOshaRecordability, determineRiddorReportability, calculateDead
 import { verifyOshaRecordability } from '../services/recordability.js';
 import { parseBodyParts } from '../services/body_parts.js';
 import { extractFromTranscript } from '../services/voice_extract.js';
+import { injuryTypeForOsha300, descriptionForOsha300 } from '../services/osha_300_helpers.js';
 import { createCapaRow } from './capas.js';
 
 const router = Router();
@@ -291,12 +292,13 @@ router.post('/', async (req, res, next) => {
       orgId, site_id, incidentId, year, caseNum,
       td.injured_person?.name || td.affected_person?.name || 'Unknown',
       td.injured_person?.job_title || td.affected_person?.job_title || null,
-      incident_datetime, area || null, description || title,
+      incident_datetime, area || null,
+      descriptionForOsha300({ description, title, bodyParts: cleanedBodyParts }),
       osha.type === 'death' ? 1 : 0,
       osha.type === 'days_away' ? 1 : 0,
       osha.type === 'job_transfer' ? 1 : 0,
       osha.type === 'other_recordable' ? 1 : 0,
-      type === 'injury' ? 'injury' : 'all_other'
+      injuryTypeForOsha300(type, type_data),
     );
   }
 
@@ -735,6 +737,7 @@ router.post('/:id/recordability-verify', (req, res) => {
       const caseNum = (maxCase?.m || 0) + 1;
       const td = JSON.parse(incident.type_data || '{}');
 
+      const verifyBodyParts = JSON.parse(incident.body_parts_affected || '[]');
       db.prepare(`
         INSERT INTO osha_300_log (
           org_id, site_id, incident_id, calendar_year, case_number,
@@ -746,12 +749,13 @@ router.post('/:id/recordability-verify', (req, res) => {
         incident.org_id, incident.site_id, incident.id, year, caseNum,
         td.injured_person?.name || td.affected_person?.name || 'Unknown',
         td.injured_person?.job_title || td.affected_person?.job_title || null,
-        incident.incident_datetime, incident.area || null, incident.description || incident.title,
+        incident.incident_datetime, incident.area || null,
+        descriptionForOsha300({ description: incident.description, title: incident.title, bodyParts: verifyBodyParts }),
         decision.type === 'death' ? 1 : 0,
         decision.type === 'days_away' ? 1 : 0,
         decision.type === 'job_transfer' ? 1 : 0,
         decision.type === 'other_recordable' ? 1 : 0,
-        incident.type === 'injury' ? 'injury' : 'all_other',
+        injuryTypeForOsha300(incident.type, td),
       );
     }
   }
