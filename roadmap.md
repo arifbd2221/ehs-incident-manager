@@ -28,9 +28,9 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 
 - [x] **T3.1** Service foundations: `body_parts.js` + recordability/riddor split + `auto_classify.js` (local, uncommitted)
 - [x] **T3.2** `incidents.js` POST extends: `body_parts_affected`, `asset_id` (was already done in F2.3), `is_anonymous`, `prior_incidents_count` + new `POST /classify-preview` endpoint (local, uncommitted)
-- [ ] **F3.1** Body map wiring (`InjuryForm` uses `BodyMap3D`)
-- [ ] **F3.2** Anonymous toggle in wizard Step 1
-- [ ] **F3.4** Trending banner on wizard Step 2
+- [x] **F3.1** Body map wiring (`InjuryForm` uses `BodyMap3D`) (local, uncommitted)
+- [x] **F3.2** Anonymous toggle in wizard Step 1 (local, uncommitted)
+- [x] **F3.4** Trending banner + auto-classification suggestion on wizard Step 2 (local, uncommitted)
 - [x] **T3.3** Stop-work endpoints + state machine + down-route guard (local, uncommitted)
 - [x] **F3.3** STOP WORK button (TopBar) + active dashboard banner (local, uncommitted)
 - [ ] **T3.4** `POST /incidents/:id/recordability-verify` (5-gate)
