@@ -16,3 +16,5 @@ export const uploadAttachments = (entityType, entityId, files) => {
   files.forEach(f => form.append('files', f));
   return api.post('/attachments', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
 };
+
+export const deleteAttachment = (id) => api.delete(`/attachments/${id}`).then(r => r.data);

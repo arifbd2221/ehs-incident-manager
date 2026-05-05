@@ -1485,6 +1485,139 @@
   }
 }
 
+/* ---- ATTACHMENTS — post-report add/delete ---- */
+.idet-attach-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--sds-fg-tertiary);
+  font-weight: 500;
+}
+.idet-attach-add {
+  margin-left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--sds-border);
+  background: #fff;
+  color: var(--sds-fg-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms;
+  font-family: inherit;
+}
+.idet-attach-add:hover:not(:disabled) {
+  border-color: var(--sds-brand-primary);
+  color: var(--sds-brand-primary);
+  background: var(--sds-brand-primary-tint);
+}
+.idet-attach-add:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.idet-attach-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(98, 109, 249, 0.25);
+  border-top-color: var(--sds-brand-primary);
+  animation: idetSpin 800ms linear infinite;
+}
+@keyframes idetSpin {
+  to { transform: rotate(360deg); }
+}
+
+.idet-attach-thumb {
+  position: relative;
+}
+.idet-attach-del {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  background: rgba(15, 23, 42, 0.7);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: all 150ms;
+}
+.idet-attach-del:hover {
+  background: #dc2626;
+  transform: scale(1.05);
+}
+.idet-attach-del-thumb {
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  z-index: 2;
+}
+.idet-attach-thumb:hover .idet-attach-del-thumb {
+  opacity: 1;
+}
+
+.idet-attach-file-wrap {
+  position: relative;
+}
+.idet-attach-del-file {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--sds-fg-tertiary);
+  border: 1px solid var(--sds-border);
+}
+.idet-attach-del-file:hover {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #dc2626;
+  transform: translateY(-50%) scale(1.05);
+}
+.idet-attach-file-wrap:hover .idet-attach-del-file {
+  opacity: 1;
+}
+
+.idet-attach-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 0;
+}
+.idet-attach-empty p {
+  font-size: 13px;
+  color: var(--sds-fg-tertiary);
+  margin: 0;
+}
+.idet-attach-add-empty {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px dashed var(--sds-border);
+  background: var(--sds-bg-surface-alt);
+  color: var(--sds-fg-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms;
+  font-family: inherit;
+}
+.idet-attach-add-empty:hover:not(:disabled) {
+  border-style: solid;
+  border-color: var(--sds-brand-primary);
+  color: var(--sds-brand-primary);
+  background: var(--sds-brand-primary-tint);
+}
+
 /* ---- RECORDABILITY VERIFY CARD ---- */
 .rv-stamp {
   margin-left: auto;

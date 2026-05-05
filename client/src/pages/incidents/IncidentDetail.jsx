@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getIncident, assignIncident, escalateIncident, closeIncident } from '../../api/incidents';
+import { getIncident, assignIncident, escalateIncident, closeIncident, uploadAttachments, deleteAttachment } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
@@ -49,6 +49,8 @@ export default function IncidentDetail() {
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, index: 0 });
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   const load = () => {
     setLoading(true);
@@ -128,6 +130,36 @@ export default function IncidentDetail() {
       load();
     } catch { showToast('Failed to close.'); }
   };
+
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      await uploadAttachments('incident', r.id, files);
+      showToast(files.length === 1 ? 'File attached.' : `${files.length} files attached.`);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to attach files.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteAttachment = async (attachment) => {
+    if (!confirm(`Remove "${attachment.filename}"? This is logged in the activity timeline.`)) return;
+    try {
+      await deleteAttachment(attachment.id);
+      showToast('Attachment removed.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to remove attachment.');
+    }
+  };
+
+  const canDelete = (attachment) =>
+    ELEVATED_ROLES.has(user?.role) || attachment.uploaded_by === user?.id;
 
   const daysOpen = r.created_at ? Math.floor((Date.now() - new Date(r.created_at).getTime()) / 86400000) : 0;
 
@@ -237,7 +269,25 @@ export default function IncidentDetail() {
             <div className="idet-card-h">
               <div className="hicon hi-attach"><Icon name="file" size={16}/></div>
               Attachments
-              {(r.attachments || []).length > 0 && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 500 }}>{r.attachments.length} file{r.attachments.length > 1 ? 's' : ''}</span>}
+              {(r.attachments || []).length > 0 && <span className="idet-attach-count">{r.attachments.length} file{r.attachments.length > 1 ? 's' : ''}</span>}
+              <button
+                className="idet-attach-add"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <><span className="idet-attach-spinner"/>Uploading…</>
+                ) : (
+                  <><Icon name="plus" size={12}/>Add files</>
+                )}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleUpload}
+              />
             </div>
             <div className="idet-card-body">
               {(r.attachments || []).length > 0 ? (
@@ -259,6 +309,15 @@ export default function IncidentDetail() {
                           <div className="idet-attach-thumb-overlay">
                             <div className="zoom-icon"><Icon name="eye" size={16}/></div>
                           </div>
+                          {canDelete(a) && (
+                            <button
+                              className="idet-attach-del idet-attach-del-thumb"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteAttachment(a); }}
+                              title="Remove attachment"
+                            >
+                              <Icon name="close" size={12}/>
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -268,26 +327,46 @@ export default function IncidentDetail() {
                       {fileAttachments.map(a => {
                         const ft = fileTypeInfo(a);
                         return (
-                          <a key={a.id} className="idet-attach-file" href={`/api/attachments/${a.id}/download`} target="_blank" rel="noopener noreferrer">
-                            <div className="idet-attach-file-icon" style={{ background: ft.bg, color: ft.color }}>
-                              <Icon name="file" size={16}/>
-                            </div>
-                            <div className="idet-attach-file-info">
-                              <div className="idet-attach-file-name">{a.filename}</div>
-                              <div className="idet-attach-file-meta">
-                                <span className="idet-attach-file-size">{((a.size_bytes || 0) / 1024).toFixed(0)} KB</span>
-                                <span className="idet-attach-file-type" style={{ background: ft.bg, color: ft.color }}>{ft.label}</span>
+                          <div key={a.id} className="idet-attach-file-wrap">
+                            <a className="idet-attach-file" href={`/api/attachments/${a.id}/download`} target="_blank" rel="noopener noreferrer">
+                              <div className="idet-attach-file-icon" style={{ background: ft.bg, color: ft.color }}>
+                                <Icon name="file" size={16}/>
                               </div>
-                            </div>
-                            <div className="idet-attach-dl"><Icon name="arrow" size={14}/></div>
-                          </a>
+                              <div className="idet-attach-file-info">
+                                <div className="idet-attach-file-name">{a.filename}</div>
+                                <div className="idet-attach-file-meta">
+                                  <span className="idet-attach-file-size">{((a.size_bytes || 0) / 1024).toFixed(0)} KB</span>
+                                  <span className="idet-attach-file-type" style={{ background: ft.bg, color: ft.color }}>{ft.label}</span>
+                                </div>
+                              </div>
+                              <div className="idet-attach-dl"><Icon name="arrow" size={14}/></div>
+                            </a>
+                            {canDelete(a) && (
+                              <button
+                                className="idet-attach-del idet-attach-del-file"
+                                onClick={() => handleDeleteAttachment(a)}
+                                title="Remove attachment"
+                              >
+                                <Icon name="close" size={14}/>
+                              </button>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
                   )}
                 </>
               ) : (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No attachments uploaded</p>
+                <div className="idet-attach-empty">
+                  <p>No attachments yet.</p>
+                  <button
+                    className="idet-attach-add-empty"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? 'Uploading…' : 'Attach a file'}
+                  </button>
+                </div>
               )}
             </div>
           </div>
