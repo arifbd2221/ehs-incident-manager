@@ -530,3 +530,50 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* Active stop-work banner — sits above the dashboard hero. Uses
+   --sds-error and existing keyframes per design rules. */
+.dash-stopwork-banner {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+  background: var(--sds-error);
+  color: #fff;
+  border-radius: var(--sds-radius-md);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--sds-shadow-elevated);
+  animation: pageEnter 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.dash-stopwork-icon {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+  animation: dotBlink 1.5s infinite;
+}
+.dash-stopwork-body { flex: 1; min-width: 0; }
+.dash-stopwork-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.dash-stopwork-list { display: flex; flex-direction: column; gap: 6px; }
+.dash-stopwork-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--sds-radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  transition: background 0.12s ease;
+}
+.dash-stopwork-row:hover { background: rgba(255, 255, 255, 0.18); }
+.dash-stopwork-num {
+  font-family: 'SF Mono', Menlo, monospace;
+  font-weight: 700;
+  font-size: 11px;
+}

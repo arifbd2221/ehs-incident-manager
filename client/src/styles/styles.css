@@ -1354,3 +1354,25 @@ body {
 @media (max-width: 800px) {
   .prof-grid { grid-template-columns: 1fr; }
 }
+
+/* Topbar STOP WORK button — extends .btn .btn-danger with subtle blink to
+   draw attention without being obnoxious. Uses the existing dotBlink keyframe
+   on a child pseudo via outline; falls back to plain red if reduced-motion. */
+.topbar-stopwork {
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  position: relative;
+}
+.topbar-stopwork::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid var(--sds-error);
+  opacity: 0.6;
+  animation: dotPulse 2s infinite;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .topbar-stopwork::before { animation: none; }
+}

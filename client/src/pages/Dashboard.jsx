@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDashboard } from '../api/dashboard';
+import { listActiveStopWorks, acknowledgeStopWork } from '../api/stop_work';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import Icon from '../components/shared/Icon';
@@ -112,10 +113,22 @@ export default function Dashboard() {
   const { setWizardOpen, refreshKey } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeStopWorks, setActiveStopWorks] = useState([]);
+
+  const loadStopWorks = useCallback(() => {
+    listActiveStopWorks().then(setActiveStopWorks).catch(() => setActiveStopWorks([]));
+  }, []);
 
   useEffect(() => {
     getDashboard().then(setData).catch(() => {}).finally(() => setLoading(false));
-  }, [refreshKey]);
+    loadStopWorks();
+  }, [refreshKey, loadStopWorks]);
+
+  const elevated = ['supervisor', 'ehs_officer', 'ehs_manager', 'admin'].includes(user?.role);
+  const handleAcknowledge = async (id) => {
+    try { await acknowledgeStopWork(id); loadStopWorks(); }
+    catch (e) { alert(e.response?.data?.error || 'Acknowledge failed'); }
+  };
 
   if (loading) {
     return (
@@ -165,6 +178,36 @@ export default function Dashboard() {
 
   return (
     <div className="page">
+      {/* Active stop-work banner — sits above everything when present */}
+      {activeStopWorks.length > 0 && (
+        <div className="dash-stopwork-banner">
+          <div className="dash-stopwork-icon"><Icon name="warning" size={22} color="#fff" /></div>
+          <div className="dash-stopwork-body">
+            <div className="dash-stopwork-title">
+              {activeStopWorks.length === 1 ? 'ACTIVE STOP-WORK' : `${activeStopWorks.length} ACTIVE STOP-WORKS`}
+            </div>
+            <div className="dash-stopwork-list">
+              {activeStopWorks.map((sw) => (
+                <div key={sw.id} className="dash-stopwork-row" onClick={() => navigate(`/incidents/${sw.id}`)}>
+                  <span className="dash-stopwork-num">{sw.incident_number}</span>
+                  <span> — </span>
+                  <span>{sw.area} · {sw.site_name || ''}</span>
+                  {elevated && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ marginLeft: 'auto', background: '#fff', color: 'var(--sds-error)', borderColor: '#fff' }}
+                      onClick={(e) => { e.stopPropagation(); handleAcknowledge(sw.id); }}
+                    >
+                      Acknowledge
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hero */}
       <div className="dash-hero">
         <div>
