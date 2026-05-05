@@ -24,6 +24,16 @@ const tlIcon = (action) => {
   return 'capa';
 };
 
+const fileTypeInfo = (a) => {
+  const name = a.filename || '';
+  const mime = a.mime_type || '';
+  if (mime.startsWith('image/')) return { type: 'image', color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', label: 'Image' };
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return { type: 'pdf', color: '#ef4444', bg: 'rgba(239,68,68,0.08)', label: 'PDF' };
+  if (mime.includes('word') || /\.docx?$/.test(name)) return { type: 'doc', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', label: 'Document' };
+  if (mime.includes('sheet') || mime.includes('excel') || /\.xlsx?$/.test(name)) return { type: 'sheet', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', label: 'Spreadsheet' };
+  return { type: 'text', color: '#6b7280', bg: 'rgba(107,114,128,0.08)', label: 'File' };
+};
+
 export default function IncidentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -31,12 +41,27 @@ export default function IncidentDetail() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
+  const [lightbox, setLightbox] = useState({ open: false, index: 0 });
 
   const load = () => {
     setLoading(true);
     getIncident(id).then(setIncident).catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(load, [id]);
+
+  const imageAttachments = (incident?.attachments || []).filter(a => a.mime_type && a.mime_type.startsWith('image/'));
+  const fileAttachments = (incident?.attachments || []).filter(a => !a.mime_type || !a.mime_type.startsWith('image/'));
+
+  useEffect(() => {
+    if (!lightbox.open) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') setLightbox({ open: false, index: 0 });
+      if (e.key === 'ArrowRight') setLightbox(prev => ({ ...prev, index: Math.min(prev.index + 1, imageAttachments.length - 1) }));
+      if (e.key === 'ArrowLeft') setLightbox(prev => ({ ...prev, index: Math.max(prev.index - 1, 0) }));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [lightbox.open, imageAttachments.length]);
 
   if (loading) return (
     <div className="page idet" style={{ padding: 60, textAlign: 'center' }}>
@@ -209,17 +234,51 @@ export default function IncidentDetail() {
             </div>
             <div className="idet-card-body">
               {(r.attachments || []).length > 0 ? (
-                <div className="idet-attach-grid">
-                  {r.attachments.map(a => (
-                    <div key={a.id} className="idet-attach-item">
-                      <div className="idet-attach-icon"><Icon name="file" size={16}/></div>
-                      <div className="idet-attach-info">
-                        <div className="idet-attach-name">{a.original_name}</div>
-                        <div className="idet-attach-size">{(a.size / 1024).toFixed(0)} KB</div>
-                      </div>
+                <>
+                  {imageAttachments.length > 0 && (
+                    <div className="idet-attach-images">
+                      {imageAttachments.map((a, idx) => (
+                        <div
+                          key={a.id}
+                          className="idet-attach-thumb"
+                          onClick={() => setLightbox({ open: true, index: idx })}
+                          onLoad={e => e.currentTarget.classList.add('loaded')}
+                        >
+                          <img
+                            src={`/uploads/${a.stored_filename}`}
+                            alt={a.filename}
+                            onLoad={e => e.currentTarget.closest('.idet-attach-thumb').classList.add('loaded')}
+                          />
+                          <div className="idet-attach-thumb-overlay">
+                            <div className="zoom-icon"><Icon name="eye" size={16}/></div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                  {fileAttachments.length > 0 && (
+                    <div className="idet-attach-files">
+                      {fileAttachments.map(a => {
+                        const ft = fileTypeInfo(a);
+                        return (
+                          <a key={a.id} className="idet-attach-file" href={`/api/attachments/${a.id}/download`} target="_blank" rel="noopener noreferrer">
+                            <div className="idet-attach-file-icon" style={{ background: ft.bg, color: ft.color }}>
+                              <Icon name="file" size={16}/>
+                            </div>
+                            <div className="idet-attach-file-info">
+                              <div className="idet-attach-file-name">{a.filename}</div>
+                              <div className="idet-attach-file-meta">
+                                <span className="idet-attach-file-size">{((a.size_bytes || 0) / 1024).toFixed(0)} KB</span>
+                                <span className="idet-attach-file-type" style={{ background: ft.bg, color: ft.color }}>{ft.label}</span>
+                              </div>
+                            </div>
+                            <div className="idet-attach-dl"><Icon name="arrow" size={14}/></div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               ) : (
                 <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No attachments uploaded</p>
               )}
@@ -351,6 +410,47 @@ export default function IncidentDetail() {
           </div>
         </div>
       </div>
+
+      {/* Lightbox */}
+      {lightbox.open && imageAttachments.length > 0 && (
+        <div className="idet-lightbox" onClick={() => setLightbox({ open: false, index: 0 })}>
+          <button className="idet-lb-close" onClick={() => setLightbox({ open: false, index: 0 })}>
+            <Icon name="close" size={18}/>
+          </button>
+          {imageAttachments.length > 1 && (
+            <>
+              <button
+                className="idet-lb-nav idet-lb-prev"
+                disabled={lightbox.index === 0}
+                onClick={e => { e.stopPropagation(); setLightbox(prev => ({ ...prev, index: prev.index - 1 })); }}
+              >
+                <Icon name="arrowL" size={18}/>
+              </button>
+              <button
+                className="idet-lb-nav idet-lb-next"
+                disabled={lightbox.index === imageAttachments.length - 1}
+                onClick={e => { e.stopPropagation(); setLightbox(prev => ({ ...prev, index: prev.index + 1 })); }}
+              >
+                <Icon name="arrow" size={18}/>
+              </button>
+            </>
+          )}
+          <img
+            key={lightbox.index}
+            className="idet-lb-image"
+            src={`/uploads/${imageAttachments[lightbox.index].stored_filename}`}
+            alt={imageAttachments[lightbox.index].filename}
+            onClick={e => e.stopPropagation()}
+          />
+          <div className="idet-lb-info" onClick={e => e.stopPropagation()}>
+            <span className="idet-lb-name">{imageAttachments[lightbox.index].filename}</span>
+            <span className="idet-lb-size">{((imageAttachments[lightbox.index].size_bytes || 0) / 1024).toFixed(0)} KB</span>
+            {imageAttachments.length > 1 && (
+              <span className="idet-lb-counter">{lightbox.index + 1} of {imageAttachments.length}</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {modal === 'assign' && <AssignModal incident={r} onCancel={() => setModal(null)} onConfirm={handleAssign}/>}

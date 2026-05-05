@@ -7,3 +7,11 @@ export const updateIncident = (id, data) => api.patch(`/incidents/${id}`, data).
 export const assignIncident = (id, data) => api.post(`/incidents/${id}/assign`, data).then(r => r.data);
 export const escalateIncident = (id, data) => api.post(`/incidents/${id}/escalate`, data).then(r => r.data);
 export const closeIncident = (id, data) => api.post(`/incidents/${id}/close`, data).then(r => r.data);
+
+export const uploadAttachments = (entityType, entityId, files) => {
+  const form = new FormData();
+  form.append('entity_type', entityType);
+  form.append('entity_id', entityId);
+  files.forEach(f => form.append('files', f));
+  return api.post('/attachments', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+};

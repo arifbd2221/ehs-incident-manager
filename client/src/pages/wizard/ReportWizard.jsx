@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { createIncident } from '../../api/incidents';
+import { useState, useEffect, useRef } from 'react';
+import { createIncident, uploadAttachments } from '../../api/incidents';
 import { getSites } from '../../api/users';
 import Icon from '../../components/shared/Icon';
 import { TYPES, typeOf } from '../../components/shared/Badges';
@@ -71,6 +71,16 @@ function RiskMatrix({ likelihood, consequence, onPick }) {
   );
 }
 
+const fileTypeInfo = (file) => {
+  const name = file.name || file.filename || '';
+  const mime = file.type || file.mime_type || '';
+  if (mime.startsWith('image/')) return { type: 'image', color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', label: 'Image' };
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return { type: 'pdf', color: '#ef4444', bg: 'rgba(239,68,68,0.08)', label: 'PDF' };
+  if (mime.includes('word') || /\.docx?$/.test(name)) return { type: 'doc', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', label: 'Document' };
+  if (mime.includes('sheet') || mime.includes('excel') || /\.xlsx?$/.test(name)) return { type: 'sheet', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', label: 'Spreadsheet' };
+  return { type: 'text', color: '#6b7280', bg: 'rgba(107,114,128,0.08)', label: 'File' };
+};
+
 export default function ReportWizard({ onClose, onSubmit }) {
   const [step, setStep] = useState(0);
   const [type, setType] = useState('injury');
@@ -82,8 +92,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const [likelihood, setLikelihood] = useState(2);
   const [consequence, setConsequence] = useState(2);
   const [typeData, setTypeData] = useState({});
+  const [files, setFiles] = useState([]);
   const [sites, setSites] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const fileInputRef = useRef(null);
+  const [removingIdx, setRemovingIdx] = useState(null);
+  const [imageUrls, setImageUrls] = useState({});
 
   useEffect(() => {
     getSites().then(data => { setSites(data); if (data.length > 0) setSiteId(String(data[0].id)); });
@@ -95,6 +109,17 @@ export default function ReportWizard({ onClose, onSubmit }) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
+  useEffect(() => {
+    const urls = {};
+    files.forEach((f, i) => {
+      if (f.type && f.type.startsWith('image/')) {
+        urls[i] = URL.createObjectURL(f);
+      }
+    });
+    setImageUrls(urls);
+    return () => Object.values(urls).forEach(url => URL.revokeObjectURL(url));
+  }, [files]);
+
   const sevKey = SEV_GRID[likelihood][consequence];
   const sev = SEV_NUM[sevKey];
   const track = sev <= 2 ? 'A' : sev === 3 ? 'B' : 'C';
@@ -104,14 +129,30 @@ export default function ReportWizard({ onClose, onSubmit }) {
 
   const canContinue = step === 0 ? title.trim().length > 0 : true;
 
+  const addFiles = (newFiles) => {
+    const list = Array.from(newFiles);
+    setFiles(prev => [...prev, ...list]);
+  };
+
+  const removeFile = (idx) => {
+    setRemovingIdx(idx);
+    setTimeout(() => {
+      setFiles(prev => prev.filter((_, i) => i !== idx));
+      setRemovingIdx(null);
+    }, 300);
+  };
+
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      await createIncident({
+      const incident = await createIncident({
         title: title.trim(), type, description,
         incident_datetime: datetime, site_id: Number(siteId),
         area, likelihood, consequence, type_data: typeData,
       });
+      if (files.length > 0 && incident?.id) {
+        await uploadAttachments('incident', incident.id, files);
+      }
       onSubmit();
     } catch {
       setSubmitting(false);
@@ -175,6 +216,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
               <span className="lbl">Track</span>
               <span className="val"><span className={`wiz-track-tag wt${track.toLowerCase()}`}>Track {track}</span></span>
             </div>
+            {files.length > 0 && (
+              <div className="wiz-preview-row">
+                <span className="lbl">Files</span>
+                <span className="val">{files.length} attached</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -254,6 +301,75 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     placeholder="Describe in detail — what happened, who was involved, what were the immediate circumstances..."
                     rows={4}
                   />
+                </div>
+
+                <div className="wiz-section">
+                  <div className="wiz-section-h">
+                    <div className="wiz-sh-icon"><Icon name="file" size={16} /></div>
+                    Attachments
+                    <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 400, color: 'var(--sds-fg-tertiary)' }}>Optional · max 10 files, 25 MB each</span>
+                  </div>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                    style={{ display: 'none' }}
+                    onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+                  />
+
+                  <div
+                    className="wiz-dropzone"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('dragover'); }}
+                    onDragLeave={e => e.currentTarget.classList.remove('dragover')}
+                    onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('dragover'); addFiles(e.dataTransfer.files); }}
+                  >
+                    <div className="wiz-dz-icon"><Icon name="file" size={22} /></div>
+                    <div className="wiz-dz-text">Drop files here or <span className="wiz-dz-link">browse</span></div>
+                    <div className="wiz-dz-hint">Photos, PDFs, documents — anything that supports the report</div>
+                  </div>
+
+                  {files.length > 0 && (
+                    <div className="wiz-file-count">
+                      <span className="wiz-fc-num" key={files.length}>{files.length}</span> of 10 files
+                    </div>
+                  )}
+
+                  {files.length > 0 && (
+                    <div className="wiz-file-list">
+                      {files.map((f, i) => {
+                        const ft = fileTypeInfo(f);
+                        const isImage = ft.type === 'image';
+                        const isOversized = f.size > 25 * 1024 * 1024;
+                        return (
+                          <div key={`${f.name}-${f.size}-${i}`} className={`wiz-file-item ${removingIdx === i ? 'removing' : ''} ${isOversized ? 'error' : ''}`}>
+                            {isImage && imageUrls[i] ? (
+                              <div className="wiz-fi-thumb">
+                                <img src={imageUrls[i]} alt="" />
+                              </div>
+                            ) : (
+                              <div className="wiz-fi-icon" style={{ background: ft.bg, color: ft.color }}>
+                                <Icon name="file" size={14} />
+                              </div>
+                            )}
+                            <div className="wiz-fi-info">
+                              <div className="wiz-fi-name">{f.name}</div>
+                              <div className="wiz-fi-meta">
+                                <span className="wiz-fi-size">{(f.size / 1024).toFixed(0)} KB</span>
+                                <span className="wiz-fi-type" style={{ color: ft.color }}>{ft.label}</span>
+                              </div>
+                            </div>
+                            {isOversized && <span className="wiz-fi-warn">Too large</span>}
+                            <button className="wiz-fi-remove" onClick={(e) => { e.stopPropagation(); removeFile(i); }}>
+                              <Icon name="close" size={12} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -414,6 +530,34 @@ export default function ReportWizard({ onClose, onSubmit }) {
                       <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #f1f5f9' }}>
                         <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sds-fg-tertiary)', marginBottom: 6 }}>Description</div>
                         <div style={{ fontSize: 12, color: 'var(--sds-fg-secondary)', lineHeight: 1.55 }}>{description}</div>
+                      </div>
+                    )}
+
+                    {files.length > 0 && (
+                      <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sds-fg-tertiary)', marginBottom: 8 }}>Attachments · {files.length} file{files.length > 1 ? 's' : ''}</div>
+                        {Object.keys(imageUrls).length > 0 && (
+                          <div className="wiz-review-thumbs">
+                            {files.map((f, i) => imageUrls[i] ? (
+                              <div key={i} className="wiz-rt-item">
+                                <img src={imageUrls[i]} alt={f.name} />
+                              </div>
+                            ) : null)}
+                          </div>
+                        )}
+                        <div className="wiz-review-files">
+                          {files.map((f, i) => {
+                            const ft = fileTypeInfo(f);
+                            return (
+                              <div key={i} className="wiz-rf-item">
+                                <Icon name="file" size={12} color={ft.color} />
+                                <span style={{ fontSize: 12, color: 'var(--sds-fg-secondary)' }}>{f.name}</span>
+                                <span className="wiz-fi-type" style={{ color: ft.color, fontSize: 9 }}>{ft.label}</span>
+                                <span style={{ fontSize: 10, color: 'var(--sds-fg-tertiary)', marginLeft: 'auto' }}>{(f.size / 1024).toFixed(0)} KB</span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
