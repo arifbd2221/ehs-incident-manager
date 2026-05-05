@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
 import { nextIncidentNumber, nextInvestigationNumber, nextRiddorNumber } from '../services/numbering.js';
-import { calculateSeverityAndTrack, shouldAutoClose } from '../services/classification.js';
+import { calculateSeverityAndTrack, shouldAutoClose, inferSeverityFrom } from '../services/classification.js';
 import { determineOshaRecordability, determineRiddorReportability, calculateDeadline } from '../services/regulatory.js';
+import { parseBodyParts } from '../services/body_parts.js';
 
 const router = Router();
 
@@ -22,6 +23,33 @@ function trackForSeverity(severity) {
   if (severity <= 2) return 'A';
   if (severity === 3) return 'B';
   return 'C';
+}
+
+// Count prior incidents in the last N days at the same asset (preferred)
+// or, lacking an asset, at the same site + area. Used for the trending
+// banner in the wizard and for likelihood inference. Excludes the
+// supplied `excludeId` so a freshly-inserted incident doesn't count itself.
+function priorIncidentsCount({ orgId, assetId, siteId, area, days = 90, excludeId = null }) {
+  const window = `-${days} days`;
+  if (assetId) {
+    const row = db.prepare(`
+      SELECT COUNT(*) as c FROM incidents
+      WHERE org_id = ? AND asset_id = ?
+        AND incident_datetime > datetime('now', ?)
+        AND (? IS NULL OR id != ?)
+    `).get(orgId, assetId, window, excludeId, excludeId);
+    return row.c;
+  }
+  if (siteId && area) {
+    const row = db.prepare(`
+      SELECT COUNT(*) as c FROM incidents
+      WHERE org_id = ? AND site_id = ? AND area = ?
+        AND incident_datetime > datetime('now', ?)
+        AND (? IS NULL OR id != ?)
+    `).get(orgId, siteId, area, window, excludeId, excludeId);
+    return row.c;
+  }
+  return 0;
 }
 
 router.get('/', (req, res) => {
@@ -55,6 +83,15 @@ router.get('/', (req, res) => {
     LIMIT ? OFFSET ?
   `).all(...params, Number(limit), offset);
 
+  // Scrub anonymous reporter info (per locked decision #10)
+  for (const inc of incidents) {
+    if (inc.is_anonymous) {
+      inc.reporter_name = 'Anonymous';
+      inc.reporter_initials = 'AN';
+      inc.reported_by = null;
+    }
+  }
+
   res.json({ incidents, total, page: Number(page), limit: Number(limit) });
 });
 
@@ -79,6 +116,16 @@ router.get('/:id', (req, res) => {
   ).all(incident.id);
 
   incident.type_data = JSON.parse(incident.type_data || '{}');
+  incident.body_parts_affected = JSON.parse(incident.body_parts_affected || '[]');
+
+  // Per locked decision #10: anonymous reports never expose a reporter
+  // identity, even if the column would otherwise show via JOIN. Scrub.
+  if (incident.is_anonymous) {
+    incident.reporter_name = 'Anonymous';
+    incident.reporter_initials = 'AN';
+    incident.reported_by = null;
+  }
+
   res.json({ ...incident, witnesses, attachments, activity });
 });
 
@@ -88,6 +135,8 @@ router.post('/', async (req, res, next) => {
     title, type, description, incident_datetime, site_id, area, specific_location,
     department, shift, likelihood, consequence, type_data, immediate_actions_taken,
     asset_id,
+    body_parts_affected,
+    is_anonymous,
     witnesses: witnessData,
   } = req.body;
 
@@ -96,6 +145,15 @@ router.post('/', async (req, res, next) => {
   }
 
   const orgId = req.user.org_id;
+
+  // Anonymous: per locked decision #10, allowed for 6 of 8 types only.
+  // Injury and illness identify a person and require an audit trail.
+  const anonymous = !!is_anonymous;
+  if (anonymous && (type === 'injury' || type === 'illness')) {
+    return res.status(400).json({
+      error: 'Anonymous reporting is not permitted for injury or illness types — these require identifying the affected person.',
+    });
+  }
 
   // Validate asset belongs to user's org + matches the chosen site (if provided)
   let resolvedAssetId = null;
@@ -108,6 +166,10 @@ router.post('/', async (req, res, next) => {
     resolvedAssetId = a.id;
   }
 
+  // Sanitize body_parts_affected against the canonical region ID set
+  const cleanedBodyParts = parseBodyParts(body_parts_affected);
+  const bodyPartsJson = JSON.stringify(cleanedBodyParts);
+
   const incidentNumber = nextIncidentNumber();
   const { severity, track } = calculateSeverityAndTrack(likelihood, consequence, type);
 
@@ -118,22 +180,27 @@ router.post('/', async (req, res, next) => {
   const autoClose = shouldAutoClose(type, severity, track);
   const status = autoClose ? 'Closed' : 'New';
 
+  // Per locked decision #10: anonymous incidents are stored with reported_by NULL
+  // even when the submitter is logged in. The activity log entry below is also
+  // scrubbed (user_id NULL, actor "Anonymous" in the description).
+  const reportedBy = anonymous ? null : req.user.id;
+
   const result = db.prepare(`
     INSERT INTO incidents (
       incident_number, org_id, site_id, title, type, description, incident_datetime,
       area, specific_location, department, shift, asset_id,
       severity, likelihood, consequence, track,
-      status, reported_by,
+      status, reported_by, is_anonymous, body_parts_affected,
       osha_recordable, osha_recordability_type,
       riddor_reportable, riddor_category,
       type_data, immediate_actions_taken,
       closed_at, closed_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     incidentNumber, orgId, site_id, title, type, description || '', incident_datetime,
     area || null, specific_location || null, department || null, shift || null, resolvedAssetId,
     severity, likelihood ?? null, consequence ?? null, track,
-    status, req.user.id,
+    status, reportedBy, anonymous ? 1 : 0, bodyPartsJson,
     osha.recordable ? 1 : 0, osha.type,
     riddor.reportable ? 1 : 0, riddor.category || null,
     JSON.stringify(type_data || {}), immediate_actions_taken || null,
@@ -150,10 +217,18 @@ router.post('/', async (req, res, next) => {
     }
   }
 
+  // Scrub the actor on anonymous incidents: log user_id NULL and a description
+  // that says "Anonymous reporter" rather than the JWT subject.
   db.prepare(`
     INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
     VALUES (?, 'incident', ?, 'created', ?, ?)
-  `).run(orgId, incidentId, `submitted ${incidentNumber} — ${type} · Sev ${severity} · Track ${track}`, req.user.id);
+  `).run(
+    orgId, incidentId,
+    anonymous
+      ? `submitted ${incidentNumber} anonymously — ${type} · Sev ${severity} · Track ${track}`
+      : `submitted ${incidentNumber} — ${type} · Sev ${severity} · Track ${track}`,
+    anonymous ? null : req.user.id,
+  );
 
   if (autoClose) {
     db.prepare(`
@@ -208,8 +283,66 @@ router.post('/', async (req, res, next) => {
 
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incidentId);
   incident.type_data = JSON.parse(incident.type_data || '{}');
+  incident.body_parts_affected = JSON.parse(incident.body_parts_affected || '[]');
+
+  // Trending banner data (per locked decision #16): how many incidents
+  // already happened at this asset (or site+area) in the last 90 days.
+  // Counted EXCLUDING the just-inserted row so the value reads as "prior."
+  incident.prior_incidents_count = priorIncidentsCount({
+    orgId,
+    assetId: resolvedAssetId,
+    siteId: site_id,
+    area,
+    days: 90,
+    excludeId: incidentId,
+  });
+
   res.status(201).json(incident);
   } catch (err) { next(err); }
+});
+
+// Classify-preview: lets the wizard pre-fill the matrix selection with
+// rule-based inference (likelihood × consequence + reasoning) BEFORE the
+// user submits. Per locked decision #14 — auto-classification. Read-only.
+router.post('/classify-preview', (req, res) => {
+  const { type, type_data, body_parts_affected, asset_id, site_id, area } = req.body;
+  const orgId = req.user.org_id;
+
+  let assetSiteId = null;
+  if (asset_id) {
+    const a = db.prepare('SELECT site_id FROM assets WHERE id = ? AND org_id = ?').get(asset_id, orgId);
+    if (a) assetSiteId = a.site_id;
+  }
+
+  const prior = priorIncidentsCount({
+    orgId,
+    assetId: asset_id || null,
+    siteId: site_id || assetSiteId,
+    area,
+    days: 365, // for likelihood inference, 12-month window per locked spec
+  });
+
+  const inference = inferSeverityFrom({
+    type,
+    type_data,
+    body_parts_affected: parseBodyParts(body_parts_affected),
+    prior_incidents_count: prior,
+  });
+
+  // Recent count over the 90-day window for the wizard banner ("3 prior in 90 days")
+  const recent = priorIncidentsCount({
+    orgId,
+    assetId: asset_id || null,
+    siteId: site_id || assetSiteId,
+    area,
+    days: 90,
+  });
+
+  res.json({
+    ...inference,
+    prior_incidents_12mo: prior,
+    prior_incidents_90d: recent,
+  });
 });
 
 router.patch('/:id', (req, res) => {
@@ -239,6 +372,13 @@ router.patch('/:id', (req, res) => {
   if (req.body.type_data !== undefined) {
     sets.push('type_data = ?');
     params.push(JSON.stringify(req.body.type_data));
+  }
+  // body_parts_affected: pass through parseBodyParts to drop unknown IDs.
+  // Note: is_anonymous is intentionally NOT in the updatable list — once a
+  // report is anonymous, it stays anonymous (per locked decision #10).
+  if (req.body.body_parts_affected !== undefined) {
+    sets.push('body_parts_affected = ?');
+    params.push(JSON.stringify(parseBodyParts(req.body.body_parts_affected)));
   }
 
   // Severity override: capture audit trail, recompute track if not explicitly set.

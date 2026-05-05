@@ -26,8 +26,8 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 
 ## Wave 3 — Incident extensions
 
-- [ ] **T3.1** Service foundations: `body_parts.js` + recordability/riddor split + `auto_classify.js`
-- [ ] **T3.2** `incidents.js` POST extends: `body_parts_affected`, `asset_id`, `is_anonymous`, `prior_incidents_count`
+- [x] **T3.1** Service foundations: `body_parts.js` + recordability/riddor split + `auto_classify.js` (local, uncommitted)
+- [x] **T3.2** `incidents.js` POST extends: `body_parts_affected`, `asset_id` (was already done in F2.3), `is_anonymous`, `prior_incidents_count` + new `POST /classify-preview` endpoint (local, uncommitted)
 - [ ] **F3.1** Body map wiring (`InjuryForm` uses `BodyMap3D`)
 - [ ] **F3.2** Anonymous toggle in wizard Step 1
 - [ ] **F3.4** Trending banner on wizard Step 2
