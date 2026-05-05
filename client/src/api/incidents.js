@@ -21,3 +21,6 @@ export const deleteAttachment = (id) => api.delete(`/attachments/${id}`).then(r 
 
 export const voiceExtract = (transcript) =>
   api.post('/incidents/voice-extract', { transcript }).then(r => r.data);
+
+export const addIncidentNote = (id, text) =>
+  api.post(`/incidents/${id}/note`, { text }).then(r => r.data);

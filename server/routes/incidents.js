@@ -388,6 +388,41 @@ router.post('/classify-preview', (req, res) => {
 });
 
 // =============================================================================
+// Inline notes on the activity timeline (UX-B).
+//
+// Any authenticated user can post a free-text note against an incident.
+// Workers can leave observations ("spoke with site mgr — no PPE was issued")
+// alongside the system-generated events. Activity timeline GET already
+// returns these — they just need an INSERT path.
+// =============================================================================
+
+router.post('/:id/note', (req, res) => {
+  const incident = db.prepare('SELECT id, org_id, incident_number FROM incidents WHERE id = ? AND org_id = ?')
+    .get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  const text = (req.body?.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'Note text is required' });
+  if (text.length > 4000) return res.status(400).json({ error: 'Note is too long (max 4000 chars).' });
+
+  const result = db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+    VALUES (?, 'incident', ?, 'note', ?, ?)
+  `).run(incident.org_id, incident.id, text, req.user.id);
+
+  // Return the row already joined with the user info so the FE can append
+  // it to the timeline without re-fetching the whole incident.
+  const row = db.prepare(`
+    SELECT al.*, u.name as user_name, u.initials as user_initials
+    FROM activity_log al
+    LEFT JOIN users u ON u.id = al.user_id
+    WHERE al.id = ?
+  `).get(result.lastInsertRowid);
+
+  res.status(201).json(row);
+});
+
+// =============================================================================
 // Voice intake — pre-incident transcript → structured fields.
 //
 // The FE captures audio with the Web Speech API and posts the resulting text
