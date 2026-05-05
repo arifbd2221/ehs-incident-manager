@@ -31,8 +31,8 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 - [ ] **F3.1** Body map wiring (`InjuryForm` uses `BodyMap3D`)
 - [ ] **F3.2** Anonymous toggle in wizard Step 1
 - [ ] **F3.4** Trending banner on wizard Step 2
-- [ ] **T3.3** Stop-work endpoints + state machine + down-route guard
-- [ ] **F3.3** STOP WORK button (TopBar) + active dashboard banner
+- [x] **T3.3** Stop-work endpoints + state machine + down-route guard (local, uncommitted)
+- [x] **F3.3** STOP WORK button (TopBar) + active dashboard banner (local, uncommitted)
 - [ ] **T3.4** `POST /incidents/:id/recordability-verify` (5-gate)
 - [ ] **F3.5** EHS recordability verification card on incident detail
 
