@@ -6,6 +6,7 @@ import { listAssets, createAsset, updateAsset, deleteAsset } from '../../api/ass
 import { listSites } from '../../api/sites';
 import { listAssetCategories, createAssetCategory } from '../../api/asset_categories';
 import Icon from '../../components/shared/Icon';
+import CategoryFieldsModal from '../../components/modals/CategoryFieldsModal';
 import '../../styles/assets.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -34,6 +35,7 @@ export default function AssetsList() {
   const [assets, setAssets] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [showCategoryFields, setShowCategoryFields] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('active');
   const [siteFilter, setSiteFilter] = useState('');
@@ -236,6 +238,16 @@ export default function AssetsList() {
           <p className="assets-sub">Equipment, vehicles, areas, and other registered assets.</p>
         </div>
         <div style={{ flex: 1 }} />
+        {canEdit && (
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowCategoryFields(true)}
+            style={{ marginRight: 8 }}
+            title="Define custom fields per category"
+          >
+            <Icon name="settings" size={14} /> Category fields
+          </button>
+        )}
         {canEdit && (
           <button className="btn btn-primary" onClick={openNew}>
             <Icon name="plus" size={16} /> New asset
@@ -548,6 +560,18 @@ export default function AssetsList() {
             </div>
           </form>
         </div>,
+        document.body
+      )}
+
+      {showCategoryFields && createPortal(
+        <CategoryFieldsModal
+          onClose={() => {
+            setShowCategoryFields(false);
+            // Refresh categories in case anything was renamed (defensive — we
+            // don't currently rename here but listAssetCategories is cheap).
+            listAssetCategories().then(setCategories).catch(() => {});
+          }}
+        />,
         document.body
       )}
     </div>
