@@ -41,25 +41,69 @@ const SEV_NUM = { low: 5, med: 4, high: 3, crit: 2 };
 const SEV_NAMES = { 5: 'Insignificant', 4: 'Minor', 3: 'Moderate', 2: 'Major', 1: 'Critical' };
 const SEV_NAME_SHORT = { low: 'Minor', med: 'Moderate', high: 'Major', crit: 'Critical' };
 
+const TRACK_DESC = {
+  A: 'Full investigation required — lead investigator assigned within 24h',
+  B: 'Light investigation — supervisor review and triage',
+  C: 'Log & close — recorded for trend analysis, no investigation needed',
+};
+
+const SEV_COLORS = {
+  5: '#6b7280', 4: '#16a34a', 3: '#ca8a04', 2: '#ea580c', 1: '#dc2626',
+};
+
+function SevGauge({ sev }) {
+  const pct = ((5 - sev) / 4) * 100;
+  const color = SEV_COLORS[sev] || '#6b7280';
+  const r = 44;
+  const circ = 2 * Math.PI * r;
+  const dashLen = (pct / 100) * circ * 0.75;
+
+  return (
+    <div className="wiz-gauge">
+      <svg width="110" height="110" viewBox="0 0 110 110">
+        <circle cx="55" cy="55" r={r} fill="none" stroke="#f1f5f9" strokeWidth="8"
+          strokeDasharray={`${circ * 0.75} ${circ * 0.25}`}
+          strokeLinecap="round" transform="rotate(135 55 55)" />
+        <circle cx="55" cy="55" r={r} fill="none" stroke={color} strokeWidth="8"
+          strokeDasharray={`${dashLen} ${circ - dashLen}`}
+          strokeLinecap="round" transform="rotate(135 55 55)"
+          className="wiz-gauge-fill" style={{ '--gauge-dash': dashLen, '--gauge-circ': circ }} />
+      </svg>
+      <div className="wiz-gauge-center">
+        <div className="wiz-gauge-val" style={{ color }}>S{sev}</div>
+      </div>
+    </div>
+  );
+}
+
 function RiskMatrix({ likelihood, consequence, onPick }) {
+  const [hover, setHover] = useState(null);
   const yLabels = ['Almost certain', 'Likely', 'Possible', 'Unlikely', 'Rare'];
   const xLabels = ['Insignificant', 'Minor', 'Moderate', 'Major', 'Catastrophic'];
 
   return (
-    <div className="matrix" style={{ flex: 1 }}>
-      <div />
-      {xLabels.map(l => <div key={l} className="axis-label">{l}</div>)}
+    <div className="rm-matrix" style={{ flex: 1 }}>
+      <div className="rm-corner">
+        <span className="rm-axis-title rm-axis-y">Likelihood →</span>
+      </div>
+      {xLabels.map((l, xi) => (
+        <div key={l} className={`rm-col-label ${hover && hover[1] === xi ? 'rm-hl' : ''}`}>{l}</div>
+      ))}
       {yLabels.map((yl, yi) => (
         <span key={yl} style={{ display: 'contents' }}>
-          <div className="axis-label y-label">{yl}</div>
+          <div className={`rm-row-label ${hover && hover[0] === yi ? 'rm-hl' : ''}`}>{yl}</div>
           {xLabels.map((_, xi) => {
             const k = SEV_GRID[yi][xi];
             const sel = likelihood === yi && consequence === xi;
+            const isHoverRow = hover && hover[0] === yi;
+            const isHoverCol = hover && hover[1] === xi;
             return (
               <div key={xi}
-                className={`cell cell-${k} ${sel ? 'selected' : ''}`}
+                className={`rm-cell rm-cell-${k} ${sel ? 'rm-sel' : ''} ${isHoverRow || isHoverCol ? 'rm-crosshair' : ''}`}
                 onClick={() => onPick(yi, xi)}
-                style={{ borderRadius: 6 }}
+                onMouseEnter={() => setHover([yi, xi])}
+                onMouseLeave={() => setHover(null)}
+                style={{ animationDelay: `${(yi * 5 + xi) * 25}ms` }}
               >
                 {SEV_NAME_SHORT[k]}
               </div>
@@ -67,6 +111,7 @@ function RiskMatrix({ likelihood, consequence, onPick }) {
           })}
         </span>
       ))}
+      <div className="rm-x-title">← Consequence</div>
     </div>
   );
 }
@@ -393,18 +438,24 @@ export default function ReportWizard({ onClose, onSubmit }) {
                   <div className="wiz-risk-h">
                     <div className="wiz-rh-icon"><Icon name="warning" size={16} /></div>
                     Risk classification
+                    <span className="wiz-risk-hint">Click a cell to set likelihood vs. consequence</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+                  <div className="wiz-risk-layout">
                     <RiskMatrix
                       likelihood={likelihood}
                       consequence={consequence}
                       onPick={(y, x) => { setLikelihood(y); setConsequence(x); }}
                     />
-                    <div className="wiz-risk-result">
-                      <div className="wiz-rr-label">Auto-classified</div>
-                      <div key={sev} className={`wiz-rr-sev rs${sev}`}>S{sev}</div>
-                      <div key={`n-${sev}`} className="wiz-rr-name">{SEV_NAMES[sev]}</div>
-                      <div key={`t-${track}`} className={`wiz-rr-track rt${track.toLowerCase()}`}>Track {track}</div>
+                    <div key={`result-${sev}-${track}`} className="wiz-risk-result-v2">
+                      <div className="wiz-rr2-label">Auto-classified</div>
+                      <SevGauge sev={sev} />
+                      <div className={`wiz-rr2-name rs${sev}`}>{SEV_NAMES[sev]}</div>
+                      <div className="wiz-rr2-divider" />
+                      <div className={`wiz-rr2-track rt${track.toLowerCase()}`}>
+                        <span className="wiz-rr2-track-letter">{track}</span>
+                        Track {track}
+                      </div>
+                      <div className="wiz-rr2-desc">{TRACK_DESC[track]}</div>
                     </div>
                   </div>
                 </div>
