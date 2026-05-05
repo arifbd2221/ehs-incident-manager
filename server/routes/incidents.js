@@ -5,6 +5,7 @@ import { calculateSeverityAndTrack, shouldAutoClose, inferSeverityFrom } from '.
 import { determineOshaRecordability, determineRiddorReportability, calculateDeadline } from '../services/regulatory.js';
 import { verifyOshaRecordability } from '../services/recordability.js';
 import { parseBodyParts } from '../services/body_parts.js';
+import { extractFromTranscript } from '../services/voice_extract.js';
 import { createCapaRow } from './capas.js';
 
 const router = Router();
@@ -347,6 +348,58 @@ router.post('/classify-preview', (req, res) => {
     prior_incidents_12mo: prior,
     prior_incidents_90d: recent,
   });
+});
+
+// =============================================================================
+// Voice intake — pre-incident transcript → structured fields.
+//
+// The FE captures audio with the Web Speech API and posts the resulting text
+// here. We never see audio. Anthropic extracts a typed JSON shape; the
+// transcript text is hashed but not stored (privacy decision in the spec).
+// The wizard then renders fields with an "✨ AI suggested" badge until the
+// user confirms or edits each one.
+//
+// 503 (no API key) is a soft failure — the demo seed includes a fallback
+// voice_extractions row so this beat is still demonstrable without a key.
+// =============================================================================
+
+router.post('/voice-extract', async (req, res, next) => {
+  try {
+    const { transcript } = req.body || {};
+    const result = await extractFromTranscript({
+      transcript,
+      orgId: req.user.org_id,
+      userId: req.user.id,
+    });
+
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+      VALUES (?, 'voice_extraction', ?, 'extracted', ?, ?, ?)
+    `).run(
+      req.user.org_id, result.extraction_id,
+      `voice transcript extracted (${result.transcript_hash.slice(0, 8)}…)`,
+      req.user.id,
+      JSON.stringify({
+        transcript_hash: result.transcript_hash,
+        extracted_type: result.extracted_fields.type,
+        missing_required: result.missing_required,
+      }),
+    );
+
+    res.json(result);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    // Anthropic SDK errors expose .status (auth, rate-limit, etc.) — surface
+    // these as 502 so the wizard can show a "voice intake failed, try again
+    // or fill manually" message instead of a generic 500.
+    if (err.status || err.name === 'APIError' || err.message?.includes('Connection error')) {
+      return res.status(502).json({
+        error: 'Voice extraction service is unavailable right now. You can fill the wizard manually.',
+        upstream: err.message,
+      });
+    }
+    next(err);
+  }
 });
 
 // =============================================================================
