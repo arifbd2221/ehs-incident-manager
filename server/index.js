@@ -14,6 +14,7 @@ import dashboardRoutes from './routes/dashboard.js';
 import notificationRoutes from './routes/notifications.js';
 import attachmentRoutes from './routes/attachments.js';
 import userRoutes from './routes/users.js';
+import siteRoutes from './routes/sites.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -56,6 +57,7 @@ app.use('/api/dashboard', authMiddleware, dashboardRoutes);
 app.use('/api/notifications', authMiddleware, notificationRoutes);
 app.use('/api/attachments', authMiddleware, attachmentRoutes);
 app.use('/api/users', authMiddleware, userRoutes);
+app.use('/api/sites', authMiddleware, siteRoutes);
 
 app.use('/uploads', express.static(join(__dirname, 'uploads')));
 
