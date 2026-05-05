@@ -4,8 +4,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getAsset, updateAsset, deleteAsset } from '../../api/assets';
 import { listSites } from '../../api/sites';
-import { listAssetCategories, createAssetCategory } from '../../api/asset_categories';
+import { listAssetCategories, createAssetCategory, listCategoryFields } from '../../api/asset_categories';
 import Icon from '../../components/shared/Icon';
+import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
+import CustomFieldsDisplay from '../../components/assets/CustomFieldsDisplay';
 import '../../styles/assets.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -38,6 +40,7 @@ export default function AssetDetail() {
   const [newCatOpen, setNewCatOpen] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatSaving, setNewCatSaving] = useState(false);
+  const [editFieldDefs, setEditFieldDefs] = useState([]);
 
   const refresh = () => {
     setLoading(true);
@@ -54,6 +57,10 @@ export default function AssetDetail() {
   }, []);
 
   const openEdit = () => {
+    let cf = asset.custom_fields;
+    if (typeof cf === 'string') {
+      try { cf = JSON.parse(cf); } catch { cf = {}; }
+    }
     setForm({
       name: asset.name || '',
       site_id: asset.site_id || '',
@@ -62,6 +69,7 @@ export default function AssetDetail() {
       location_description: asset.location_description || '',
       serial_number: asset.serial_number || '',
       description: asset.description || '',
+      custom_fields: cf || {},
     });
     setEditOpen(true);
     setMsg({ type: '', text: '' });
@@ -69,6 +77,12 @@ export default function AssetDetail() {
     setSuccess(false);
   };
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Reload field defs when the user changes category in the edit modal.
+  useEffect(() => {
+    if (!editOpen || !form.asset_category_id) { setEditFieldDefs([]); return; }
+    listCategoryFields(form.asset_category_id).then(setEditFieldDefs).catch(() => setEditFieldDefs([]));
+  }, [editOpen, form.asset_category_id]);
   const closeEdit = () => {
     setEditOpen(false);
     setNewCatOpen(false);
@@ -225,6 +239,15 @@ export default function AssetDetail() {
             </div>
           )}
 
+          {asset.category_fields && asset.category_fields.length > 0 && (
+            <div className="asset-detail-fullrow">
+              <CustomFieldsDisplay
+                fields={asset.category_fields}
+                values={asset.custom_fields}
+              />
+            </div>
+          )}
+
           <div className="card card-pad">
             <div className="card-h"><Icon name="clock" size={16} /> Lifecycle</div>
             <div className="kv"><div className="kv-k">Created</div><div className="kv-v">{asset.created_at?.slice(0, 10) || '—'}</div></div>
@@ -374,6 +397,13 @@ export default function AssetDetail() {
 
               {section === 'details' && (
                 <div className="am-section" key="details">
+                  {editFieldDefs.length > 0 && (
+                    <CustomFieldsForm
+                      fields={editFieldDefs}
+                      values={form.custom_fields}
+                      onChange={(v) => set('custom_fields', v)}
+                    />
+                  )}
                   <div className="am-field" style={{ animationDelay: '0ms' }}>
                     <label className="am-label">Description / notes</label>
                     <textarea className="am-input am-textarea" rows={4} value={form.description || ''} onChange={e => set('description', e.target.value)} placeholder="Specs, model details, maintenance notes…" />

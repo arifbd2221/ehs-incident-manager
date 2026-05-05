@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { listAssets, createAsset, updateAsset, deleteAsset } from '../../api/assets';
 import { listSites } from '../../api/sites';
-import { listAssetCategories, createAssetCategory } from '../../api/asset_categories';
+import { listAssetCategories, createAssetCategory, listCategoryFields } from '../../api/asset_categories';
 import Icon from '../../components/shared/Icon';
 import CategoryFieldsModal from '../../components/modals/CategoryFieldsModal';
+import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
 import '../../styles/assets.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -19,6 +20,7 @@ const EMPTY = {
   location_description: '',
   serial_number: '',
   description: '',
+  custom_fields: {},
 };
 
 const MODAL_SECTIONS = [
@@ -36,6 +38,7 @@ export default function AssetsList() {
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
   const [showCategoryFields, setShowCategoryFields] = useState(false);
+  const [categoryFieldDefs, setCategoryFieldDefs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('active');
   const [siteFilter, setSiteFilter] = useState('');
@@ -103,6 +106,10 @@ export default function AssetsList() {
 
   const openEdit = (asset) => {
     setEditing(asset);
+    let cf = asset.custom_fields;
+    if (typeof cf === 'string') {
+      try { cf = JSON.parse(cf); } catch { cf = {}; }
+    }
     setForm({
       name: asset.name || '',
       site_id: asset.site_id || '',
@@ -111,6 +118,7 @@ export default function AssetsList() {
       location_description: asset.location_description || '',
       serial_number: asset.serial_number || '',
       description: asset.description || '',
+      custom_fields: cf || {},
     });
     setMsg({ type: '', text: '' });
     setSection('identity');
@@ -125,6 +133,13 @@ export default function AssetsList() {
     setSuccess(false);
   };
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Reload the category's field defs whenever the user picks a different
+  // category in the asset modal. Empty array clears them.
+  useEffect(() => {
+    if (!form.asset_category_id) { setCategoryFieldDefs([]); return; }
+    listCategoryFields(form.asset_category_id).then(setCategoryFieldDefs).catch(() => setCategoryFieldDefs([]));
+  }, [form.asset_category_id]);
 
   const handleCategoryChange = (val) => {
     if (val === '__new__') {
@@ -492,6 +507,14 @@ export default function AssetsList() {
 
               {section === 'details' && (
                 <div className="am-section" key="details">
+                  {categoryFieldDefs.length > 0 && (
+                    <CustomFieldsForm
+                      fields={categoryFieldDefs}
+                      values={form.custom_fields}
+                      onChange={(v) => set('custom_fields', v)}
+                    />
+                  )}
+
                   <div className="am-field" style={{ animationDelay: '0ms' }}>
                     <label className="am-label">Description / notes</label>
                     <textarea
