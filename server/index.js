@@ -1,0 +1,62 @@
+import express from 'express';
+import cors from 'cors';
+import { join, dirname } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { existsSync } from 'fs';
+import { authMiddleware } from './middleware/auth.js';
+import { errorHandler } from './middleware/errorHandler.js';
+import authRoutes from './routes/auth.js';
+import incidentRoutes from './routes/incidents.js';
+import investigationRoutes from './routes/investigations.js';
+import capaRoutes from './routes/capas.js';
+import reportRoutes from './routes/reports.js';
+import dashboardRoutes from './routes/dashboard.js';
+import notificationRoutes from './routes/notifications.js';
+import attachmentRoutes from './routes/attachments.js';
+import userRoutes from './routes/users.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    const status = res.statusCode;
+    if (status >= 400) {
+      console.log(`[${status}] ${req.method} ${req.originalUrl} — ${ms}ms`);
+    }
+  });
+  next();
+});
+
+app.use('/api/auth', authRoutes);
+
+app.use('/api/incidents', authMiddleware, incidentRoutes);
+app.use('/api/investigations', authMiddleware, investigationRoutes);
+app.use('/api/capas', authMiddleware, capaRoutes);
+app.use('/api/reports', authMiddleware, reportRoutes);
+app.use('/api/dashboard', authMiddleware, dashboardRoutes);
+app.use('/api/notifications', authMiddleware, notificationRoutes);
+app.use('/api/attachments', authMiddleware, attachmentRoutes);
+app.use('/api/users', authMiddleware, userRoutes);
+
+app.use('/uploads', express.static(join(__dirname, 'uploads')));
+
+const clientDist = join(__dirname, '..', 'client', 'dist');
+if (process.env.NODE_ENV === 'production' && existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get('*', (req, res) => {
+    res.sendFile(join(clientDist, 'index.html'));
+  });
+}
+
+app.use(errorHandler);
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});

@@ -1,0 +1,172 @@
+/* SDS Manager Design System — Color & Type Tokens
+ * Source: inventory.sdsmanager.com (extracted May 2026)
+ * Built on MUI v5 + Montserrat
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+
+:root {
+  /* === BRAND === */
+  --sds-brand-primary: #626DF9;          /* Primary purple — buttons, links, active */
+  --sds-brand-primary-hover: rgba(98, 109, 249, 0.8);
+  --sds-brand-primary-tint: rgba(98, 109, 249, 0.08); /* active sidebar / selected row */
+  --sds-brand-primary-light: rgba(98, 109, 249, 0.1);
+  --sds-brand-primary-glow: rgba(98, 109, 249, 0.2);
+  --sds-brand-secondary: #626DF9;        /* Aliased to primary — deep purple #5C00FF removed per brand guidance */
+  --sds-brand-gold: #FFC93C;             /* Logo gold — used as warning/attention accent */
+  --sds-brand-brown: #AE8145;            /* Logo brown — minor accent */
+
+  /* === NEUTRAL SCALE === */
+  --sds-gray-50:  #F8F9FB;
+  --sds-gray-100: #F2F5F7;
+  --sds-gray-200: #E0E0E0;
+  --sds-gray-300: #BDC2D9;
+  --sds-gray-400: #9AA0A6;
+  --sds-gray-500: #7E7E8C;
+  --sds-gray-600: #666A72;
+  --sds-gray-700: #52525F;
+  --sds-gray-800: #333333;
+  --sds-gray-900: #1A1A1A;
+
+  /* === SEMANTIC === */
+  --sds-success: #2E7D32;
+  --sds-success-bg: #E8F5E9;
+  --sds-error: #D32F2F;
+  --sds-error-bright: #FF0000;
+  --sds-error-bg: #FFEBEE;
+  --sds-warning: #ED6C02;
+  --sds-warning-dark: #E65100;
+  --sds-warning-bg: #FFF4E5;
+  --sds-info: #0DB4F0;
+  --sds-info-bg: #E5F6FD;
+  --sds-info-blue: #1570EF;
+
+  /* === HAZARD CATEGORY ACCENTS === */
+  --sds-hazard-health-critical: #D32F2F; /* H* — red */
+  --sds-hazard-health: #ED6C02;          /* H — orange */
+  --sds-hazard-safety: #FFC93C;          /* S — gold */
+  --sds-hazard-environment: #2E7D32;     /* E — green */
+  --sds-hazard-disposal: #1570EF;        /* D — blue */
+  --sds-hazard-special: #626DF9;         /* X — primary purple (was deep purple) */
+
+  /* === TEXT === */
+  --sds-fg-primary: rgba(0, 0, 0, 0.87);
+  --sds-fg-secondary: #52525F;
+  --sds-fg-tertiary: #666A72;
+  --sds-fg-muted: rgba(0, 0, 0, 0.54);
+  --sds-fg-disabled: rgba(0, 0, 0, 0.26);
+  --sds-fg-heading: #1A1A1A;
+  --sds-fg-heading-soft: #333333;
+  --sds-fg-on-dark: #FFFFFF;
+  --sds-fg-link: #0DB4F0;
+  --sds-fg-link-purple: #626DF9;
+
+  /* === SURFACES === */
+  --sds-bg-page: #F2F5F7;
+  --sds-bg-surface: #FFFFFF;
+  --sds-bg-surface-alt: #F8F9FB;
+  --sds-bg-sidebar: #FFFFFF;
+  --sds-bg-sidebar-active: rgba(98, 109, 249, 0.08);
+  --sds-bg-skeleton: #E0E0E0;
+
+  /* === BORDERS === */
+  --sds-border: #E0E0E0;
+  --sds-border-input: rgba(0, 0, 0, 0.23);
+  --sds-border-focus: #626DF9;
+
+  /* === TYPOGRAPHY === */
+  --sds-font-family: 'Montserrat', Arial, sans-serif;
+
+  --sds-font-size-xs: 10px;        /* sidebar labels */
+  --sds-font-size-sm: 12px;        /* caption, badge counts */
+  --sds-font-size-body-sm: 13px;   /* descriptions, metadata */
+  --sds-font-size-body: 14px;      /* default body, table cells, inputs */
+  --sds-font-size-md: 15px;        /* card heading */
+  --sds-font-size-lg: 16px;        /* subheading */
+  --sds-font-size-xl: 18px;        /* page subtitle (H5) */
+  --sds-font-size-2xl: 22px;       /* section title */
+  --sds-font-size-3xl: 24px;       /* section heading / stat */
+  --sds-font-size-4xl: 32px;       /* page title */
+
+  --sds-fw-regular: 400;
+  --sds-fw-medium: 500;
+  --sds-fw-semibold: 600;
+  --sds-fw-bold: 700;
+
+  --sds-lh-tight: 1.2;
+  --sds-lh-normal: 1.5;
+  --sds-lh-loose: 1.7;
+
+  /* === SPACING (8px base) === */
+  --sds-space-xs: 4px;
+  --sds-space-sm: 8px;
+  --sds-space-md: 16px;
+  --sds-space-lg: 24px;
+  --sds-space-xl: 32px;
+  --sds-space-2xl: 48px;
+
+  /* === RADII === */
+  --sds-radius-xs: 4px;     /* badges, alerts, tags */
+  --sds-radius-sm: 5px;     /* inputs, small buttons */
+  --sds-radius-md: 8px;     /* cards, primary buttons, dropdowns */
+  --sds-radius-lg: 10px;    /* large cards, panels */
+  --sds-radius-xl: 15px;    /* dialogs, featured cards */
+  --sds-radius-2xl: 20px;   /* modal containers, hero */
+  --sds-radius-pill: 50px;  /* pill badges, chips */
+  --sds-radius-circle: 50%;
+
+  /* === SHADOWS === */
+  --sds-shadow-card: rgba(58, 53, 65, 0.1) 0 2px 10px 0;
+  --sds-shadow-subtle: rgba(0, 0, 0, 0.2) 0 1px 2px 0;
+  --sds-shadow-elevated: rgba(0,0,0,0.2) 0 3px 1px -2px, rgba(0,0,0,0.14) 0 2px 2px 0, rgba(0,0,0,0.12) 0 1px 5px 0;
+  --sds-shadow-sidebar: rgba(0, 0, 0, 0.1) 2px 0 8px 0;
+  --sds-shadow-primary-glow: rgba(98, 109, 249, 0.2) 0 8px 31px 0;
+  --sds-shadow-primary-soft: rgba(98, 109, 249, 0.1) 0 8px 31px 0;
+
+  /* === MOTION === */
+  --sds-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --sds-transition: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --sds-transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* === LAYOUT === */
+  --sds-sidebar-w: 80px;
+  --sds-sidebar-w-expanded: 280px;
+
+  /* === Z-INDEX === */
+  --sds-z-sidebar: 100;
+  --sds-z-header: 200;
+  --sds-z-dropdown: 300;
+  --sds-z-modal-backdrop: 400;
+  --sds-z-modal: 500;
+  --sds-z-tooltip: 600;
+  --sds-z-toast: 700;
+}
+
+/* ============================================================
+ * SEMANTIC ELEMENT STYLES — drop-in defaults for prototypes
+ * ============================================================ */
+body {
+  font-family: var(--sds-font-family);
+  font-size: var(--sds-font-size-body);
+  color: var(--sds-fg-primary);
+  background: var(--sds-bg-page);
+  line-height: var(--sds-lh-normal);
+}
+
+h1 { font-size: var(--sds-font-size-4xl); font-weight: var(--sds-fw-bold); color: var(--sds-fg-heading); line-height: var(--sds-lh-tight); }
+h2 { font-size: var(--sds-font-size-2xl); font-weight: var(--sds-fw-bold); color: var(--sds-fg-heading-soft); }
+h3 { font-size: var(--sds-font-size-xl); font-weight: var(--sds-fw-semibold); color: #000; }
+h4 { font-size: var(--sds-font-size-lg); font-weight: var(--sds-fw-semibold); color: var(--sds-fg-heading); }
+h5 { font-size: var(--sds-font-size-md); font-weight: var(--sds-fw-semibold); color: var(--sds-fg-heading); }
+
+p { font-size: var(--sds-font-size-body); color: var(--sds-fg-primary); }
+small, .sds-caption { font-size: var(--sds-font-size-sm); color: var(--sds-fg-muted); }
+.sds-meta { font-size: var(--sds-font-size-body-sm); color: var(--sds-fg-tertiary); }
+
+a { color: var(--sds-fg-link); text-decoration: underline; }
+a.sds-link-purple { color: var(--sds-fg-link-purple); }
+
+code, pre {
+  font-family: 'Menlo', 'Courier New', monospace;
+  font-size: 13px;
+}

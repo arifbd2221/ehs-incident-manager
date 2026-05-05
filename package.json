@@ -1,0 +1,15 @@
+{
+  "name": "incident-report-management",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && node --watch index.js",
+    "dev:client": "cd client && npx vite",
+    "build": "cd client && npx vite build",
+    "start": "cd server && NODE_ENV=production node index.js",
+    "seed": "cd server && node db/seed.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

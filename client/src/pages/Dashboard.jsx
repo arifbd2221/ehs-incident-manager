@@ -1,0 +1,396 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getDashboard } from '../api/dashboard';
+import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
+import Icon from '../components/shared/Icon';
+import { TYPES, typeOf } from '../components/shared/Badges';
+import { timeAgo, formatDate } from '../utils/time';
+import '../styles/dashboard.css';
+
+function DonutChart({ data, size = 160, strokeWidth = 22 }) {
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+
+  return (
+    <div className="donut-chart" style={{ width: size, height: size }}>
+      <svg width={size} height={size}>
+        <circle cx={size / 2} cy={size / 2} r={radius}
+          fill="none" stroke="#f3f4f6" strokeWidth={strokeWidth} />
+        {data.map((d, i) => {
+          const pct = d.value / total;
+          const dashLen = pct * circumference;
+          const dashOffset = -offset;
+          offset += dashLen;
+          return (
+            <circle key={i} cx={size / 2} cy={size / 2} r={radius}
+              fill="none" stroke={d.color} strokeWidth={strokeWidth}
+              strokeDasharray={`${dashLen} ${circumference - dashLen}`}
+              strokeDashoffset={dashOffset}
+              strokeLinecap="round"
+              style={{
+                transform: 'rotate(-90deg)',
+                transformOrigin: '50% 50%',
+                transition: 'stroke-dasharray 600ms cubic-bezier(0.4,0,0.2,1)',
+              }}
+            />
+          );
+        })}
+      </svg>
+      <div className="donut-center">
+        <div className="num">{total}</div>
+        <div className="lbl">Total</div>
+      </div>
+    </div>
+  );
+}
+
+function MiniBar({ pct, color }) {
+  return (
+    <div style={{ height: 4, background: '#f1f5f9', borderRadius: 4, flex: 1 }}>
+      <div style={{
+        height: '100%', borderRadius: 4, background: color,
+        width: `${Math.max(pct, 4)}%`,
+        transition: 'width 500ms cubic-bezier(0.4,0,0.2,1)',
+      }} />
+    </div>
+  );
+}
+
+const ACTION_MAP = {
+  created: { icon: 'edit', cls: 'act-create' },
+  classified: { icon: 'shield', cls: 'act-create' },
+  escalated: { icon: 'investigation', cls: 'act-escalate' },
+  closed: { icon: 'check', cls: 'act-close' },
+  auto_closed: { icon: 'check', cls: 'act-close' },
+  assigned: { icon: 'person', cls: 'act-assign' },
+  notification: { icon: 'bell', cls: 'act-system' },
+  verified: { icon: 'capa', cls: 'act-verify' },
+  capa_assigned: { icon: 'capa', cls: 'act-assign' },
+};
+
+function statusClass(status) {
+  const s = (status || '').toLowerCase().replace(/\s+/g, '-');
+  if (s === 'investigating') return 'st-investigating';
+  if (s === 'new') return 'st-new';
+  if (s === 'triage') return 'st-triage';
+  if (s.includes('capa')) return 'st-capa';
+  if (s === 'closed') return 'st-closed';
+  return 'st-new';
+}
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { setWizardOpen, refreshKey } = useApp();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getDashboard().then(setData).catch(() => {}).finally(() => setLoading(false));
+  }, [refreshKey]);
+
+  if (loading) {
+    return (
+      <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 40, height: 40, border: '3px solid #f1f5f9', borderTopColor: 'var(--sds-brand-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+          <div style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)', fontWeight: 500 }}>Loading dashboard...</div>
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+        <div style={{ textAlign: 'center' }}>
+          <Icon name="warning" size={32} color="var(--sds-fg-tertiary)" />
+          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Failed to load dashboard</div>
+          <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={() => window.location.reload()}>Retry</button>
+        </div>
+      </div>
+    );
+  }
+
+  const { kpis, incidentsByType, recentIncidents, recentActivity } = data;
+  const tc = kpis.trackCounts || {};
+  const totalOpen = (tc.A || 0) + (tc.B || 0) + (tc.C || 0);
+
+  const firstName = (user?.name || 'there').split(' ')[0];
+  const now = new Date();
+  const hour = now.getHours();
+  const greetWord = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+  const donutData = (incidentsByType || []).map(({ type, count }) => ({
+    value: count,
+    color: typeOf(type)?.color || '#94a3b8',
+    name: typeOf(type)?.name || type,
+  }));
+
+  const totalIncidents = donutData.reduce((s, d) => s + d.value, 0);
+  const trirTarget = 2.5;
+  const trirOk = (kpis.trir || 0) <= trirTarget;
+
+  const oshaCount = (recentIncidents || []).filter(r => r.osha_recordable).length;
+  const riddorCount = (recentIncidents || []).filter(r => r.riddor_reportable).length;
+
+  return (
+    <div className="page">
+      {/* Hero */}
+      <div className="dash-hero">
+        <div>
+          <div className="greeting">{greetWord}, <span>{firstName}</span></div>
+          <div className="date-strip">
+            <span className="live-dot" />
+            Live overview &middot; {now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </div>
+        </div>
+        <div className="flex gap-8">
+          <button className="btn btn-tertiary btn-sm" onClick={() => navigate('/reports')}>
+            <Icon name="reports" size={15} />Reports
+          </button>
+          <button className="btn btn-primary" onClick={() => setWizardOpen(true)}>
+            <Icon name="plus" size={16} />Report incident
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Row */}
+      <div className="kpi-row">
+        <div className="kpi-card kpi-trir">
+          <div className="kpi-top">
+            <div className="kpi-label">TRIR &middot; YTD</div>
+            <div className="kpi-icon"><Icon name="reports" size={18} /></div>
+          </div>
+          <div className="kpi-val">{kpis.trir?.toFixed(2) || '0.00'}</div>
+          <div className="kpi-foot">
+            <span className={`kpi-target ${trirOk ? 'good' : 'bad'}`}>
+              {trirOk ? '✓' : '↑'} Target {trirTarget.toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        <div className="kpi-card kpi-dart">
+          <div className="kpi-top">
+            <div className="kpi-label">DART &middot; YTD</div>
+            <div className="kpi-icon"><Icon name="person" size={18} /></div>
+          </div>
+          <div className="kpi-val">{kpis.dart?.toFixed(2) || '0.00'}</div>
+          <div className="kpi-foot">Days away / restricted / transfer</div>
+        </div>
+
+        <div className="kpi-card kpi-open">
+          <div className="kpi-top">
+            <div className="kpi-label">Open incidents</div>
+            <div className="kpi-icon"><Icon name="incidents" size={18} /></div>
+          </div>
+          <div className="kpi-val">{kpis.openIncidents || 0}</div>
+          <div className="kpi-foot">
+            <span style={{ fontWeight: 600, color: '#dc2626' }}>{tc.A || 0}</span> Track A
+            <span style={{ color: 'var(--sds-border)' }}>&middot;</span>
+            <span style={{ fontWeight: 600, color: '#d97706' }}>{tc.B || 0}</span> Track B
+            <span style={{ color: 'var(--sds-border)' }}>&middot;</span>
+            <span style={{ fontWeight: 600, color: '#059669' }}>{tc.C || 0}</span> Track C
+          </div>
+        </div>
+
+        <div className="kpi-card kpi-overdue">
+          <div className="kpi-top">
+            <div className="kpi-label">Overdue CAPAs</div>
+            <div className="kpi-icon"><Icon name="warning" size={18} /></div>
+          </div>
+          <div className="kpi-val">{kpis.overdueCAPAs || 0}</div>
+          <div className="kpi-foot">
+            {kpis.overdueCAPAs > 0
+              ? <span className="kpi-target bad">Needs attention</span>
+              : <span className="kpi-target good">All on track</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Main grid */}
+      <div className="dash-grid">
+        <div className="dash-left">
+          {/* Incident type distribution + Track routing */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            <div className="dash-card">
+              <div className="dash-card-h">
+                <div className="title"><span className="dot-accent" />Incidents by type</div>
+                <span className="link" onClick={() => navigate('/incidents')}>View all <Icon name="arrow" size={14} /></span>
+              </div>
+              <div className="donut-section">
+                <DonutChart data={donutData} size={140} strokeWidth={20} />
+                <div className="donut-legend">
+                  {donutData.map((d, i) => (
+                    <div className="donut-legend-item" key={i}>
+                      <span className="swatch" style={{ background: d.color }} />
+                      <span className="name">{d.name}</span>
+                      <MiniBar pct={(d.value / totalIncidents) * 100} color={d.color} />
+                      <span className="count">{d.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="dash-card">
+              <div className="dash-card-h">
+                <div className="title"><span className="dot-accent" />Track routing</div>
+                <span style={{ fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 600 }}>{totalOpen} open</span>
+              </div>
+              <div className="track-pipeline">
+                <div className="track-lane t-a">
+                  <div className="track-letter">A</div>
+                  <div className="track-count">{tc.A || 0}</div>
+                  <div className="track-name">Full investigation</div>
+                  <div className="track-desc">Sev 1-2 &middot; Critical &amp; major</div>
+                </div>
+                <div className="track-lane t-b">
+                  <div className="track-letter">B</div>
+                  <div className="track-count">{tc.B || 0}</div>
+                  <div className="track-name">Light investigation</div>
+                  <div className="track-desc">Sev 3 &middot; Moderate risk</div>
+                </div>
+                <div className="track-lane t-c">
+                  <div className="track-letter">C</div>
+                  <div className="track-count">{tc.C || 0}</div>
+                  <div className="track-name">Log &amp; close</div>
+                  <div className="track-desc">Sev 4-5 &middot; Minor / obs.</div>
+                </div>
+              </div>
+
+              {/* Regulatory flags */}
+              {(oshaCount > 0 || riddorCount > 0) && (
+                <div className="reg-alerts">
+                  {oshaCount > 0 && (
+                    <div className="reg-alert osha">
+                      <span className="reg-badge">OSHA</span>
+                      <span className="reg-text"><b>{oshaCount}</b> recordable {oshaCount === 1 ? 'case' : 'cases'} in recent incidents</span>
+                    </div>
+                  )}
+                  {riddorCount > 0 && (
+                    <div className="reg-alert riddor">
+                      <span className="reg-badge">RIDDOR</span>
+                      <span className="reg-text"><b>{riddorCount}</b> reportable {riddorCount === 1 ? 'event' : 'events'} requiring HSE notification</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Recent incidents */}
+          <div className="dash-card">
+            <div className="dash-card-h">
+              <div className="title"><span className="dot-accent" />Recent incidents</div>
+              <span className="link" onClick={() => navigate('/incidents')}>All incidents <Icon name="arrow" size={14} /></span>
+            </div>
+            <div className="incident-feed">
+              {(recentIncidents || []).map(r => (
+                <div className="inc-row" key={r.id} onClick={() => navigate(`/incidents/${r.id}`)}>
+                  <div className={`inc-sev-ring s${r.severity}`}>S{r.severity}</div>
+                  <div className="inc-info">
+                    <div className="inc-title">{r.title}</div>
+                    <div className="inc-meta">
+                      <span style={{ fontFamily: "'SF Mono', Menlo, monospace", fontWeight: 600, fontSize: 10, color: 'var(--sds-fg-tertiary)' }}>{r.incident_number}</span>
+                      <span className="sep">&middot;</span>
+                      {r.site_name}
+                      {r.area && <><span className="sep">&middot;</span>{r.area}</>}
+                      <span className="sep">&middot;</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 2, background: typeOf(r.type)?.color || '#94a3b8' }} />
+                        {typeOf(r.type)?.name || r.type}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="inc-right">
+                    <span className={`inc-status ${statusClass(r.status)}`}>{r.status}</span>
+                    <span className="inc-time">{timeAgo(r.created_at)}</span>
+                  </div>
+                </div>
+              ))}
+              {(!recentIncidents || recentIncidents.length === 0) && (
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--sds-fg-tertiary)', fontSize: 13 }}>No recent incidents</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div className="dash-right">
+          {/* Activity feed */}
+          <div className="dash-card" style={{ flex: 1 }}>
+            <div className="dash-card-h">
+              <div className="title"><span className="dot-accent" />Activity</div>
+              <span style={{ fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 600 }}>Last 7 days</span>
+            </div>
+            <div className="activity-feed">
+              {(recentActivity || []).map((e, i) => {
+                const mapped = ACTION_MAP[e.action] || { icon: 'bell', cls: 'act-system' };
+                return (
+                  <div className="act-item" key={i}>
+                    <div className={`act-dot ${mapped.cls}`}>
+                      <Icon name={mapped.icon} size={16} />
+                    </div>
+                    <div className="act-body">
+                      <div className="act-who">{e.user_name || 'System'}</div>
+                      <div className="act-desc">{e.description}</div>
+                      <div className="act-when">{timeAgo(e.created_at)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              {(!recentActivity || recentActivity.length === 0) && (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--sds-fg-tertiary)', fontSize: 12 }}>No recent activity</div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick actions */}
+          <div className="dash-card">
+            <div className="dash-card-body" style={{ padding: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--sds-fg-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Quick actions</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[
+                  { label: 'Report new incident', icon: 'plus', action: () => setWizardOpen(true), accent: 'var(--sds-brand-primary)' },
+                  { label: 'View investigations', icon: 'investigation', action: () => navigate('/investigations'), accent: '#f59e0b' },
+                  { label: 'CAPA board', icon: 'capa', action: () => navigate('/capas'), accent: '#22c55e' },
+                  { label: 'OSHA / RIDDOR reports', icon: 'reports', action: () => navigate('/reports'), accent: '#0ea5e9' },
+                ].map((qa, i) => (
+                  <button key={i} onClick={qa.action}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '10px 12px', borderRadius: 10,
+                      border: '1px solid #f1f5f9', background: '#fff',
+                      cursor: 'pointer', transition: 'all 150ms',
+                      fontFamily: 'var(--sds-font-family)', fontSize: 13, fontWeight: 600,
+                      color: 'var(--sds-fg-heading)',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#fafbfd'; e.currentTarget.style.borderColor = 'var(--sds-border)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
+                  >
+                    <span style={{
+                      width: 30, height: 30, borderRadius: 8,
+                      background: `${qa.accent}14`, color: qa.accent,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Icon name={qa.icon} size={15} />
+                    </span>
+                    {qa.label}
+                    <span style={{ marginLeft: 'auto', color: 'var(--sds-fg-tertiary)' }}>
+                      <Icon name="arrow" size={14} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

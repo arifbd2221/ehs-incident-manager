@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" width="280" height="80">
+  <g transform="translate(4,8)">
+    <g fill="#FFC93C">
+      <rect x="11" y="11" width="11" height="11" transform="rotate(45 16.5 16.5)"></rect>
+      <rect x="29" y="14" width="14" height="14" transform="rotate(45 36 21)"></rect>
+      <rect x="46" y="11" width="11" height="11" transform="rotate(45 51.5 16.5)"></rect>
+      <rect x="29" y="32" width="11" height="11" transform="rotate(45 34.5 37.5)"></rect>
+    </g>
+    <path d="M 14 49 L 33 68 L 73 28 L 65 20 L 33 52 L 22 41 Z" fill="#626DF9"></path>
+  </g>
+  <text x="92" y="42" font-family="Montserrat, Arial, sans-serif" font-weight="700" font-size="26" fill="#626DF9" letter-spacing="0.02em">SDS</text>
+  <text x="92" y="62" font-family="Montserrat, Arial, sans-serif" font-weight="500" font-size="13" fill="#7E7E8C" letter-spacing="0.18em">MANAGER</text>
+</svg>
