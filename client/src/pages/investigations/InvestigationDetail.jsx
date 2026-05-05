@@ -1,12 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation } from '../../api/investigations';
+import { listDocuments } from '../../api/documents';
+import api from '../../api/client';
+import { createLink, deleteLink } from '../../api/links';
+import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge } from '../../components/shared/Badges';
 import { timeAgo, formatDate } from '../../utils/time';
 import CloseInvestigationModal from './modals/CloseInvestigationModal';
 import AssignCapaModal from './modals/AssignCapaModal';
 import '../../styles/investigations.css';
+import '../../styles/documents.css'; // for the link-document modal
+
+const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 const tlDotClass = (action) => {
   if (action === 'created') return 'td-created';
@@ -32,6 +39,8 @@ const capaStatusClass = (s) => {
 export default function InvestigationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canEdit = ELEVATED.has(user?.role);
   const [inv, setInv] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
@@ -39,11 +48,74 @@ export default function InvestigationDetail() {
   const [newWhy, setNewWhy] = useState({ question: '', answer: '', is_root_cause: false });
   const [findings, setFindings] = useState('');
 
+  // Document linking modal state
+  const [docModalOpen, setDocModalOpen] = useState(false);
+  const [docLibrary, setDocLibrary] = useState([]);
+  const [docSearch, setDocSearch] = useState('');
+  const [docTypeFilter, setDocTypeFilter] = useState('');
+  const [docLinking, setDocLinking] = useState(false);
+
   const load = () => {
     setLoading(true);
     getInvestigation(id).then(data => { setInv(data); setFindings(data.findings || ''); }).catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(load, [id]);
+
+  const openDocModal = () => {
+    setDocModalOpen(true);
+    setDocSearch('');
+    setDocTypeFilter('');
+    listDocuments({ active: 1, limit: 200 }).then(d => setDocLibrary(d.documents || [])).catch(() => setDocLibrary([]));
+  };
+  const closeDocModal = () => setDocModalOpen(false);
+
+  const handleLinkDoc = async (doc) => {
+    setDocLinking(true);
+    try {
+      await createLink({ source_type: 'investigation', source_id: Number(id), target_type: 'document', target_id: doc.id, link_role: 'evidence' });
+      load();
+      setToast({ kind: 'ok', text: `Linked "${doc.name}"` });
+    } catch (e) {
+      setToast({ kind: 'err', text: e.response?.data?.error || 'Link failed' });
+    } finally {
+      setDocLinking(false);
+    }
+  };
+
+  const handleUnlinkDoc = async (linkedDoc) => {
+    if (!window.confirm(`Unlink "${linkedDoc.name}" from this investigation?`)) return;
+    try {
+      await deleteLink(linkedDoc.link_id);
+      load();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Unlink failed');
+    }
+  };
+
+  const handleDownloadDoc = async (doc) => {
+    try {
+      const res = await api.get(`/documents/${doc.id}/download`, { responseType: 'blob' });
+      const blob = new Blob([res.data]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = doc.name || doc.stored_filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e.response?.data?.error || 'Download failed');
+    }
+  };
+
+  const filteredDocs = docLibrary.filter(d => {
+    if (docTypeFilter && d.document_type !== docTypeFilter) return false;
+    if (docSearch.trim()) {
+      const q = docSearch.toLowerCase();
+      if (!(d.name?.toLowerCase().includes(q) || d.document_number?.toLowerCase().includes(q))) return false;
+    }
+    // Don't show already-linked docs
+    if (inv?.linked_documents?.some(ld => ld.id === d.id)) return false;
+    return true;
+  });
 
   if (loading) return (
     <div className="page invd">
@@ -206,23 +278,57 @@ export default function InvestigationDetail() {
             <div className="invd-card-h">
               <div className="hicon hi-evidence"><Icon name="file" size={16}/></div>
               Evidence
-              {(inv.attachments || []).length > 0 && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 500 }}>{inv.attachments.length} item{inv.attachments.length > 1 ? 's' : ''}</span>}
+              {((inv.attachments || []).length + (inv.linked_documents || []).length) > 0 && (
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 500 }}>
+                  {(inv.attachments || []).length + (inv.linked_documents || []).length} item{(inv.attachments || []).length + (inv.linked_documents || []).length > 1 ? 's' : ''}
+                </span>
+              )}
             </div>
             <div className="invd-card-body">
-              {(inv.attachments || []).length > 0 ? (
+              {((inv.attachments || []).length === 0 && (inv.linked_documents || []).length === 0) ? (
+                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No evidence uploaded or linked yet.</p>
+              ) : (
                 <div className="invd-evidence-grid">
-                  {inv.attachments.map(a => (
-                    <div key={a.id} className="invd-evidence-item">
+                  {(inv.attachments || []).map(a => (
+                    <div key={`att-${a.id}`} className="invd-evidence-item">
                       <div className="invd-evidence-icon"><Icon name="file" size={16}/></div>
                       <div className="invd-evidence-info">
                         <div className="invd-evidence-name">{a.original_name}</div>
-                        <div className="invd-evidence-size">{(a.size / 1024).toFixed(0)} KB</div>
+                        <div className="invd-evidence-size">{(a.size / 1024).toFixed(0)} KB · uploaded</div>
                       </div>
                     </div>
                   ))}
+                  {(inv.linked_documents || []).map(d => (
+                    <div key={`doc-${d.id}`} className="invd-evidence-item invd-evidence-doc"
+                      onClick={() => handleDownloadDoc(d)}
+                      style={{ cursor: 'pointer' }}>
+                      <div className="invd-evidence-icon" style={{ background: 'rgba(98,109,249,0.1)', color: '#626DF9' }}>
+                        <Icon name="file" size={16}/>
+                      </div>
+                      <div className="invd-evidence-info">
+                        <div className="invd-evidence-name">{d.name}</div>
+                        <div className="invd-evidence-size">
+                          {d.document_number} · {d.document_type} · linked
+                        </div>
+                      </div>
+                      {canEdit && (
+                        <button className="btn btn-text btn-sm"
+                          style={{ marginLeft: 'auto', color: 'var(--sds-error)' }}
+                          onClick={(e) => { e.stopPropagation(); handleUnlinkDoc(d); }}>
+                          Unlink
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No evidence uploaded yet.</p>
+              )}
+
+              {canEdit && (
+                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button className="btn btn-secondary btn-sm" onClick={openDocModal}>
+                    <Icon name="file" size={13}/> Link from library
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -374,11 +480,64 @@ export default function InvestigationDetail() {
       {modal === 'close' && <CloseInvestigationModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleClose}/>}
       {modal === 'capa' && <AssignCapaModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAssignCapa}/>}
 
+      {docModalOpen && (
+        <div className="docs-modal-backdrop" onClick={closeDocModal}>
+          <div className="docs-modal" onClick={e => e.stopPropagation()} style={{ width: 640, maxHeight: 'calc(100vh - 64px)' }}>
+            <div className="docs-modal-h">
+              <h2>Link a document from the library</h2>
+              <button className="icon-btn" onClick={closeDocModal}><Icon name="close" size={18}/></button>
+            </div>
+            <div className="docs-modal-body" style={{ paddingTop: 16 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <input className="input" placeholder="Search by name or number…" value={docSearch} onChange={e => setDocSearch(e.target.value)} />
+                <select className="input" style={{ width: 160 }} value={docTypeFilter} onChange={e => setDocTypeFilter(e.target.value)}>
+                  <option value="">All types</option>
+                  <option value="sds">SDS</option>
+                  <option value="manual">Manual</option>
+                  <option value="policy">Policy</option>
+                  <option value="photo">Photo</option>
+                  <option value="video">Video</option>
+                  <option value="log">Log</option>
+                  <option value="certificate">Certificate</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              {filteredDocs.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)', textAlign: 'center', padding: 32 }}>
+                  {docLibrary.length === 0 ? 'No documents in the library yet. Upload some on the Documents page.' : 'No documents match — or all matching docs are already linked.'}
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
+                  {filteredDocs.map(d => (
+                    <div key={d.id}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 10, border: '1px solid var(--sds-border)', borderRadius: 6, cursor: 'pointer' }}
+                      onClick={() => !docLinking && handleLinkDoc(d)}>
+                      <Icon name="file" size={16}/>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{d.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--sds-fg-tertiary)' }}>{d.document_number} · {d.document_type}</div>
+                      </div>
+                      <button className="btn btn-primary btn-sm" disabled={docLinking}
+                        onClick={(e) => { e.stopPropagation(); handleLinkDoc(d); }}>
+                        Link
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="docs-modal-actions" style={{ padding: '16px 22px' }}>
+              <button className="btn btn-secondary" onClick={closeDocModal}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {toast && (
         <div className="invd-toast">
           <span className="toast-check"><Icon name="check" size={12}/></span>
-          {toast}
+          {typeof toast === 'string' ? toast : toast.text}
         </div>
       )}
     </div>
