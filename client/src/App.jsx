@@ -14,6 +14,7 @@ import CAPAPage from './pages/capas/CAPAPage';
 import CAPADetail from './pages/capas/CAPADetail';
 import ReportsPage from './pages/reports/ReportsPage';
 import Settings from './pages/Settings';
+import Sites from './pages/admin/Sites';
 import ReportWizard from './pages/wizard/ReportWizard';
 
 function ProtectedLayout() {
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/capas" element={<CAPAPage />} />
         <Route path="/capas/:id" element={<CAPADetail />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/admin/sites" element={<Sites />} />
         <Route path="/profile" element={<Settings />} />
       </Route>
     </Routes>
