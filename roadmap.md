@@ -47,13 +47,12 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 - [x] **T5.2** `POST /incidents/voice-extract` endpoint + `voice_extractions` write + activity log — commit `8b5f609`
 - [x] **F5.1** Voice intake confirmation flow (Web Speech transcribes in browser, BE extracts structure) — commit `108f08f`
 
-## Wave 6 — Polish + seed
+## Wave 6 — Polish + seed ✅ code complete (F6.2 is a manual walkthrough)
 
-- [ ] **T6.1** Hygiene: multer 2.x cleanup + OSHA 300 `injury_type` granularity + FK error scrubbing
-- [ ] **T6.2** Demo seed Part 1: sites, assets, documents, work_hours, users, risk_matrix
-- [ ] **T6.3** Demo seed Part 2: incidents (all types + flags), investigations, CAPAs (mixed source), regulatory submissions, activity log, voice extraction row
-- [ ] **F6.1** 300A sign-off button on Reports page
-- [ ] **F6.2** End-to-end demo path walkthrough in browser
+- [x] **T6.1** Hygiene: multer 2.x cleanup + OSHA 300 `injury_type` granularity + FK error scrubbing — commit `75fb1ef`
+- [x] **T6.2 + T6.3** Demo seed rewrite (foundation + incident graph) — bundled in commit `48e29ff` (the seed is one atomic transaction; splitting would have left a half-written, broken seed)
+- [x] **F6.1** 300A sign-off button on Reports page — commit `511dab9`
+- [ ] **F6.2** End-to-end demo path walkthrough in browser — *manual; run `SEED_FORCE=1 node db/seed.js`, then click through the 10 beats per plan-phase-2.md §5*
 
 ## Wave 7 — Deferred enhancements (post-demo / time permitting)
 
@@ -107,4 +106,4 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 3. `git fetch origin && git status` — confirm branch state vs `origin/main`.
 4. `cd server && rm -f db/incident_management.db db/*.db-wal db/*.db-shm && node db/seed.js && cd .. && npm run dev` — clean reset + boot.
 5. Login as `elena@sdsmanager.com / password123`. Quick sanity click: Dashboard, Sites, Assets, Documents, Investigations, Wizard.
-6. **Next task**: Wave 6 begins — T6.1 (multer 2.x cleanup + OSHA 300 injury_type granularity + FK error scrubbing), then T6.2/T6.3 (demo seed) and F6.1 (300A sign-off).
+6. **Next task**: Phase 2 code is complete — F6.2 is a manual walkthrough. After that, the productionization UX backlog (UX-B inline notes on activity timeline is the highest-value next step) and BUG-001 are the queue.
