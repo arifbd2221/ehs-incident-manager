@@ -7,6 +7,7 @@ const NAV = [
   { id: 'investigations', path: '/investigations', icon: 'investigation', label: 'Investigations' },
   { id: 'capas', path: '/capas', icon: 'capa', label: 'CAPA' },
   { id: 'reports', path: '/reports', icon: 'reports', label: 'Reports' },
+  { id: 'sites', path: '/admin/sites', icon: 'factory', label: 'Sites' },
 ];
 
 export default function Sidebar() {
