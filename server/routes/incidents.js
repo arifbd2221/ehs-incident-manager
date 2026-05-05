@@ -345,9 +345,222 @@ router.post('/classify-preview', (req, res) => {
   });
 });
 
+// =============================================================================
+// Stop-work endpoints (per locked decision #11)
+//
+// Submission is open to ANY authenticated user (Worker / EHS / Site Admin) —
+// never deter someone from triggering. Anonymous flag honored. The created
+// incident is locked: severity=1, track='A', is_imminent_danger=1,
+// stop_work_status='active'. Down-routing blocked in PATCH/escalate guards.
+//
+// State endpoints (acknowledge / resolve / cancel) are elevated-only.
+// =============================================================================
+
+router.post('/stop-work', async (req, res, next) => {
+  try {
+    const { site_id, area, description, asset_id, is_anonymous } = req.body;
+
+    if (!site_id || !area) {
+      return res.status(400).json({ error: 'site_id and area are required' });
+    }
+
+    const orgId = req.user.org_id;
+    const site = db.prepare('SELECT id, country FROM sites WHERE id = ? AND org_id = ?').get(site_id, orgId);
+    if (!site) return res.status(404).json({ error: 'Site not found in your organization' });
+
+    let resolvedAssetId = null;
+    if (asset_id) {
+      const a = db.prepare('SELECT id, site_id FROM assets WHERE id = ? AND org_id = ? AND active = 1').get(asset_id, orgId);
+      if (!a) return res.status(404).json({ error: 'Asset not found in your organization' });
+      if (a.site_id !== Number(site_id)) {
+        return res.status(400).json({ error: 'Asset does not belong to the chosen site' });
+      }
+      resolvedAssetId = a.id;
+    }
+
+    const anonymous = !!is_anonymous;
+    const reportedBy = anonymous ? null : req.user.id;
+    const incidentNumber = nextIncidentNumber();
+    const nowIso = new Date().toISOString();
+    const title = `STOP WORK — ${area}`;
+
+    const result = db.prepare(`
+      INSERT INTO incidents (
+        incident_number, org_id, site_id, title, type, description, incident_datetime,
+        area, asset_id,
+        severity, likelihood, consequence, track,
+        status, reported_by, is_anonymous, is_imminent_danger, stop_work_status,
+        body_parts_affected
+      ) VALUES (?, ?, ?, ?, 'unsafe', ?, ?, ?, ?, 1, 0, 4, 'A', 'New', ?, ?, 1, 'active', '[]')
+    `).run(
+      incidentNumber, orgId, site_id, title,
+      description || 'Stop-work submitted — details to follow',
+      nowIso, area, resolvedAssetId,
+      reportedBy, anonymous ? 1 : 0,
+    );
+    const incidentId = result.lastInsertRowid;
+
+    // Activity log — scrubbed if anonymous
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+      VALUES (?, 'incident', ?, 'stop_work_submitted', ?, ?)
+    `).run(
+      orgId, incidentId,
+      anonymous
+        ? `STOP-WORK ${incidentNumber} submitted anonymously at ${area}`
+        : `STOP-WORK ${incidentNumber} submitted at ${area}`,
+      anonymous ? null : req.user.id,
+    );
+
+    // Notify all elevated users at the site (recipients computed at fire time
+    // per locked decision #9 — role × scope, not stored configuration).
+    const recipients = db.prepare(`
+      SELECT id FROM users
+      WHERE org_id = ? AND is_active = 1
+        AND role IN ('supervisor', 'ehs_officer', 'ehs_manager', 'admin')
+        AND (site_id = ? OR site_id IS NULL OR role = 'admin')
+    `).all(orgId, site_id);
+    const insertNotif = db.prepare(`
+      INSERT INTO notifications (org_id, user_id, type, incident_id, title, body, severity)
+      VALUES (?, ?, 'stop_work_active', ?, ?, ?, 'err')
+    `);
+    for (const r of recipients) {
+      insertNotif.run(
+        orgId, r.id, incidentId,
+        `STOP WORK at ${site.id ? area : ''} — immediate response required`,
+        `${incidentNumber}: ${description || 'No details provided'}`,
+      );
+    }
+
+    const incident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incidentId);
+    incident.type_data = JSON.parse(incident.type_data || '{}');
+    incident.body_parts_affected = JSON.parse(incident.body_parts_affected || '[]');
+    res.status(201).json(incident);
+  } catch (err) { next(err); }
+});
+
+// Acknowledge — elevated only
+router.post('/:id/stop-work-acknowledge', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot acknowledge stop-work.' });
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!incident.is_imminent_danger) return res.status(400).json({ error: 'Not a stop-work incident' });
+  if (incident.stop_work_status !== 'active') {
+    return res.status(409).json({ error: `Cannot acknowledge — current state is "${incident.stop_work_status}"` });
+  }
+
+  db.prepare(`
+    UPDATE incidents SET stop_work_status = 'acknowledged', updated_at = datetime('now')
+    WHERE id = ?
+  `).run(incident.id);
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+    VALUES (?, 'incident', ?, 'stop_work_acknowledged', ?, ?)
+  `).run(incident.org_id, incident.id, `acknowledged stop-work ${incident.incident_number}`, req.user.id);
+
+  const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
+  res.json(updated);
+});
+
+// Resolve — elevated only, requires reason + remediation
+router.post('/:id/stop-work-resolve', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot resolve stop-work.' });
+  const { reason, remediation } = req.body;
+  if (!reason || !reason.trim()) return res.status(400).json({ error: 'reason is required' });
+
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!incident.is_imminent_danger) return res.status(400).json({ error: 'Not a stop-work incident' });
+  if (incident.stop_work_status !== 'active' && incident.stop_work_status !== 'acknowledged') {
+    return res.status(409).json({ error: `Cannot resolve — current state is "${incident.stop_work_status}"` });
+  }
+
+  const remediationLine = remediation && remediation.trim() ? `\n\nRemediation: ${remediation.trim()}` : '';
+  const closeNotes = `${reason.trim()}${remediationLine}`;
+
+  db.prepare(`
+    UPDATE incidents
+    SET stop_work_status = 'resolved',
+        closed_reason = ?, closed_notes = ?, closed_at = datetime('now'), closed_by = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(`stop-work resolved: ${reason.trim()}`, closeNotes, req.user.id, incident.id);
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+    VALUES (?, 'incident', ?, 'stop_work_resolved', ?, ?, ?)
+  `).run(
+    incident.org_id, incident.id,
+    `resolved stop-work ${incident.incident_number} — ${reason.trim()}`,
+    req.user.id,
+    JSON.stringify({ reason: reason.trim(), remediation: remediation?.trim() || null }),
+  );
+
+  const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
+  res.json(updated);
+});
+
+// Cancel — Site Admin only (false-alarm path), requires reason
+router.post('/:id/stop-work-cancel', (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only a Site Admin can cancel a stop-work (false-alarm path).' });
+  }
+  const { reason } = req.body;
+  if (!reason || !reason.trim() || reason.trim().length < 20) {
+    return res.status(400).json({ error: 'reason is required and must be at least 20 characters' });
+  }
+
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!incident.is_imminent_danger) return res.status(400).json({ error: 'Not a stop-work incident' });
+  if (incident.stop_work_status === 'resolved' || incident.stop_work_status === 'cancelled') {
+    return res.status(409).json({ error: `Cannot cancel — current state is "${incident.stop_work_status}"` });
+  }
+
+  db.prepare(`
+    UPDATE incidents
+    SET stop_work_status = 'cancelled',
+        closed_reason = ?, closed_notes = ?, closed_at = datetime('now'), closed_by = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(`stop-work cancelled (false alarm): ${reason.trim()}`, reason.trim(), req.user.id, incident.id);
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+    VALUES (?, 'incident', ?, 'stop_work_cancelled', ?, ?, ?)
+  `).run(
+    incident.org_id, incident.id,
+    `cancelled stop-work ${incident.incident_number} (false alarm) — ${reason.trim()}`,
+    req.user.id,
+    JSON.stringify({ reason: reason.trim() }),
+  );
+
+  const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
+  res.json(updated);
+});
+
 router.patch('/:id', (req, res) => {
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  // Stop-work down-route guard (locked decision #11):
+  // If is_imminent_danger=1, severity must stay at S1 and track must stay 'A'.
+  // No exception — not even Site Admin can downgrade a stop-work.
+  if (incident.is_imminent_danger) {
+    const newSeverity = req.body.severity !== undefined ? Number(req.body.severity) : null;
+    const newTrack = req.body.track !== undefined ? req.body.track : null;
+    if (newSeverity !== null && newSeverity > 1) {
+      return res.status(409).json({
+        error: 'Stop-work incidents cannot be down-routed. Severity is locked at S1.',
+      });
+    }
+    if (newTrack !== null && newTrack !== 'A') {
+      return res.status(409).json({
+        error: 'Stop-work incidents cannot be down-routed. Track is locked at A.',
+      });
+    }
+  }
 
   const updatable = ['title', 'description', 'severity', 'track', 'status', 'assigned_to', 'triage_due', 'triage_notes',
     'osha_recordable', 'osha_recordability_type', 'osha_days_away', 'osha_days_restricted',
