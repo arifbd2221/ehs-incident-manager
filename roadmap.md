@@ -14,15 +14,15 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 
 - [x] **T2.1** Site CRUD (`POST/PATCH/DELETE /api/sites`) (commit `6a881c1`)
 - [x] **F2.1** Sites admin page + `api/sites.js` + Sidebar nav (commit `d4786a8`)
-- [x] **T2.2** Asset CRUD (local, uncommitted)
-- [x] **F2.2** Assets module pages + nav + routing (local, uncommitted)
-- [x] **T2.2b** Custom asset categories (`/api/asset-categories` + migration 004 + auto-seed trigger) (local, uncommitted)
-- [x] **F2.2b** Asset detail rebuild (tabs, edit-in-place, archive/restore actions) + category picker w/ "+ New" inline (local, uncommitted)
-- [x] **T2.3** EntityLink endpoints + service + asset-detail enrichment (local, uncommitted)
-- [ ] **F2.3** Site → Area → Asset cascade in wizard (drop `specific_location`)
-- [ ] **T2.4** Document module (CRUD + multipart upload + linking)
-- [ ] **F2.4** Documents library page + upload modal + nav
-- [ ] **F2.5** Document linking on investigation evidence
+- [x] **T2.2** Asset CRUD (commit `982c39c`)
+- [x] **F2.2** Assets module pages + nav + routing (commit `907a3b4`)
+- [x] **T2.2b** Custom asset categories (`/api/asset-categories` + migration 004 + auto-seed trigger) (commit `982c39c`)
+- [x] **F2.2b** Asset detail rebuild (tabs, edit-in-place, archive/restore actions) + category picker w/ "+ New" inline (commit `907a3b4`)
+- [x] **T2.3** EntityLink endpoints + service + asset-detail enrichment (commit `982c39c`)
+- [x] **F2.3** Site → Asset cascade in wizard + incidents POST accepts `asset_id`
+- [x] **T2.4** Document module (CRUD + multipart upload + linking via entity_links)
+- [x] **F2.4** Documents library page + upload modal + nav
+- [x] **F2.5** Document linking on investigation evidence + investigation GET includes `linked_documents`
 
 ## Wave 3 — Incident extensions
 
@@ -59,8 +59,12 @@ Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
 
 - [ ] **E7.1** **Custom fields per asset type** — SafetyCulture-style. New `asset_category_fields` table (field_name, field_type, required, options, order). `assets.custom_fields` JSON. UI: define fields when creating/editing a category; render fields when creating an asset of that type; display on detail page. Enables asset-type-specific data capture (Forklift → capacity/power-source; Chemical → CAS-number/SDS-link; etc.)
 
+## Known issues (investigate later, not blocking)
+
+- [ ] **BUG-001** "Failed to create category" error when using the inline `+ Add new category…` flow in the AssetsList modal. Backend `POST /api/asset-categories` works via curl (returns 201 + `{id, name, ...}`); confirmed reactivation + 409 paths. Likely candidates: (a) Vite proxy not forwarding `Origin` header on POST while a JWT is in localStorage, (b) async state race after `refreshCategories()` blocks the dropdown selection, (c) duplicate check vs default seeded categories — user may have hit "Machine"/"Vehicle" which already exist and the 409 message isn't surfacing in the modal correctly. Repro path: Assets → New asset → Type dropdown → "+ Add new category…" → enter name → Save. Check browser devtools → Network tab for the actual response. Patch in the next polish pass alongside the design-token alignment.
+
 ---
 
-**Progress: 7 / 32 committed and pushed · 12 / 32 done locally** (Wave 1 + Sites + Assets BE/FE + custom categories + improved detail + EntityLink BE). Next: F2.3 — Site → Area → Asset cascade in wizard.
+**Progress: Wave 2 complete · 19 / 32 done locally** (Wave 1 + entire Wave 2). Next: **Wave 3 — Incident extensions** (T3.1 service foundations + body map wiring + anonymous + stop-work + recordability).
 
 See `plan-phase-2.md` for full design rationale, acceptance criteria, risks, and migration strategy.
