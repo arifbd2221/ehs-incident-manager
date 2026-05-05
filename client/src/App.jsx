@@ -17,6 +17,7 @@ import Settings from './pages/Settings';
 import Sites from './pages/admin/Sites';
 import AssetsList from './pages/assets/AssetsList';
 import AssetDetail from './pages/assets/AssetDetail';
+import DocumentsList from './pages/documents/DocumentsList';
 import ReportWizard from './pages/wizard/ReportWizard';
 
 function ProtectedLayout() {
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/admin/sites" element={<Sites />} />
         <Route path="/assets" element={<AssetsList />} />
         <Route path="/assets/:id" element={<AssetDetail />} />
+        <Route path="/documents" element={<DocumentsList />} />
         <Route path="/profile" element={<Settings />} />
       </Route>
     </Routes>
