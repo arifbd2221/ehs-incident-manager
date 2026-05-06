@@ -34,7 +34,7 @@
   box-shadow: 0 0 0 3px rgba(98, 109, 249, 0.1);
 }
 .cb-disabled .cb-trigger {
-  opacity: 0.55;
+  opacity: 0.38;
   cursor: not-allowed;
   background: var(--sds-bg-surface-alt);
 }

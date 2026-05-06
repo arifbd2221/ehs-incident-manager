@@ -947,14 +947,14 @@
   padding: 4px 8px 4px 0;
 }
 .rm-axis-title {
-  font-size: 9px; font-weight: 700;
+  font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--sds-fg-tertiary);
 }
 .rm-x-title {
   grid-column: 2 / -1;
   text-align: center;
-  font-size: 9px; font-weight: 700;
+  font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--sds-fg-tertiary);
   padding-top: 4px;

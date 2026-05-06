@@ -976,7 +976,7 @@
   box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
 }
 .invd-why-add-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.38;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
@@ -1285,7 +1285,7 @@
   align-items: center;
   gap: 10px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-  z-index: 950;
+  z-index: var(--sds-z-toast);
   animation: invToastIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes invToastIn {
@@ -1469,7 +1469,7 @@
   background: var(--sds-brand-primary-tint);
 }
 .invd-attach-add:disabled {
-  opacity: 0.6;
+  opacity: 0.38;
   cursor: not-allowed;
 }
 .invd-attach-spinner {

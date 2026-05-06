@@ -456,7 +456,7 @@ export default function AssetTypesModal({ onClose }) {
           <button className="btn btn-primary" onClick={onClose}>Done</button>
         </div>
 
-        {toast && <div className="atm-toast"><Icon name="check" size={13}/>{toast}</div>}
+        {toast && <div className="atm-toast" role="status" aria-live="polite"><Icon name="check" size={13}/>{toast}</div>}
       </div>
     </div>
   );

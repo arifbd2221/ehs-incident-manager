@@ -632,10 +632,10 @@ export default function InvestigationDetail() {
 
       {docModalOpen && createPortal(
         <div className="modal-backdrop" onClick={closeDocModal}>
-          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+          <div className="modal modal-lg" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="link-doc-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Link a document from the library</div>
+                <div className="modal-title" id="link-doc-modal-title">Link a document from the library</div>
                 <div className="modal-sub">Attach evidence already uploaded to the document library</div>
               </div>
               <button className="icon-btn" onClick={closeDocModal}><Icon name="close" size={18}/></button>

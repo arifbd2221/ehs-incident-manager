@@ -193,7 +193,7 @@ function Osha300AReport({ siteId }) {
         document.body
       )}
       {toast && createPortal(
-        <div className="rpt-300a-toast"><Icon name="check" size={14}/>{toast}</div>,
+        <div className="rpt-300a-toast" role="status" aria-live="polite"><Icon name="check" size={14}/>{toast}</div>,
         document.body
       )}
       <div className="rpt-panel-body">
