@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { getNotifications, markAllRead } from '../../api/notifications';
 import { globalSearch } from '../../api/search';
+import StopWorkModal from '../modals/StopWorkModal';
 
 const PAGE_TIPS = {
   '/': [
@@ -142,6 +143,7 @@ export default function TopBar() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [stopWorkOpen, setStopWorkOpen] = useState(false);
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState({ incidents: [], investigations: [], capas: [] });
@@ -278,6 +280,9 @@ export default function TopBar() {
         </div>
         <div className="module-tag"><span className="pulse" />EHS Module</div>
         <div className="grow" />
+        <button className="btn btn-danger btn-sm topbar-stopwork" onClick={() => setStopWorkOpen(true)} title="Submit a stop-work — imminent danger">
+          <Icon name="warning" size={16} />STOP WORK
+        </button>
         <button className="btn btn-primary btn-sm" onClick={() => setWizardOpen(true)}>
           <Icon name="plus" size={16} />Report incident
         </button>
@@ -368,6 +373,8 @@ export default function TopBar() {
         <div className="crumbs">SDS Manager / EHS / <b>{crumb()}</b></div>
         <div className="grow" />
       </div>
+
+      <StopWorkModal open={stopWorkOpen} onClose={() => setStopWorkOpen(false)} />
     </>
   );
 }

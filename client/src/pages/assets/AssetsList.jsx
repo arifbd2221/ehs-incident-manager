@@ -4,20 +4,24 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { listAssets, createAsset, updateAsset, deleteAsset } from '../../api/assets';
 import { listSites } from '../../api/sites';
-import { listAssetCategories, createAssetCategory } from '../../api/asset_categories';
+import { listAssetCategories, createAssetCategory, listCategoryFields } from '../../api/asset_categories';
 import Icon from '../../components/shared/Icon';
+import AssetTypesModal from '../../components/modals/AssetTypesModal';
+import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
 import '../../styles/assets.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 const EMPTY = {
   name: '',
+  display_id: '',
   site_id: '',
   asset_type: '',
   asset_category_id: '',
   location_description: '',
   serial_number: '',
   description: '',
+  custom_fields: {},
 };
 
 const MODAL_SECTIONS = [
@@ -34,6 +38,8 @@ export default function AssetsList() {
   const [assets, setAssets] = useState([]);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [showAssetTypes, setShowAssetTypes] = useState(false);
+  const [categoryFieldDefs, setCategoryFieldDefs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('active');
   const [siteFilter, setSiteFilter] = useState('');
@@ -101,14 +107,20 @@ export default function AssetsList() {
 
   const openEdit = (asset) => {
     setEditing(asset);
+    let cf = asset.custom_fields;
+    if (typeof cf === 'string') {
+      try { cf = JSON.parse(cf); } catch { cf = {}; }
+    }
     setForm({
       name: asset.name || '',
+      display_id: asset.display_id || '',
       site_id: asset.site_id || '',
       asset_type: asset.asset_type || '',
       asset_category_id: asset.asset_category_id || '',
       location_description: asset.location_description || '',
       serial_number: asset.serial_number || '',
       description: asset.description || '',
+      custom_fields: cf || {},
     });
     setMsg({ type: '', text: '' });
     setSection('identity');
@@ -123,6 +135,13 @@ export default function AssetsList() {
     setSuccess(false);
   };
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Reload the category's field defs whenever the user picks a different
+  // category in the asset modal. Empty array clears them.
+  useEffect(() => {
+    if (!form.asset_category_id) { setCategoryFieldDefs([]); return; }
+    listCategoryFields(form.asset_category_id).then(setCategoryFieldDefs).catch(() => setCategoryFieldDefs([]));
+  }, [form.asset_category_id]);
 
   const handleCategoryChange = (val) => {
     if (val === '__new__') {
@@ -171,7 +190,12 @@ export default function AssetsList() {
   const handleSave = async (e) => {
     e?.preventDefault();
     if (!form.name.trim()) {
-      setMsg({ type: 'error', text: 'Name is required' });
+      setMsg({ type: 'error', text: 'Display name is required' });
+      setSection('identity');
+      return;
+    }
+    if (!form.display_id.trim()) {
+      setMsg({ type: 'error', text: 'Unique identifier is required' });
       setSection('identity');
       return;
     }
@@ -181,7 +205,7 @@ export default function AssetsList() {
       return;
     }
     if (!form.asset_type.trim() && !form.asset_category_id) {
-      setMsg({ type: 'error', text: 'Type is required' });
+      setMsg({ type: 'error', text: 'Asset type is required' });
       setSection('identity');
       return;
     }
@@ -236,6 +260,16 @@ export default function AssetsList() {
           <p className="assets-sub">Equipment, vehicles, areas, and other registered assets.</p>
         </div>
         <div style={{ flex: 1 }} />
+        {canEdit && (
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowAssetTypes(true)}
+            style={{ marginRight: 8 }}
+            title="Define asset types and their custom fields"
+          >
+            <Icon name="settings" size={14} /> Asset types
+          </button>
+        )}
         {canEdit && (
           <button className="btn btn-primary" onClick={openNew}>
             <Icon name="plus" size={16} /> New asset
@@ -293,7 +327,7 @@ export default function AssetsList() {
               {!a.active && <span className="asset-badge-archived">archived</span>}
             </div>
             <div className="asset-name">{a.name}</div>
-            <div className="asset-num">{a.asset_number}</div>
+            <div className="asset-num">{a.display_id || a.asset_number}</div>
             <div className="asset-meta">
               <div className="asset-meta-row"><Icon name="factory" size={13} /> {a.site_name || '—'}</div>
               {a.location_description && <div className="asset-meta-row"><Icon name="location" size={13} /> {a.location_description}</div>}
@@ -355,19 +389,37 @@ export default function AssetsList() {
             <div className="am-body">
               {section === 'identity' && (
                 <div className="am-section" key="identity">
-                  <div className="am-field" style={{ animationDelay: '0ms' }}>
-                    <label className="am-label">Asset name <span className="req">*</span></label>
-                    <input
-                      ref={nameRef}
-                      className={`am-input${!form.name.trim() && msg.type === 'error' ? ' am-input-err' : ''}`}
-                      value={form.name}
-                      onChange={e => set('name', e.target.value)}
-                      placeholder="e.g. Hydraulic Press #4"
-                    />
+                  <div className="am-sys-banner" style={{ animationDelay: '0ms' }}>
+                    <Icon name="shield" size={13}/>
+                    <span>System fields — required regardless of asset type</span>
                   </div>
 
-                  <div className="am-field" style={{ animationDelay: '60ms' }}>
-                    <label className="am-label">Type / category <span className="req">*</span></label>
+                  <div className="am-field-row" style={{ animationDelay: '40ms' }}>
+                    <div className="am-field am-field-half">
+                      <label className="am-label">Display name <span className="req">*</span></label>
+                      <input
+                        ref={nameRef}
+                        className={`am-input${!form.name.trim() && msg.type === 'error' ? ' am-input-err' : ''}`}
+                        value={form.name}
+                        onChange={e => set('name', e.target.value)}
+                        placeholder="e.g. Hydraulic Press #4"
+                      />
+                      <span className="am-helper">How the asset appears in lists and reports</span>
+                    </div>
+                    <div className="am-field am-field-half">
+                      <label className="am-label">Unique identifier <span className="req">*</span></label>
+                      <input
+                        className={`am-input${!form.display_id.trim() && msg.type === 'error' ? ' am-input-err' : ''}`}
+                        value={form.display_id}
+                        onChange={e => set('display_id', e.target.value)}
+                        placeholder="e.g. INV-PRESS-04"
+                      />
+                      <span className="am-helper">Your inventory tag, asset code, or sticker number</span>
+                    </div>
+                  </div>
+
+                  <div className="am-field" style={{ animationDelay: '80ms' }}>
+                    <label className="am-label">Asset type <span className="req">*</span></label>
                     {!newCatOpen ? (
                       <>
                         <div className="am-cat-grid">
@@ -424,14 +476,15 @@ export default function AssetsList() {
                     )}
                   </div>
 
-                  <div className="am-field" style={{ animationDelay: '120ms' }}>
-                    <label className="am-label">Serial number <span className="am-label-hint">optional</span></label>
+                  <div className="am-field" style={{ animationDelay: '140ms' }}>
+                    <label className="am-label">Manufacturer serial number <span className="am-label-hint">optional</span></label>
                     <input
                       className="am-input"
                       value={form.serial_number}
                       onChange={e => set('serial_number', e.target.value)}
                       placeholder="e.g. SN-2024-04821"
                     />
+                    <span className="am-helper">Different from the unique identifier above — this is the OEM serial</span>
                   </div>
                 </div>
               )}
@@ -480,6 +533,14 @@ export default function AssetsList() {
 
               {section === 'details' && (
                 <div className="am-section" key="details">
+                  {categoryFieldDefs.length > 0 && (
+                    <CustomFieldsForm
+                      fields={categoryFieldDefs}
+                      values={form.custom_fields}
+                      onChange={(v) => set('custom_fields', v)}
+                    />
+                  )}
+
                   <div className="am-field" style={{ animationDelay: '0ms' }}>
                     <label className="am-label">Description / notes</label>
                     <textarea
@@ -548,6 +609,18 @@ export default function AssetsList() {
             </div>
           </form>
         </div>,
+        document.body
+      )}
+
+      {showAssetTypes && createPortal(
+        <AssetTypesModal
+          onClose={() => {
+            setShowAssetTypes(false);
+            // Refresh categories so any newly-added/archived type is reflected
+            // in the asset-create form's dropdown.
+            listAssetCategories().then(setCategories).catch(() => {});
+          }}
+        />,
         document.body
       )}
     </div>

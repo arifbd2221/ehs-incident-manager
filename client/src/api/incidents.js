@@ -7,6 +7,7 @@ export const updateIncident = (id, data) => api.patch(`/incidents/${id}`, data).
 export const assignIncident = (id, data) => api.post(`/incidents/${id}/assign`, data).then(r => r.data);
 export const escalateIncident = (id, data) => api.post(`/incidents/${id}/escalate`, data).then(r => r.data);
 export const closeIncident = (id, data) => api.post(`/incidents/${id}/close`, data).then(r => r.data);
+export const verifyRecordability = (id, gates) => api.post(`/incidents/${id}/recordability-verify`, gates).then(r => r.data);
 
 export const uploadAttachments = (entityType, entityId, files) => {
   const form = new FormData();
@@ -15,3 +16,11 @@ export const uploadAttachments = (entityType, entityId, files) => {
   files.forEach(f => form.append('files', f));
   return api.post('/attachments', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
 };
+
+export const deleteAttachment = (id) => api.delete(`/attachments/${id}`).then(r => r.data);
+
+export const voiceExtract = (transcript) =>
+  api.post('/incidents/voice-extract', { transcript }).then(r => r.data);
+
+export const addIncidentNote = (id, text) =>
+  api.post(`/incidents/${id}/note`, { text }).then(r => r.data);

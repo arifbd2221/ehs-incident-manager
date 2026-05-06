@@ -96,7 +96,23 @@ export default function CAPADetail() {
           <div className="capd-meta-row">
             <span className="capd-number">{c.capa_number}</span>
             <span style={{ color: 'var(--sds-border)' }}>·</span>
-            <span className="capd-number">From {c.investigation_number}</span>
+            {c.source_type === 'proactive' ? (
+              <span className="capd-number">Proactive</span>
+            ) : c.source_type === 'incident' && c.incident_id ? (
+              <span className="capd-number">
+                From{' '}
+                <a className="capd-source-link" onClick={() => navigate(`/incidents/${c.incident_id}`)}>
+                  {c.incident_number}
+                </a>
+              </span>
+            ) : c.investigation_id ? (
+              <span className="capd-number">
+                From{' '}
+                <a className="capd-source-link" onClick={() => navigate(`/investigations/${c.investigation_id}`)}>
+                  {c.investigation_number}
+                </a>
+              </span>
+            ) : null}
           </div>
           <h1 className="capd-title">{c.title}</h1>
           <div className="capd-badges">
@@ -258,7 +274,19 @@ export default function CAPADetail() {
                 </div>
                 <div className="capd-detail-row">
                   <span className="capd-detail-label">Source</span>
-                  <span className="capd-detail-val" style={{ fontFamily: 'SF Mono, Menlo, monospace', fontSize: 12 }}>{c.investigation_number}</span>
+                  <span className="capd-detail-val" style={{ fontFamily: 'SF Mono, Menlo, monospace', fontSize: 12 }}>
+                    {c.source_type === 'proactive' ? (
+                      'Proactive'
+                    ) : c.source_type === 'incident' && c.incident_id ? (
+                      <a className="capd-source-link" onClick={() => navigate(`/incidents/${c.incident_id}`)}>
+                        {c.incident_number}
+                      </a>
+                    ) : c.investigation_id ? (
+                      <a className="capd-source-link" onClick={() => navigate(`/investigations/${c.investigation_id}`)}>
+                        {c.investigation_number}
+                      </a>
+                    ) : '—'}
+                  </span>
                 </div>
                 <div className="capd-detail-row">
                   <span className="capd-detail-label">Priority</span>

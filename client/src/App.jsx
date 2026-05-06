@@ -3,6 +3,7 @@ import { useAuth } from './context/AuthContext';
 import { useApp } from './context/AppContext';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
+import StopWorkBanner from './components/layout/StopWorkBanner';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -31,6 +32,7 @@ function ProtectedLayout() {
     <div className="shell">
       <Sidebar />
       <div className="main">
+        <StopWorkBanner />
         <TopBar />
         <Outlet />
       </div>

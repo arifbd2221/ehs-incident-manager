@@ -3,9 +3,13 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getCapas, updateCapa, completeCapa, verifyCapa, rejectCapa } from '../../api/capas';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import NewCapaModal from '../../components/modals/NewCapaModal';
 import { formatDateShort } from '../../utils/time';
 import '../../styles/capas.css';
+
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 const CAPA_LANES = [
   { id: 'pending', title: 'Pending', color: '#7E7E8C', desc: 'Assigned, not started yet' },
@@ -26,6 +30,9 @@ const ALLOWED_MOVES = {
 export default function CAPAPage() {
   const navigate = useNavigate();
   const { refreshKey } = useApp();
+  const { user } = useAuth();
+  const canCreate = ELEVATED_ROLES.has(user?.role);
+  const [showNew, setShowNew] = useState(false);
   const [capas, setCapas] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
@@ -65,6 +72,18 @@ export default function CAPAPage() {
   ];
 
   const progressClass = (c) => c.overdue ? 'pf-overdue' : c.progress >= 100 ? 'pf-done' : '';
+
+  // CAPA due-date urgency. Red <3d (incl. today), amber <7d, gray else.
+  // Overdue stays in its existing red treatment via `c.overdue`.
+  // Closed CAPAs get nothing — the date is historic.
+  const dueUrgency = (c) => {
+    if (!c.due_date || c.status === 'closed') return '';
+    if (c.overdue) return 'due-overdue';
+    const days = Math.ceil((new Date(c.due_date) - Date.now()) / 86400000);
+    if (days <= 2) return 'due-soon';
+    if (days <= 6) return 'due-near';
+    return '';
+  };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
   const handleDragStart = (e, capa) => {
@@ -162,6 +181,11 @@ export default function CAPAPage() {
             </button>
           </div>
           <button className="inv-export-btn"><Icon name="export" size={14}/>Export</button>
+          {canCreate && (
+            <button className="ncap-new-btn" onClick={() => setShowNew(true)}>
+              <Icon name="plus" size={14}/>New CAPA
+            </button>
+          )}
         </div>
       </div>
 
@@ -264,12 +288,30 @@ export default function CAPAPage() {
                       </div>
                       <div className="capa-kcard-title">{c.title}</div>
                       <div className="capa-kcard-source">
-                        <Icon name="investigation" size={11}/>From <b>{c.investigation_number}</b>
+                        {c.source_type === 'proactive' ? (
+                          <><Icon name="leaf" size={11}/>Proactive</>
+                        ) : c.source_type === 'incident' && c.incident_id ? (
+                          <>
+                            <Icon name="incidents" size={11}/>From{' '}
+                            <a
+                              className="capa-kcard-source-link"
+                              onClick={e => { e.stopPropagation(); navigate(`/incidents/${c.incident_id}`); }}
+                            >{c.incident_number}</a>
+                          </>
+                        ) : c.investigation_id ? (
+                          <>
+                            <Icon name="investigation" size={11}/>From{' '}
+                            <a
+                              className="capa-kcard-source-link"
+                              onClick={e => { e.stopPropagation(); navigate(`/investigations/${c.investigation_id}`); }}
+                            >{c.investigation_number}</a>
+                          </>
+                        ) : null}
                       </div>
                       <div className="capa-kcard-progress">
                         <div className="capa-kcard-progress-head">
                           <span className="pct">{c.progress || 0}%</span>
-                          <span className={`due ${c.overdue ? 'overdue' : ''}`}>Due {formatDateShort(c.due_date)}</span>
+                          <span className={`due ${dueUrgency(c)}`}>Due {formatDateShort(c.due_date)}</span>
                         </div>
                         <div className="capa-progress-track">
                           <div className={`capa-progress-fill ${progressClass(c)}`} style={{ width: `${c.progress || 0}%` }}/>
@@ -313,7 +355,21 @@ export default function CAPAPage() {
                   <span className="kt-dot"/>{c.type === 'corrective' ? 'Corr.' : 'Prev.'}
                 </span>
               </span>
-              <span className="capa-list-ref">{c.investigation_number}</span>
+              <span className="capa-list-ref">
+                {c.source_type === 'proactive' ? (
+                  'Proactive'
+                ) : c.source_type === 'incident' && c.incident_id ? (
+                  <a
+                    className="capa-list-source-link"
+                    onClick={e => { e.stopPropagation(); navigate(`/incidents/${c.incident_id}`); }}
+                  >{c.incident_number}</a>
+                ) : c.investigation_id ? (
+                  <a
+                    className="capa-list-source-link"
+                    onClick={e => { e.stopPropagation(); navigate(`/investigations/${c.investigation_id}`); }}
+                  >{c.investigation_number}</a>
+                ) : '—'}
+              </span>
               <span><span className="capa-kcard-av av-owner" style={{ width: 24, height: 24, fontSize: 9 }}>{c.owner_initials}</span></span>
               <span><span className="capa-kcard-av av-verifier" style={{ width: 24, height: 24, fontSize: 9, marginLeft: 0 }}>{c.verifier_initials}</span></span>
               <span>
@@ -321,7 +377,7 @@ export default function CAPAPage() {
                   <div className={`capa-progress-fill ${progressClass(c)}`} style={{ width: `${c.progress || 0}%` }}/>
                 </div>
               </span>
-              <span className={`capa-list-due ${c.overdue ? 'overdue' : ''}`} style={!c.overdue ? { color: 'var(--sds-fg-tertiary)' } : {}}>{formatDateShort(c.due_date)}</span>
+              <span className={`capa-list-due ${dueUrgency(c)}`}>{formatDateShort(c.due_date)}</span>
               <span>
                 <span className={`capa-kcard-lane kl-${c.status}`}>
                   <span className="kl-dot"/>{LANE_LABELS[c.status] || c.status}
@@ -341,6 +397,19 @@ export default function CAPAPage() {
           <span className="toast-check"><Icon name="check" size={12}/></span>
           {toast}
         </div>,
+        document.body
+      )}
+
+      {/* New CAPA modal */}
+      {showNew && createPortal(
+        <NewCapaModal
+          onCancel={() => setShowNew(false)}
+          onCreated={(c) => {
+            setShowNew(false);
+            showToast(`Created ${c.capa_number}`);
+            load();
+          }}
+        />,
         document.body
       )}
     </div>

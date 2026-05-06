@@ -1,20 +1,28 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getIncident, assignIncident, escalateIncident, closeIncident } from '../../api/incidents';
+import { getIncident, assignIncident, escalateIncident, closeIncident, uploadAttachments, deleteAttachment, addIncidentNote } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
+import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
+import { useAuth } from '../../context/AuthContext';
 import { timeAgo, formatDate } from '../../utils/time';
 import AssignModal from './modals/AssignModal';
 import EscalateModal from './modals/EscalateModal';
 import CloseModal from './modals/CloseModal';
 import '../../styles/incidents.css';
 
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+
 const tlDotClass = (action) => {
   if (action === 'created') return 'tl-created';
   if (action === 'escalated') return 'tl-escalated';
   if (action === 'closed') return 'tl-closed';
   if (action === 'assigned') return 'tl-assigned';
+  if (action === 'note') return 'tl-note';
+  if (action === 'recordability_verified') return 'tl-verified';
+  if (action === 'attached' || action === 'attachment_deleted') return 'tl-attach';
+  if (action === 'stop_work_submitted' || action === 'stop_work_acknowledged' || action === 'stop_work_resolved' || action === 'stop_work_cancelled') return 'tl-stopwork';
   return 'tl-created';
 };
 
@@ -22,6 +30,11 @@ const tlIcon = (action) => {
   if (action === 'created') return 'edit';
   if (action === 'escalated') return 'investigation';
   if (action === 'closed') return 'check';
+  if (action === 'note') return 'edit';
+  if (action === 'recordability_verified') return 'shield';
+  if (action === 'attached') return 'file';
+  if (action === 'attachment_deleted') return 'close';
+  if (action === 'stop_work_submitted' || action === 'stop_work_acknowledged' || action === 'stop_work_resolved' || action === 'stop_work_cancelled') return 'warning';
   return 'capa';
 };
 
@@ -38,11 +51,17 @@ const fileTypeInfo = (a) => {
 export default function IncidentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canVerify = ELEVATED_ROLES.has(user?.role);
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, index: 0 });
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+  const [noteText, setNoteText] = useState('');
+  const [postingNote, setPostingNote] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -122,6 +141,54 @@ export default function IncidentDetail() {
       load();
     } catch { showToast('Failed to close.'); }
   };
+
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      await uploadAttachments('incident', r.id, files);
+      showToast(files.length === 1 ? 'File attached.' : `${files.length} files attached.`);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to attach files.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteAttachment = async (attachment) => {
+    if (!confirm(`Remove "${attachment.filename}"? This is logged in the activity timeline.`)) return;
+    try {
+      await deleteAttachment(attachment.id);
+      showToast('Attachment removed.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to remove attachment.');
+    }
+  };
+
+  const handlePostNote = async () => {
+    const text = noteText.trim();
+    if (!text || postingNote) return;
+    setPostingNote(true);
+    try {
+      const created = await addIncidentNote(r.id, text);
+      // Optimistic prepend so the user sees their note immediately without
+      // waiting for the full incident reload.
+      setIncident(prev => prev ? { ...prev, activity: [created, ...(prev.activity || [])] } : prev);
+      setNoteText('');
+      showToast('Note added to timeline.');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to add note.');
+    } finally {
+      setPostingNote(false);
+    }
+  };
+
+  const canDelete = (attachment) =>
+    ELEVATED_ROLES.has(user?.role) || attachment.uploaded_by === user?.id;
 
   const daysOpen = r.created_at ? Math.floor((Date.now() - new Date(r.created_at).getTime()) / 86400000) : 0;
 
@@ -231,7 +298,25 @@ export default function IncidentDetail() {
             <div className="idet-card-h">
               <div className="hicon hi-attach"><Icon name="file" size={16}/></div>
               Attachments
-              {(r.attachments || []).length > 0 && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 500 }}>{r.attachments.length} file{r.attachments.length > 1 ? 's' : ''}</span>}
+              {(r.attachments || []).length > 0 && <span className="idet-attach-count">{r.attachments.length} file{r.attachments.length > 1 ? 's' : ''}</span>}
+              <button
+                className="idet-attach-add"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <><span className="idet-attach-spinner"/>Uploading…</>
+                ) : (
+                  <><Icon name="plus" size={12}/>Add files</>
+                )}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleUpload}
+              />
             </div>
             <div className="idet-card-body">
               {(r.attachments || []).length > 0 ? (
@@ -253,6 +338,15 @@ export default function IncidentDetail() {
                           <div className="idet-attach-thumb-overlay">
                             <div className="zoom-icon"><Icon name="eye" size={16}/></div>
                           </div>
+                          {canDelete(a) && (
+                            <button
+                              className="idet-attach-del idet-attach-del-thumb"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteAttachment(a); }}
+                              title="Remove attachment"
+                            >
+                              <Icon name="close" size={12}/>
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -262,26 +356,46 @@ export default function IncidentDetail() {
                       {fileAttachments.map(a => {
                         const ft = fileTypeInfo(a);
                         return (
-                          <a key={a.id} className="idet-attach-file" href={`/api/attachments/${a.id}/download`} target="_blank" rel="noopener noreferrer">
-                            <div className="idet-attach-file-icon" style={{ background: ft.bg, color: ft.color }}>
-                              <Icon name="file" size={16}/>
-                            </div>
-                            <div className="idet-attach-file-info">
-                              <div className="idet-attach-file-name">{a.filename}</div>
-                              <div className="idet-attach-file-meta">
-                                <span className="idet-attach-file-size">{((a.size_bytes || 0) / 1024).toFixed(0)} KB</span>
-                                <span className="idet-attach-file-type" style={{ background: ft.bg, color: ft.color }}>{ft.label}</span>
+                          <div key={a.id} className="idet-attach-file-wrap">
+                            <a className="idet-attach-file" href={`/api/attachments/${a.id}/download`} target="_blank" rel="noopener noreferrer">
+                              <div className="idet-attach-file-icon" style={{ background: ft.bg, color: ft.color }}>
+                                <Icon name="file" size={16}/>
                               </div>
-                            </div>
-                            <div className="idet-attach-dl"><Icon name="arrow" size={14}/></div>
-                          </a>
+                              <div className="idet-attach-file-info">
+                                <div className="idet-attach-file-name">{a.filename}</div>
+                                <div className="idet-attach-file-meta">
+                                  <span className="idet-attach-file-size">{((a.size_bytes || 0) / 1024).toFixed(0)} KB</span>
+                                  <span className="idet-attach-file-type" style={{ background: ft.bg, color: ft.color }}>{ft.label}</span>
+                                </div>
+                              </div>
+                              <div className="idet-attach-dl"><Icon name="arrow" size={14}/></div>
+                            </a>
+                            {canDelete(a) && (
+                              <button
+                                className="idet-attach-del idet-attach-del-file"
+                                onClick={() => handleDeleteAttachment(a)}
+                                title="Remove attachment"
+                              >
+                                <Icon name="close" size={14}/>
+                              </button>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
                   )}
                 </>
               ) : (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No attachments uploaded</p>
+                <div className="idet-attach-empty">
+                  <p>No attachments yet.</p>
+                  <button
+                    className="idet-attach-add-empty"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? 'Uploading…' : 'Attach a file'}
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -293,15 +407,44 @@ export default function IncidentDetail() {
               Activity timeline
             </div>
             <div className="idet-card-body">
+              {/* Add-note composer — anyone authenticated can leave an
+                  observation. Notes interleave with system events below. */}
+              <div className="idet-note-composer">
+                <textarea
+                  className="idet-note-input"
+                  rows={2}
+                  placeholder="Add a note to the timeline — context, side conversations, things you noticed…"
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handlePostNote(); }
+                  }}
+                />
+                <div className="idet-note-foot">
+                  <span className="idet-note-hint">⌘+Enter to post</span>
+                  <button
+                    className="idet-note-btn"
+                    onClick={handlePostNote}
+                    disabled={!noteText.trim() || postingNote}
+                  >
+                    <Icon name="edit" size={12}/>
+                    {postingNote ? 'Posting…' : 'Add note'}
+                  </button>
+                </div>
+              </div>
+
               <div className="idet-timeline">
                 {(r.activity || []).map((e, i) => (
-                  <div className="idet-tl-item" key={i}>
+                  <div className={`idet-tl-item ${e.action === 'note' ? 'is-note' : ''}`} key={e.id || i}>
                     <div className={`idet-tl-dot ${tlDotClass(e.action)}`}>
                       <Icon name={tlIcon(e.action)} size={14}/>
                     </div>
                     <div className="idet-tl-body">
-                      <div className="tl-who">{e.user_name || 'System'}</div>
-                      <div className="tl-what">{e.description}</div>
+                      <div className="tl-who">
+                        {e.user_name || 'System'}
+                        {e.action === 'note' && <span className="tl-note-tag">NOTE</span>}
+                      </div>
+                      <div className={`tl-what ${e.action === 'note' ? 'tl-what-note' : ''}`}>{e.description}</div>
                       <div className="tl-when">{timeAgo(e.created_at)}</div>
                     </div>
                   </div>
@@ -409,6 +552,10 @@ export default function IncidentDetail() {
               </div>
             </div>
           </div>
+
+          {canVerify && (r.type === 'injury' || r.type === 'illness') && (
+            <RecordabilityVerifyCard incident={r} onVerified={load}/>
+          )}
         </div>
       </div>
 

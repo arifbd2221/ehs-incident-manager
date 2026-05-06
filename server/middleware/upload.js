@@ -25,7 +25,15 @@ const fileFilter = (req, file, cb) => {
     'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'text/plain', 'text/csv',
   ];
-  cb(null, allowed.includes(file.mimetype));
+  if (allowed.includes(file.mimetype)) return cb(null, true);
+  // Surface a typed multer error so the global handler returns 400 with a
+  // clean message instead of silently dropping the file (the previous
+  // cb(null, false) behaviour). multer 2.x passes this through next(err)
+  // automatically — no route change needed.
+  const err = new Error(`Unsupported file type: ${file.mimetype}`);
+  err.name = 'MulterError';
+  err.code = 'LIMIT_UNEXPECTED_FILE';
+  cb(err, false);
 };
 
 export const upload = multer({

@@ -12,6 +12,9 @@ const PARENT_TABLES = {
   capa: 'capas',
 };
 
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
+
 // Returns the attachment row only if its parent entity belongs to the requester's org.
 function getScopedAttachment(attachmentId, orgId) {
   const attachment = db.prepare('SELECT * FROM attachments WHERE id = ?').get(attachmentId);
@@ -58,6 +61,23 @@ router.post('/', upload.array('files', 10), (req, res) => {
     });
   }
 
+  // Audit trail: per OSHA 1904.33, post-creation evidence is fine but every
+  // change must be attributable. One activity_log row per upload batch keeps
+  // the timeline readable; metadata captures every filename for forensic use.
+  if (attachments.length > 0) {
+    const summary = attachments.length === 1
+      ? `attached "${attachments[0].filename}"`
+      : `attached ${attachments.length} files`;
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+      VALUES (?, ?, ?, 'attached', ?, ?, ?)
+    `).run(
+      req.user.org_id, entity_type, Number(entity_id),
+      summary, req.user.id,
+      JSON.stringify({ attachment_ids: attachments.map(a => a.id), filenames: attachments.map(a => a.filename) }),
+    );
+  }
+
   res.status(201).json({ attachments });
 });
 
@@ -73,12 +93,40 @@ router.delete('/:id', (req, res) => {
   const attachment = getScopedAttachment(Number(req.params.id), req.user.org_id);
   if (!attachment) return res.status(404).json({ error: 'Attachment not found' });
 
+  // Deletion authority: the original uploader can remove their own file,
+  // or any elevated role can remove anyone's. Workers cannot wipe evidence
+  // someone else attached.
+  if (attachment.uploaded_by !== req.user.id && !isElevated(req.user)) {
+    return res.status(403).json({
+      error: 'Only the uploader or an elevated role can delete this attachment.',
+    });
+  }
+
   db.prepare('DELETE FROM attachments WHERE id = ?').run(attachment.id);
   try {
     unlinkSync(join(uploadDir, attachment.stored_filename));
   } catch {
     // File may have been removed already; not a hard error.
   }
+
+  // Audit trail: capture the filename in description + full metadata so
+  // a deleted attachment is recoverable in spirit (we know what was there).
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+    VALUES (?, ?, ?, 'attachment_deleted', ?, ?, ?)
+  `).run(
+    req.user.org_id, attachment.entity_type, attachment.entity_id,
+    `removed attachment "${attachment.filename}"`,
+    req.user.id,
+    JSON.stringify({
+      attachment_id: attachment.id,
+      filename: attachment.filename,
+      mime_type: attachment.mime_type,
+      size_bytes: attachment.size_bytes,
+      original_uploader: attachment.uploaded_by,
+    }),
+  );
+
   res.json({ success: true });
 });
 

@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { getOsha300, getOsha300A, getRiddor, getMetrics } from '../../api/reports';
 import { getSites } from '../../api/users';
+import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
-import { formatDateShort } from '../../utils/time';
+import CertifyOsha300AModal from '../../components/modals/CertifyOsha300AModal';
+import { formatDateShort, formatDate } from '../../utils/time';
 import '../../styles/reports.css';
+
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 const REPORT_TYPES = [
   { id: 'osha300', cls: 'rt-osha300', badge: 'OSHA · US', title: 'OSHA 300 Log', desc: 'Running log of recordable injuries & illnesses.' },
@@ -122,10 +127,19 @@ function Osha300Report({ siteId }) {
 }
 
 function Osha300AReport({ siteId }) {
+  const { user } = useAuth();
+  const canCertify = ELEVATED_ROLES.has(user?.role);
   const [data, setData] = useState(null);
-  useEffect(() => {
-    if (siteId) { setData(null); getOsha300A({ site_id: siteId }).then(setData).catch(() => {}); }
-  }, [siteId]);
+  const [showCertify, setShowCertify] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const load = () => {
+    if (siteId) {
+      setData(null);
+      getOsha300A({ site_id: siteId }).then(setData).catch(() => {});
+    }
+  };
+  useEffect(load, [siteId]);
 
   if (!data) return <ReportLoading/>;
 
@@ -138,7 +152,49 @@ function Osha300AReport({ siteId }) {
           <div className="rpt-panel-title">OSHA 300A · Annual Summary</div>
           <div className="rpt-panel-sub">{data.site?.name} · Calendar year {data.year}</div>
         </div>
+        <div className="rpt-300a-cert-area">
+          {data.certification ? (
+            <div className="rpt-300a-cert-stamp">
+              <div className="rpt-300a-cert-stamp-icon"><Icon name="check" size={14}/></div>
+              <div>
+                <div className="rpt-300a-cert-stamp-title">Signed</div>
+                <div className="rpt-300a-cert-stamp-meta">
+                  by <b>{data.certification.certifier_name}</b>
+                  {data.certification.certifier_title ? `, ${data.certification.certifier_title}` : ''}
+                  {' · '}
+                  {formatDate(data.certification.signed_at)}
+                </div>
+              </div>
+            </div>
+          ) : canCertify ? (
+            <button className="rpt-300a-cert-btn" onClick={() => setShowCertify(true)}>
+              <Icon name="check" size={14}/>Certify &amp; sign
+            </button>
+          ) : (
+            <div className="rpt-300a-cert-pending">Awaiting executive sign-off</div>
+          )}
+        </div>
       </div>
+      {showCertify && createPortal(
+        <CertifyOsha300AModal
+          siteId={siteId}
+          year={data.year}
+          siteName={data.site?.name}
+          affirmationText={data.affirmation_text}
+          onCancel={() => setShowCertify(false)}
+          onCertified={() => {
+            setShowCertify(false);
+            setToast(`300A signed for ${data.site?.name} ${data.year}.`);
+            setTimeout(() => setToast(null), 3000);
+            load();
+          }}
+        />,
+        document.body
+      )}
+      {toast && createPortal(
+        <div className="rpt-300a-toast"><Icon name="check" size={14}/>{toast}</div>,
+        document.body
+      )}
       <div className="rpt-panel-body">
         <div className="rpt-300a-grid">
           <div>

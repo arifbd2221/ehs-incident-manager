@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { createIncident, uploadAttachments } from '../../api/incidents';
+import VoiceIntakeModal from '../../components/wizard/VoiceIntakeModal';
 import { getSites } from '../../api/users';
 import { listAssets } from '../../api/assets';
+import api from '../../api/client';
 import Icon from '../../components/shared/Icon';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import InjuryForm from './types/InjuryForm';
@@ -263,6 +266,72 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const [removingIdx, setRemovingIdx] = useState(null);
   const [imageUrls, setImageUrls] = useState({});
 
+  // Anonymous reporting toggle (per locked decision #10).
+  // Disabled when type is injury/illness — those identify a person and
+  // are blocked at the backend.
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const anonymousAllowed = type !== 'injury' && type !== 'illness';
+
+  // Auto-classification preview (locked #14) + trending banner data (#16).
+  // Fetched whenever the cascade fields settle. Lets Step 2 pre-fill the
+  // matrix selection AND show "N prior incidents at this asset/area" banner.
+  const [classifyPreview, setClassifyPreview] = useState(null);
+
+  // Voice intake (W5 F5.1). Tracks which fields the AI suggested so we can
+  // badge them in the UI. Editing a field clears it from the set (auto-confirm
+  // via edit). On submit, the wizard sends voice_extraction_id along with the
+  // sets of fields the user kept, edited, or rejected.
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [voiceExtractionId, setVoiceExtractionId] = useState(null);
+  const [aiSuggestedFields, setAiSuggestedFields] = useState(new Set());
+  const [aiOriginalValues, setAiOriginalValues] = useState({});
+  const [voiceFollowups, setVoiceFollowups] = useState([]);
+
+  // Strip a field from the AI-suggested set when the user changes it.
+  // Called from each input's onChange below.
+  const clearAiBadge = useCallback((field) => {
+    setAiSuggestedFields(prev => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }, []);
+
+  const handleVoiceExtracted = useCallback((result) => {
+    const f = result.extracted_fields || {};
+    const filled = new Set();
+    const originals = {};
+    if (f.title) { setTitle(f.title); filled.add('title'); originals.title = f.title; }
+    if (f.type) { setType(f.type); filled.add('type'); originals.type = f.type; }
+    if (f.description) { setDescription(f.description); filled.add('description'); originals.description = f.description; }
+    if (f.area) { setArea(f.area); filled.add('area'); originals.area = f.area; }
+    if (f.site_id) { setSiteId(String(f.site_id)); filled.add('site'); originals.site = String(f.site_id); }
+    // assetId picks up after the site change effect runs; stash it in original
+    // so we can re-apply once the assets list reloads.
+    if (f.asset_id) { originals.asset = String(f.asset_id); filled.add('asset'); }
+    if (Array.isArray(f.body_parts_affected) && f.body_parts_affected.length > 0) {
+      setTypeData(td => ({ ...td, body_parts: f.body_parts_affected }));
+      filled.add('body_parts');
+      originals.body_parts = f.body_parts_affected;
+    }
+    setVoiceExtractionId(result.extraction_id);
+    setAiSuggestedFields(filled);
+    setAiOriginalValues(originals);
+    setVoiceFollowups(result.suggested_followups || []);
+    setShowVoiceModal(false);
+  }, []);
+
+  // After site-change effect reloads assets, apply the AI-suggested asset
+  // (if any) once the option is actually present in the dropdown.
+  useEffect(() => {
+    const target = aiOriginalValues.asset;
+    if (!target) return;
+    if (assets.some(a => String(a.id) === target)) {
+      setAssetId(target);
+    }
+  }, [assets, aiOriginalValues.asset]);
+
   useEffect(() => {
     getSites().then(data => { setSites(data); if (data.length > 0) setSiteId(String(data[0].id)); });
   }, []);
@@ -282,6 +351,23 @@ export default function ReportWizard({ onClose, onSubmit }) {
     const a = assets.find(x => String(x.id) === String(assetId));
     if (a && !area && a.location_description) setArea(a.location_description);
   }, [assetId, assets]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch classify-preview whenever cascade fields settle. Used for the
+  // trending banner (prior_incidents_90d) and to suggest a matrix cell.
+  useEffect(() => {
+    if (!siteId || !type) { setClassifyPreview(null); return; }
+    const handle = setTimeout(() => {
+      api.post('/incidents/classify-preview', {
+        type,
+        type_data: typeData,
+        body_parts_affected: typeData?.body_parts || [],
+        asset_id: assetId ? Number(assetId) : null,
+        site_id: Number(siteId),
+        area: area || null,
+      }).then(r => setClassifyPreview(r.data)).catch(() => setClassifyPreview(null));
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [siteId, assetId, area, type, typeData]);
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -325,11 +411,48 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
+      // Bridge: type-specific forms (InjuryForm, IllnessForm) store body_parts
+      // inside type_data. The backend reads body_parts_affected from the
+      // top-level POST body (added in T3.2). Hoist it.
+      const bodyParts = Array.isArray(typeData?.body_parts) ? typeData.body_parts : [];
+
+      // Anonymous reporting (per locked decision #10) is disabled for
+      // injury/illness — backend rejects, but the toggle is also disabled
+      // in the UI for those types. Defensive double-check here.
+      const allowAnon = type !== 'injury' && type !== 'illness';
+
+      // Categorize each AI-suggested field as confirmed (kept verbatim) or
+      // edited (changed by the user). Body parts compares as a set, the rest
+      // compare as strings. The aiSuggestedFields set already excludes
+      // anything the user edited (we cleared on change), so anything still
+      // in the set is "confirmed". Edited fields are derived from the
+      // diff against aiOriginalValues for fields that left the set.
+      const confirmed = Array.from(aiSuggestedFields);
+      const edited = Object.keys(aiOriginalValues).filter(k => !aiSuggestedFields.has(k));
+      // Rejected = AI suggested it, user blanked it. Treat empty == rejected.
+      const rejected = edited.filter(k => {
+        if (k === 'title') return !title.trim();
+        if (k === 'description') return !description.trim();
+        if (k === 'area') return !area.trim();
+        if (k === 'body_parts') return bodyParts.length === 0;
+        return false;
+      });
+
       const incident = await createIncident({
         title: title.trim(), type, description,
         incident_datetime: datetime, site_id: Number(siteId),
         asset_id: assetId ? Number(assetId) : null,
         area, likelihood, consequence, type_data: typeData,
+        body_parts_affected: bodyParts,
+        is_anonymous: allowAnon && isAnonymous ? true : false,
+        ...(voiceExtractionId
+          ? {
+              voice_extraction_id: voiceExtractionId,
+              voice_user_confirmed: confirmed,
+              voice_user_edited: edited.filter(k => !rejected.includes(k)),
+              voice_user_rejected: rejected,
+            }
+          : {}),
       });
       if (files.length > 0 && incident?.id) {
         await uploadAttachments('incident', incident.id, files);
@@ -421,24 +544,60 @@ export default function ReportWizard({ onClose, onSubmit }) {
             {/* STEP 0 — What happened */}
             {step === 0 && (
               <>
-                <SmartInput
-                  value={title}
-                  onChange={setTitle}
-                  examples={EXAMPLE_TITLES}
-                  className="wiz-title-input"
-                  autoFocus
-                />
+                {/* Voice intake CTA — only useful before the user starts
+                    typing; demoted to a thin info bar once any field is
+                    AI-suggested so it doesn't compete with the form. */}
+                {aiSuggestedFields.size === 0 ? (
+                  <button type="button" className="wiz-voice-cta" onClick={() => setShowVoiceModal(true)}>
+                    <span className="wiz-voice-cta-spark">✨</span>
+                    <div className="wiz-voice-cta-body">
+                      <div className="wiz-voice-cta-title">Voice intake</div>
+                      <div className="wiz-voice-cta-desc">
+                        Speak the incident — Claude pre-fills the wizard with what it heard. You review every field before submit.
+                      </div>
+                    </div>
+                    <span className="wiz-voice-cta-arrow"><Icon name="arrow" size={14}/></span>
+                  </button>
+                ) : (
+                  <div className="wiz-voice-active-banner">
+                    <span className="wiz-voice-active-spark">✨</span>
+                    <span className="wiz-voice-active-text">
+                      <b>{aiSuggestedFields.size} field{aiSuggestedFields.size > 1 ? 's' : ''}</b> filled by AI from your voice intake.
+                      Edit any field to confirm — purple ✨ pills indicate unedited AI suggestions.
+                    </span>
+                    {voiceFollowups.length > 0 && (
+                      <details className="wiz-voice-followups">
+                        <summary>{voiceFollowups.length} clarifying question{voiceFollowups.length > 1 ? 's' : ''}</summary>
+                        <ul>
+                          {voiceFollowups.map((q, i) => <li key={i}>{q}</li>)}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                )}
+
+                <div className="wiz-field-with-badge">
+                  {aiSuggestedFields.has('title') && <span className="wiz-ai-pill">✨ AI</span>}
+                  <SmartInput
+                    value={title}
+                    onChange={(v) => { setTitle(v); clearAiBadge('title'); }}
+                    examples={EXAMPLE_TITLES}
+                    className="wiz-title-input"
+                    autoFocus
+                  />
+                </div>
 
                 <div className="wiz-section">
                   <div className="wiz-section-h">
                     <div className="wiz-sh-icon"><Icon name="incidents" size={16} /></div>
                     Incident type
+                    {aiSuggestedFields.has('type') && <span className="wiz-ai-pill" style={{ marginLeft: 8 }}>✨ AI</span>}
                   </div>
                   <div className="wiz-type-grid">
                     {TYPES.map(t => (
                       <div key={t.id}
                         className={`wiz-type-card ${type === t.id ? 'selected' : ''}`}
-                        onClick={() => { setType(t.id); setTypeData({}); }}
+                        onClick={() => { setType(t.id); setTypeData({}); clearAiBadge('type'); }}
                       >
                         <div className="wiz-tc-icon" style={{ background: `${t.color}18` }}>
                           <Icon name={TYPE_ICONS[t.id] || 'warning'} size={20} color={t.color} />
@@ -462,23 +621,30 @@ export default function ReportWizard({ onClose, onSubmit }) {
                       <input className="input" type="datetime-local" value={datetime} onChange={e => setDatetime(e.target.value)} />
                     </div>
                     <div className="field">
-                      <label className="label">Site <span className="req">*</span></label>
-                      <select className="select" value={siteId} onChange={e => setSiteId(e.target.value)}>
+                      <label className="label">
+                        Site <span className="req">*</span>
+                        {aiSuggestedFields.has('site') && <span className="wiz-ai-pill" style={{ marginLeft: 6 }}>✨ AI</span>}
+                      </label>
+                      <select className="select" value={siteId} onChange={e => { setSiteId(e.target.value); clearAiBadge('site'); }}>
                         {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </div>
                     <div className="field">
-                      <label className="label">Area / location</label>
-                      <input className="input" value={area} onChange={e => setArea(e.target.value)} placeholder="e.g. Lab 2, Workshop B" />
+                      <label className="label">
+                        Area / location
+                        {aiSuggestedFields.has('area') && <span className="wiz-ai-pill" style={{ marginLeft: 6 }}>✨ AI</span>}
+                      </label>
+                      <input className="input" value={area} onChange={e => { setArea(e.target.value); clearAiBadge('area'); }} placeholder="e.g. Lab 2, Workshop B" />
                     </div>
                   </div>
 
                   <div className="field" style={{ marginTop: 12 }}>
                     <label className="label">
                       Asset (optional)
+                      {aiSuggestedFields.has('asset') && <span className="wiz-ai-pill" style={{ marginLeft: 6 }}>✨ AI</span>}
                       {assets.length === 0 && siteId && <span className="helper" style={{ marginLeft: 8, fontSize: 11 }}>No assets registered for this site yet</span>}
                     </label>
-                    <select className="select" value={assetId} onChange={e => setAssetId(e.target.value)} disabled={assets.length === 0}>
+                    <select className="select" value={assetId} onChange={e => { setAssetId(e.target.value); clearAiBadge('asset'); }} disabled={assets.length === 0}>
                       <option value="">— No specific asset —</option>
                       {assets.map(a => (
                         <option key={a.id} value={a.id}>
@@ -493,8 +659,41 @@ export default function ReportWizard({ onClose, onSubmit }) {
                   <div className="wiz-section-h">
                     <div className="wiz-sh-icon"><Icon name="edit" size={16} /></div>
                     Description
+                    {aiSuggestedFields.has('description') && <span className="wiz-ai-pill" style={{ marginLeft: 8 }}>✨ AI</span>}
                   </div>
-                  <SmartInput value={description} onChange={setDescription} examples={EXAMPLE_DESCRIPTIONS} multiline rows={4} />
+                  <SmartInput value={description} onChange={(v) => { setDescription(v); clearAiBadge('description'); }} examples={EXAMPLE_DESCRIPTIONS} multiline rows={4} />
+                </div>
+
+                {/* Anonymous reporting toggle — disabled for injury / illness
+                    because those identify a person and are blocked at the BE
+                    (locked decision #10). */}
+                <div className="wiz-section">
+                  <label className="wiz-anon-row" style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    padding: 12, borderRadius: 'var(--sds-radius-md)',
+                    background: anonymousAllowed ? 'var(--sds-bg-surface-alt)' : 'rgba(0,0,0,0.03)',
+                    border: '1px solid var(--sds-border)',
+                    cursor: anonymousAllowed ? 'pointer' : 'not-allowed',
+                    opacity: anonymousAllowed ? 1 : 0.6,
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={isAnonymous && anonymousAllowed}
+                      onChange={(e) => setIsAnonymous(e.target.checked)}
+                      disabled={!anonymousAllowed}
+                      style={{ marginTop: 2 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--sds-fg-primary)' }}>
+                        Submit anonymously
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)', marginTop: 2 }}>
+                        {anonymousAllowed
+                          ? "Your identity will not be linked to this report — even though you're signed in, we won't store who submitted it."
+                          : `Not available for ${type} reports — these require identifying the affected person for OSHA recordkeeping.`}
+                      </div>
+                    </div>
+                  </label>
                 </div>
 
                 <div className="wiz-section">
@@ -571,6 +770,51 @@ export default function ReportWizard({ onClose, onSubmit }) {
             {/* STEP 1 — Details & risk */}
             {step === 1 && (
               <>
+                {/* Trending banner — visible whenever the cascade settled with
+                    >= 1 prior incident at this asset/area in the last 90 days
+                    (locked decision #16). */}
+                {classifyPreview && classifyPreview.prior_incidents_90d > 0 && (
+                  <div className="wiz-trend-banner">
+                    <div className="wiz-trend-icon"><Icon name="warning" size={18} /></div>
+                    <div className="wiz-trend-text">
+                      <strong>{classifyPreview.prior_incidents_90d} prior incident{classifyPreview.prior_incidents_90d > 1 ? 's' : ''}</strong>
+                      {' '}at this {assetId ? 'asset' : 'site/area'} in the last 90 days.
+                      {classifyPreview.prior_incidents_12mo > classifyPreview.prior_incidents_90d &&
+                        ` (${classifyPreview.prior_incidents_12mo} in the last 12 months.)`}
+                      {' '}This pattern raises the likelihood band — review carefully.
+                    </div>
+                  </div>
+                )}
+
+                {/* Auto-classification suggestion (locked decision #14). The
+                    matrix below is still user-driven; this surfaces what the
+                    rule engine would pick so the user can adopt it with one
+                    click or override. */}
+                {classifyPreview && classifyPreview.suggested_severity != null && (
+                  <div className="wiz-suggest-banner">
+                    <div className="wiz-suggest-icon"><Icon name="pulse" size={18} /></div>
+                    <div className="wiz-suggest-text">
+                      <strong>Suggested: S{classifyPreview.suggested_severity} · Track {classifyPreview.suggested_track}</strong>
+                      <div style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)', marginTop: 2 }}>
+                        {classifyPreview.reasoning}
+                      </div>
+                    </div>
+                    {(likelihood !== classifyPreview.suggested_likelihood ||
+                      consequence !== classifyPreview.suggested_consequence) && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => {
+                          setLikelihood(classifyPreview.suggested_likelihood);
+                          setConsequence(classifyPreview.suggested_consequence);
+                        }}
+                      >
+                        Apply
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <div className="wiz-section">
                   <div className="wiz-section-h">
                     <div className="wiz-sh-icon" style={{ background: typeOf(type)?.color || 'var(--sds-brand-primary)' }}>
@@ -800,6 +1044,14 @@ export default function ReportWizard({ onClose, onSubmit }) {
           </div>
         </div>
       </div>
+
+      {showVoiceModal && createPortal(
+        <VoiceIntakeModal
+          onCancel={() => setShowVoiceModal(false)}
+          onExtracted={handleVoiceExtracted}
+        />,
+        document.body
+      )}
     </div>
   );
 }

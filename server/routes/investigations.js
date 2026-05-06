@@ -225,8 +225,8 @@ router.post('/:id/assign-capa', (req, res) => {
   const capaNumber = nextCapaNumber();
 
   const result = db.prepare(`
-    INSERT INTO capas (capa_number, investigation_id, org_id, title, description, type, priority, owner_id, verifier_id, due_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO capas (capa_number, source_type, investigation_id, org_id, title, description, type, priority, owner_id, verifier_id, due_date)
+    VALUES (?, 'investigation', ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(capaNumber, inv.id, inv.org_id, title, description || null, type || 'corrective', priority || 'medium', owner_id, verifier_id, due_date);
 
   if (inv.status !== 'capa' && inv.status !== 'closed') {

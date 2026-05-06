@@ -1,8 +1,13 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
 import { nextIncidentNumber, nextInvestigationNumber, nextRiddorNumber } from '../services/numbering.js';
-import { calculateSeverityAndTrack, shouldAutoClose } from '../services/classification.js';
+import { calculateSeverityAndTrack, shouldAutoClose, inferSeverityFrom } from '../services/classification.js';
 import { determineOshaRecordability, determineRiddorReportability, calculateDeadline } from '../services/regulatory.js';
+import { verifyOshaRecordability } from '../services/recordability.js';
+import { parseBodyParts } from '../services/body_parts.js';
+import { extractFromTranscript } from '../services/voice_extract.js';
+import { injuryTypeForOsha300, descriptionForOsha300 } from '../services/osha_300_helpers.js';
+import { createCapaRow } from './capas.js';
 
 const router = Router();
 
@@ -22,6 +27,33 @@ function trackForSeverity(severity) {
   if (severity <= 2) return 'A';
   if (severity === 3) return 'B';
   return 'C';
+}
+
+// Count prior incidents in the last N days at the same asset (preferred)
+// or, lacking an asset, at the same site + area. Used for the trending
+// banner in the wizard and for likelihood inference. Excludes the
+// supplied `excludeId` so a freshly-inserted incident doesn't count itself.
+function priorIncidentsCount({ orgId, assetId, siteId, area, days = 90, excludeId = null }) {
+  const window = `-${days} days`;
+  if (assetId) {
+    const row = db.prepare(`
+      SELECT COUNT(*) as c FROM incidents
+      WHERE org_id = ? AND asset_id = ?
+        AND incident_datetime > datetime('now', ?)
+        AND (? IS NULL OR id != ?)
+    `).get(orgId, assetId, window, excludeId, excludeId);
+    return row.c;
+  }
+  if (siteId && area) {
+    const row = db.prepare(`
+      SELECT COUNT(*) as c FROM incidents
+      WHERE org_id = ? AND site_id = ? AND area = ?
+        AND incident_datetime > datetime('now', ?)
+        AND (? IS NULL OR id != ?)
+    `).get(orgId, siteId, area, window, excludeId, excludeId);
+    return row.c;
+  }
+  return 0;
 }
 
 router.get('/', (req, res) => {
@@ -55,6 +87,15 @@ router.get('/', (req, res) => {
     LIMIT ? OFFSET ?
   `).all(...params, Number(limit), offset);
 
+  // Scrub anonymous reporter info (per locked decision #10)
+  for (const inc of incidents) {
+    if (inc.is_anonymous) {
+      inc.reporter_name = 'Anonymous';
+      inc.reporter_initials = 'AN';
+      inc.reported_by = null;
+    }
+  }
+
   res.json({ incidents, total, page: Number(page), limit: Number(limit) });
 });
 
@@ -62,11 +103,13 @@ router.get('/:id', (req, res) => {
   const incident = db.prepare(`
     SELECT i.*, s.name as site_name, s.country as site_country,
            u.name as reporter_name, u.initials as reporter_initials,
-           a.name as assignee_name, a.initials as assignee_initials
+           a.name as assignee_name, a.initials as assignee_initials,
+           vu.name as verified_by_name, vu.initials as verified_by_initials
     FROM incidents i
     LEFT JOIN sites s ON s.id = i.site_id
     LEFT JOIN users u ON u.id = i.reported_by
     LEFT JOIN users a ON a.id = i.assigned_to
+    LEFT JOIN users vu ON vu.id = i.osha_recordable_verified_by
     WHERE i.id = ? AND i.org_id = ?
   `).get(req.params.id, req.user.org_id);
 
@@ -79,6 +122,16 @@ router.get('/:id', (req, res) => {
   ).all(incident.id);
 
   incident.type_data = JSON.parse(incident.type_data || '{}');
+  incident.body_parts_affected = JSON.parse(incident.body_parts_affected || '[]');
+
+  // Per locked decision #10: anonymous reports never expose a reporter
+  // identity, even if the column would otherwise show via JOIN. Scrub.
+  if (incident.is_anonymous) {
+    incident.reporter_name = 'Anonymous';
+    incident.reporter_initials = 'AN';
+    incident.reported_by = null;
+  }
+
   res.json({ ...incident, witnesses, attachments, activity });
 });
 
@@ -88,7 +141,13 @@ router.post('/', async (req, res, next) => {
     title, type, description, incident_datetime, site_id, area, specific_location,
     department, shift, likelihood, consequence, type_data, immediate_actions_taken,
     asset_id,
+    body_parts_affected,
+    is_anonymous,
     witnesses: witnessData,
+    voice_extraction_id,
+    voice_user_confirmed,
+    voice_user_edited,
+    voice_user_rejected,
   } = req.body;
 
   if (!title || !type || !site_id || !incident_datetime) {
@@ -96,6 +155,15 @@ router.post('/', async (req, res, next) => {
   }
 
   const orgId = req.user.org_id;
+
+  // Anonymous: per locked decision #10, allowed for 6 of 8 types only.
+  // Injury and illness identify a person and require an audit trail.
+  const anonymous = !!is_anonymous;
+  if (anonymous && (type === 'injury' || type === 'illness')) {
+    return res.status(400).json({
+      error: 'Anonymous reporting is not permitted for injury or illness types — these require identifying the affected person.',
+    });
+  }
 
   // Validate asset belongs to user's org + matches the chosen site (if provided)
   let resolvedAssetId = null;
@@ -108,6 +176,20 @@ router.post('/', async (req, res, next) => {
     resolvedAssetId = a.id;
   }
 
+  // Sanitize body_parts_affected against the canonical region ID set
+  const cleanedBodyParts = parseBodyParts(body_parts_affected);
+  const bodyPartsJson = JSON.stringify(cleanedBodyParts);
+
+  // Validate voice_extraction_id is one of the requester's extractions if
+  // supplied. Quietly null it out if it doesn't belong — no need to 400 the
+  // whole submission over a stale link.
+  let resolvedVoiceExtractionId = null;
+  if (voice_extraction_id) {
+    const ve = db.prepare('SELECT id FROM voice_extractions WHERE id = ? AND created_by = ?')
+      .get(voice_extraction_id, req.user.id);
+    if (ve) resolvedVoiceExtractionId = ve.id;
+  }
+
   const incidentNumber = nextIncidentNumber();
   const { severity, track } = calculateSeverityAndTrack(likelihood, consequence, type);
 
@@ -118,30 +200,56 @@ router.post('/', async (req, res, next) => {
   const autoClose = shouldAutoClose(type, severity, track);
   const status = autoClose ? 'Closed' : 'New';
 
+  // Per locked decision #10: anonymous incidents are stored with reported_by NULL
+  // even when the submitter is logged in. The activity log entry below is also
+  // scrubbed (user_id NULL, actor "Anonymous" in the description).
+  const reportedBy = anonymous ? null : req.user.id;
+
   const result = db.prepare(`
     INSERT INTO incidents (
       incident_number, org_id, site_id, title, type, description, incident_datetime,
       area, specific_location, department, shift, asset_id,
       severity, likelihood, consequence, track,
-      status, reported_by,
+      status, reported_by, is_anonymous, body_parts_affected,
       osha_recordable, osha_recordability_type,
       riddor_reportable, riddor_category,
       type_data, immediate_actions_taken,
+      voice_extraction_id,
       closed_at, closed_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     incidentNumber, orgId, site_id, title, type, description || '', incident_datetime,
     area || null, specific_location || null, department || null, shift || null, resolvedAssetId,
     severity, likelihood ?? null, consequence ?? null, track,
-    status, req.user.id,
+    status, reportedBy, anonymous ? 1 : 0, bodyPartsJson,
     osha.recordable ? 1 : 0, osha.type,
     riddor.reportable ? 1 : 0, riddor.category || null,
     JSON.stringify(type_data || {}), immediate_actions_taken || null,
+    resolvedVoiceExtractionId,
     autoClose ? new Date().toISOString() : null,
     autoClose ? 'Auto-closed (Track C)' : null
   );
 
   const incidentId = result.lastInsertRowid;
+
+  // Record the user's confirm/edit/reject decisions on the voice extraction
+  // row so audit can show how much of the AI's suggestion was kept verbatim.
+  if (resolvedVoiceExtractionId) {
+    db.prepare(`
+      UPDATE voice_extractions
+      SET incident_id = ?,
+          user_confirmed_fields = ?,
+          user_edited_fields = ?,
+          user_rejected_fields = ?
+      WHERE id = ?
+    `).run(
+      incidentId,
+      JSON.stringify(Array.isArray(voice_user_confirmed) ? voice_user_confirmed : []),
+      JSON.stringify(Array.isArray(voice_user_edited) ? voice_user_edited : []),
+      JSON.stringify(Array.isArray(voice_user_rejected) ? voice_user_rejected : []),
+      resolvedVoiceExtractionId,
+    );
+  }
 
   if (witnessData && Array.isArray(witnessData)) {
     const insertWitness = db.prepare('INSERT INTO witnesses (incident_id, name, contact) VALUES (?, ?, ?)');
@@ -150,10 +258,18 @@ router.post('/', async (req, res, next) => {
     }
   }
 
+  // Scrub the actor on anonymous incidents: log user_id NULL and a description
+  // that says "Anonymous reporter" rather than the JWT subject.
   db.prepare(`
     INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
     VALUES (?, 'incident', ?, 'created', ?, ?)
-  `).run(orgId, incidentId, `submitted ${incidentNumber} — ${type} · Sev ${severity} · Track ${track}`, req.user.id);
+  `).run(
+    orgId, incidentId,
+    anonymous
+      ? `submitted ${incidentNumber} anonymously — ${type} · Sev ${severity} · Track ${track}`
+      : `submitted ${incidentNumber} — ${type} · Sev ${severity} · Track ${track}`,
+    anonymous ? null : req.user.id,
+  );
 
   if (autoClose) {
     db.prepare(`
@@ -176,12 +292,13 @@ router.post('/', async (req, res, next) => {
       orgId, site_id, incidentId, year, caseNum,
       td.injured_person?.name || td.affected_person?.name || 'Unknown',
       td.injured_person?.job_title || td.affected_person?.job_title || null,
-      incident_datetime, area || null, description || title,
+      incident_datetime, area || null,
+      descriptionForOsha300({ description, title, bodyParts: cleanedBodyParts }),
       osha.type === 'death' ? 1 : 0,
       osha.type === 'days_away' ? 1 : 0,
       osha.type === 'job_transfer' ? 1 : 0,
       osha.type === 'other_recordable' ? 1 : 0,
-      type === 'injury' ? 'injury' : 'all_other'
+      injuryTypeForOsha300(type, type_data),
     );
   }
 
@@ -208,13 +325,515 @@ router.post('/', async (req, res, next) => {
 
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incidentId);
   incident.type_data = JSON.parse(incident.type_data || '{}');
+  incident.body_parts_affected = JSON.parse(incident.body_parts_affected || '[]');
+
+  // Trending banner data (per locked decision #16): how many incidents
+  // already happened at this asset (or site+area) in the last 90 days.
+  // Counted EXCLUDING the just-inserted row so the value reads as "prior."
+  incident.prior_incidents_count = priorIncidentsCount({
+    orgId,
+    assetId: resolvedAssetId,
+    siteId: site_id,
+    area,
+    days: 90,
+    excludeId: incidentId,
+  });
+
   res.status(201).json(incident);
   } catch (err) { next(err); }
+});
+
+// Classify-preview: lets the wizard pre-fill the matrix selection with
+// rule-based inference (likelihood × consequence + reasoning) BEFORE the
+// user submits. Per locked decision #14 — auto-classification. Read-only.
+router.post('/classify-preview', (req, res) => {
+  const { type, type_data, body_parts_affected, asset_id, site_id, area } = req.body;
+  const orgId = req.user.org_id;
+
+  let assetSiteId = null;
+  if (asset_id) {
+    const a = db.prepare('SELECT site_id FROM assets WHERE id = ? AND org_id = ?').get(asset_id, orgId);
+    if (a) assetSiteId = a.site_id;
+  }
+
+  const prior = priorIncidentsCount({
+    orgId,
+    assetId: asset_id || null,
+    siteId: site_id || assetSiteId,
+    area,
+    days: 365, // for likelihood inference, 12-month window per locked spec
+  });
+
+  const inference = inferSeverityFrom({
+    type,
+    type_data,
+    body_parts_affected: parseBodyParts(body_parts_affected),
+    prior_incidents_count: prior,
+  });
+
+  // Recent count over the 90-day window for the wizard banner ("3 prior in 90 days")
+  const recent = priorIncidentsCount({
+    orgId,
+    assetId: asset_id || null,
+    siteId: site_id || assetSiteId,
+    area,
+    days: 90,
+  });
+
+  res.json({
+    ...inference,
+    prior_incidents_12mo: prior,
+    prior_incidents_90d: recent,
+  });
+});
+
+// =============================================================================
+// Inline notes on the activity timeline (UX-B).
+//
+// Any authenticated user can post a free-text note against an incident.
+// Workers can leave observations ("spoke with site mgr — no PPE was issued")
+// alongside the system-generated events. Activity timeline GET already
+// returns these — they just need an INSERT path.
+// =============================================================================
+
+router.post('/:id/note', (req, res) => {
+  const incident = db.prepare('SELECT id, org_id, incident_number FROM incidents WHERE id = ? AND org_id = ?')
+    .get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  const text = (req.body?.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'Note text is required' });
+  if (text.length > 4000) return res.status(400).json({ error: 'Note is too long (max 4000 chars).' });
+
+  const result = db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+    VALUES (?, 'incident', ?, 'note', ?, ?)
+  `).run(incident.org_id, incident.id, text, req.user.id);
+
+  // Return the row already joined with the user info so the FE can append
+  // it to the timeline without re-fetching the whole incident.
+  const row = db.prepare(`
+    SELECT al.*, u.name as user_name, u.initials as user_initials
+    FROM activity_log al
+    LEFT JOIN users u ON u.id = al.user_id
+    WHERE al.id = ?
+  `).get(result.lastInsertRowid);
+
+  res.status(201).json(row);
+});
+
+// =============================================================================
+// Voice intake — pre-incident transcript → structured fields.
+//
+// The FE captures audio with the Web Speech API and posts the resulting text
+// here. We never see audio. Anthropic extracts a typed JSON shape; the
+// transcript text is hashed but not stored (privacy decision in the spec).
+// The wizard then renders fields with an "✨ AI suggested" badge until the
+// user confirms or edits each one.
+//
+// 503 (no API key) is a soft failure — the demo seed includes a fallback
+// voice_extractions row so this beat is still demonstrable without a key.
+// =============================================================================
+
+router.post('/voice-extract', async (req, res, next) => {
+  try {
+    const { transcript } = req.body || {};
+    const result = await extractFromTranscript({
+      transcript,
+      orgId: req.user.org_id,
+      userId: req.user.id,
+    });
+
+    // entity_type='system' (pre-incident, no incident_id yet); the
+    // extraction_id is captured in metadata. The activity_log CHECK only
+    // allows incident/investigation/capa/system, so 'system' is the right
+    // bucket for a transcription event that hasn't tied to an incident yet.
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+      VALUES (?, 'system', NULL, 'voice_extracted', ?, ?, ?)
+    `).run(
+      req.user.org_id,
+      `voice transcript extracted (${result.transcript_hash.slice(0, 8)}…)`,
+      req.user.id,
+      JSON.stringify({
+        extraction_id: result.extraction_id,
+        transcript_hash: result.transcript_hash,
+        extracted_type: result.extracted_fields.type,
+        missing_required: result.missing_required,
+      }),
+    );
+
+    res.json(result);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    // Anthropic SDK errors expose .status (auth, rate-limit, etc.) — surface
+    // these as 502 so the wizard can show a "voice intake failed, try again
+    // or fill manually" message instead of a generic 500.
+    if (err.status || err.name === 'APIError' || err.message?.includes('Connection error')) {
+      return res.status(502).json({
+        error: 'Voice extraction service is unavailable right now. You can fill the wizard manually.',
+        upstream: err.message,
+      });
+    }
+    next(err);
+  }
+});
+
+// =============================================================================
+// Stop-work endpoints (per locked decision #11)
+//
+// Submission is open to ANY authenticated user (Worker / EHS / Site Admin) —
+// never deter someone from triggering. Anonymous flag honored. The created
+// incident is locked: severity=1, track='A', is_imminent_danger=1,
+// stop_work_status='active'. Down-routing blocked in PATCH/escalate guards.
+//
+// State endpoints (acknowledge / resolve / cancel) are elevated-only.
+// =============================================================================
+
+router.post('/stop-work', async (req, res, next) => {
+  try {
+    const { site_id, area, description, asset_id, is_anonymous } = req.body;
+
+    if (!site_id || !area) {
+      return res.status(400).json({ error: 'site_id and area are required' });
+    }
+
+    const orgId = req.user.org_id;
+    const site = db.prepare('SELECT id, country FROM sites WHERE id = ? AND org_id = ?').get(site_id, orgId);
+    if (!site) return res.status(404).json({ error: 'Site not found in your organization' });
+
+    let resolvedAssetId = null;
+    if (asset_id) {
+      const a = db.prepare('SELECT id, site_id FROM assets WHERE id = ? AND org_id = ? AND active = 1').get(asset_id, orgId);
+      if (!a) return res.status(404).json({ error: 'Asset not found in your organization' });
+      if (a.site_id !== Number(site_id)) {
+        return res.status(400).json({ error: 'Asset does not belong to the chosen site' });
+      }
+      resolvedAssetId = a.id;
+    }
+
+    const anonymous = !!is_anonymous;
+    const reportedBy = anonymous ? null : req.user.id;
+    const incidentNumber = nextIncidentNumber();
+    const nowIso = new Date().toISOString();
+    const title = `STOP WORK — ${area}`;
+
+    const result = db.prepare(`
+      INSERT INTO incidents (
+        incident_number, org_id, site_id, title, type, description, incident_datetime,
+        area, asset_id,
+        severity, likelihood, consequence, track,
+        status, reported_by, is_anonymous, is_imminent_danger, stop_work_status,
+        body_parts_affected
+      ) VALUES (?, ?, ?, ?, 'unsafe', ?, ?, ?, ?, 1, 0, 4, 'A', 'New', ?, ?, 1, 'active', '[]')
+    `).run(
+      incidentNumber, orgId, site_id, title,
+      description || 'Stop-work submitted — details to follow',
+      nowIso, area, resolvedAssetId,
+      reportedBy, anonymous ? 1 : 0,
+    );
+    const incidentId = result.lastInsertRowid;
+
+    // Activity log — scrubbed if anonymous
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+      VALUES (?, 'incident', ?, 'stop_work_submitted', ?, ?)
+    `).run(
+      orgId, incidentId,
+      anonymous
+        ? `STOP-WORK ${incidentNumber} submitted anonymously at ${area}`
+        : `STOP-WORK ${incidentNumber} submitted at ${area}`,
+      anonymous ? null : req.user.id,
+    );
+
+    // Notify all elevated users at the site (recipients computed at fire time
+    // per locked decision #9 — role × scope, not stored configuration).
+    const recipients = db.prepare(`
+      SELECT id FROM users
+      WHERE org_id = ? AND is_active = 1
+        AND role IN ('supervisor', 'ehs_officer', 'ehs_manager', 'admin')
+        AND (site_id = ? OR site_id IS NULL OR role = 'admin')
+    `).all(orgId, site_id);
+    const insertNotif = db.prepare(`
+      INSERT INTO notifications (org_id, user_id, type, incident_id, title, body, severity)
+      VALUES (?, ?, 'stop_work_active', ?, ?, ?, 'err')
+    `);
+    for (const r of recipients) {
+      insertNotif.run(
+        orgId, r.id, incidentId,
+        `STOP WORK at ${site.id ? area : ''} — immediate response required`,
+        `${incidentNumber}: ${description || 'No details provided'}`,
+      );
+    }
+
+    const incident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incidentId);
+    incident.type_data = JSON.parse(incident.type_data || '{}');
+    incident.body_parts_affected = JSON.parse(incident.body_parts_affected || '[]');
+    res.status(201).json(incident);
+  } catch (err) { next(err); }
+});
+
+// Acknowledge — elevated only
+router.post('/:id/stop-work-acknowledge', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot acknowledge stop-work.' });
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!incident.is_imminent_danger) return res.status(400).json({ error: 'Not a stop-work incident' });
+  if (incident.stop_work_status !== 'active') {
+    return res.status(409).json({ error: `Cannot acknowledge — current state is "${incident.stop_work_status}"` });
+  }
+
+  db.prepare(`
+    UPDATE incidents SET stop_work_status = 'acknowledged', updated_at = datetime('now')
+    WHERE id = ?
+  `).run(incident.id);
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+    VALUES (?, 'incident', ?, 'stop_work_acknowledged', ?, ?)
+  `).run(incident.org_id, incident.id, `acknowledged stop-work ${incident.incident_number}`, req.user.id);
+
+  const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
+  res.json(updated);
+});
+
+// Resolve — elevated only, requires reason + remediation
+router.post('/:id/stop-work-resolve', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot resolve stop-work.' });
+  const { reason, remediation } = req.body;
+  if (!reason || !reason.trim()) return res.status(400).json({ error: 'reason is required' });
+
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!incident.is_imminent_danger) return res.status(400).json({ error: 'Not a stop-work incident' });
+  if (incident.stop_work_status !== 'active' && incident.stop_work_status !== 'acknowledged') {
+    return res.status(409).json({ error: `Cannot resolve — current state is "${incident.stop_work_status}"` });
+  }
+
+  const remediationLine = remediation && remediation.trim() ? `\n\nRemediation: ${remediation.trim()}` : '';
+  const closeNotes = `${reason.trim()}${remediationLine}`;
+
+  db.prepare(`
+    UPDATE incidents
+    SET stop_work_status = 'resolved',
+        closed_reason = ?, closed_notes = ?, closed_at = datetime('now'), closed_by = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(`stop-work resolved: ${reason.trim()}`, closeNotes, req.user.id, incident.id);
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+    VALUES (?, 'incident', ?, 'stop_work_resolved', ?, ?, ?)
+  `).run(
+    incident.org_id, incident.id,
+    `resolved stop-work ${incident.incident_number} — ${reason.trim()}`,
+    req.user.id,
+    JSON.stringify({ reason: reason.trim(), remediation: remediation?.trim() || null }),
+  );
+
+  const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
+  res.json(updated);
+});
+
+// Cancel — Site Admin only (false-alarm path), requires reason
+router.post('/:id/stop-work-cancel', (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only a Site Admin can cancel a stop-work (false-alarm path).' });
+  }
+  const { reason } = req.body;
+  if (!reason || !reason.trim() || reason.trim().length < 20) {
+    return res.status(400).json({ error: 'reason is required and must be at least 20 characters' });
+  }
+
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!incident.is_imminent_danger) return res.status(400).json({ error: 'Not a stop-work incident' });
+  if (incident.stop_work_status === 'resolved' || incident.stop_work_status === 'cancelled') {
+    return res.status(409).json({ error: `Cannot cancel — current state is "${incident.stop_work_status}"` });
+  }
+
+  db.prepare(`
+    UPDATE incidents
+    SET stop_work_status = 'cancelled',
+        closed_reason = ?, closed_notes = ?, closed_at = datetime('now'), closed_by = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(`stop-work cancelled (false alarm): ${reason.trim()}`, reason.trim(), req.user.id, incident.id);
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+    VALUES (?, 'incident', ?, 'stop_work_cancelled', ?, ?, ?)
+  `).run(
+    incident.org_id, incident.id,
+    `cancelled stop-work ${incident.incident_number} (false alarm) — ${reason.trim()}`,
+    req.user.id,
+    JSON.stringify({ reason: reason.trim() }),
+  );
+
+  const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
+  res.json(updated);
+});
+
+// =============================================================================
+// EHS recordability verification (per locked decision #1, hybrid path)
+//
+// Reporter form provides a fast `osha_recordable` guess at submission time.
+// This endpoint runs the full 5-gate decision tree and stamps the verifying
+// EHS Manager + timestamp on the incident. Elevated roles only. The verifier
+// can either confirm or override the original guess; both are stored on the
+// incident plus a structured activity_log entry with the gate trail.
+// =============================================================================
+
+// Direct CAPA creation from an incident (pre-investigation path). Sets
+// source_type='incident' and skips the investigation step. Elevated only.
+router.post('/:id/create-capa', (req, res) => {
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Worker role cannot create CAPAs.' });
+  }
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  try {
+    const capaId = createCapaRow({
+      orgId: req.user.org_id,
+      sourceType: 'incident',
+      investigationId: null,
+      incidentId: incident.id,
+      body: req.body,
+      userId: req.user.id,
+    });
+    const capa = db.prepare(`
+      SELECT c.*, src_inc.incident_number as incident_number
+      FROM capas c
+      LEFT JOIN incidents src_inc ON src_inc.id = c.incident_id
+      WHERE c.id = ?
+    `).get(capaId);
+    res.status(201).json(capa);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    throw err;
+  }
+});
+
+router.post('/:id/recordability-verify', (req, res) => {
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can verify OSHA recordability.' });
+  }
+
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  if (incident.type !== 'injury' && incident.type !== 'illness') {
+    return res.status(400).json({ error: 'Recordability verification only applies to injury or illness incidents.' });
+  }
+
+  const decision = verifyOshaRecordability(req.body || {});
+
+  const nowIso = new Date().toISOString();
+  db.prepare(`
+    UPDATE incidents
+    SET osha_recordable = ?,
+        osha_recordability_type = ?,
+        osha_recordable_verified_by = ?,
+        osha_recordable_verified_at = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(
+    decision.recordable ? 1 : 0,
+    decision.type,
+    req.user.id,
+    nowIso,
+    incident.id,
+  );
+
+  const summary = decision.recordable
+    ? `verified OSHA recordable as ${decision.type}`
+    : `verified NOT OSHA recordable${decision.failed_gate ? ` (gate: ${decision.failed_gate})` : ''}`;
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+    VALUES (?, 'incident', ?, 'recordability_verified', ?, ?, ?)
+  `).run(
+    incident.org_id, incident.id,
+    `${summary} for ${incident.incident_number}`,
+    req.user.id,
+    JSON.stringify({
+      recordable: decision.recordable,
+      type: decision.type,
+      reasoning: decision.reasoning,
+      failed_gate: decision.failed_gate,
+      gates: req.body || {},
+    }),
+  );
+
+  // 300 Log row management: if newly recordable and no row yet, insert one;
+  // if previously recordable but now not, the existing row is left in place
+  // (reverts handled by EHS via the OSHA log UI — out of scope for verify).
+  if (decision.recordable) {
+    const existing = db.prepare('SELECT id FROM osha_300_log WHERE incident_id = ?').get(incident.id);
+    if (!existing) {
+      const year = new Date(incident.incident_datetime).getFullYear();
+      const maxCase = db.prepare('SELECT MAX(case_number) as m FROM osha_300_log WHERE site_id = ? AND calendar_year = ?').get(incident.site_id, year);
+      const caseNum = (maxCase?.m || 0) + 1;
+      const td = JSON.parse(incident.type_data || '{}');
+
+      const verifyBodyParts = JSON.parse(incident.body_parts_affected || '[]');
+      db.prepare(`
+        INSERT INTO osha_300_log (
+          org_id, site_id, incident_id, calendar_year, case_number,
+          employee_name, job_title, injury_date, location, description,
+          classification_death, classification_days_away, classification_job_transfer, classification_other,
+          injury_type
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        incident.org_id, incident.site_id, incident.id, year, caseNum,
+        td.injured_person?.name || td.affected_person?.name || 'Unknown',
+        td.injured_person?.job_title || td.affected_person?.job_title || null,
+        incident.incident_datetime, incident.area || null,
+        descriptionForOsha300({ description: incident.description, title: incident.title, bodyParts: verifyBodyParts }),
+        decision.type === 'death' ? 1 : 0,
+        decision.type === 'days_away' ? 1 : 0,
+        decision.type === 'job_transfer' ? 1 : 0,
+        decision.type === 'other_recordable' ? 1 : 0,
+        injuryTypeForOsha300(incident.type, td),
+      );
+    }
+  }
+
+  const updated = db.prepare(`
+    SELECT i.*, vu.name as verified_by_name, vu.initials as verified_by_initials
+    FROM incidents i
+    LEFT JOIN users vu ON vu.id = i.osha_recordable_verified_by
+    WHERE i.id = ?
+  `).get(incident.id);
+
+  res.json({
+    incident: updated,
+    decision,
+  });
 });
 
 router.patch('/:id', (req, res) => {
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  // Stop-work down-route guard (locked decision #11):
+  // If is_imminent_danger=1, severity must stay at S1 and track must stay 'A'.
+  // No exception — not even Site Admin can downgrade a stop-work.
+  if (incident.is_imminent_danger) {
+    const newSeverity = req.body.severity !== undefined ? Number(req.body.severity) : null;
+    const newTrack = req.body.track !== undefined ? req.body.track : null;
+    if (newSeverity !== null && newSeverity > 1) {
+      return res.status(409).json({
+        error: 'Stop-work incidents cannot be down-routed. Severity is locked at S1.',
+      });
+    }
+    if (newTrack !== null && newTrack !== 'A') {
+      return res.status(409).json({
+        error: 'Stop-work incidents cannot be down-routed. Track is locked at A.',
+      });
+    }
+  }
 
   const updatable = ['title', 'description', 'severity', 'track', 'status', 'assigned_to', 'triage_due', 'triage_notes',
     'osha_recordable', 'osha_recordability_type', 'osha_days_away', 'osha_days_restricted',
@@ -239,6 +858,13 @@ router.patch('/:id', (req, res) => {
   if (req.body.type_data !== undefined) {
     sets.push('type_data = ?');
     params.push(JSON.stringify(req.body.type_data));
+  }
+  // body_parts_affected: pass through parseBodyParts to drop unknown IDs.
+  // Note: is_anonymous is intentionally NOT in the updatable list — once a
+  // report is anonymous, it stays anonymous (per locked decision #10).
+  if (req.body.body_parts_affected !== undefined) {
+    sets.push('body_parts_affected = ?');
+    params.push(JSON.stringify(parseBodyParts(req.body.body_parts_affected)));
   }
 
   // Severity override: capture audit trail, recompute track if not explicitly set.

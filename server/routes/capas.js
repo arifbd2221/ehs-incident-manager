@@ -1,7 +1,120 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
+import { nextCapaNumber } from '../services/numbering.js';
 
 const router = Router();
+
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
+
+// Shared INSERT used by both /capas (polymorphic) and /incidents/:id/create-capa.
+// Validates source_type ↔ id shape against the migration-003 CHECK constraint
+// and the owner != verifier rule (DB trigger enforces, but fail-fast is friendlier).
+// Returns the created row, throws an Error with `.statusCode` on validation failure.
+function createCapaRow({ orgId, sourceType, investigationId, incidentId, body, userId }) {
+  const {
+    title, description, type, priority, category,
+    owner_id, verifier_id, due_date,
+  } = body;
+
+  if (!title || !owner_id || !verifier_id || !due_date) {
+    const err = new Error('Title, owner, verifier, and due date are required');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (Number(owner_id) === Number(verifier_id)) {
+    const err = new Error('Owner and verifier must be different people');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const safeType = type === 'preventive' ? 'preventive' : 'corrective';
+  const safePriority = ['critical', 'high', 'medium', 'low'].includes(priority) ? priority : 'medium';
+
+  // Source-shape validation mirrors the table-level CHECK so we 400 on mismatch
+  // instead of letting SQLite throw a generic constraint error.
+  if (sourceType === 'investigation') {
+    if (!investigationId || incidentId) {
+      const err = new Error('source_type=investigation requires investigation_id and forbids incident_id');
+      err.statusCode = 400;
+      throw err;
+    }
+    const inv = db.prepare('SELECT id FROM investigations WHERE id = ? AND org_id = ?').get(investigationId, orgId);
+    if (!inv) {
+      const err = new Error('Investigation not found in your organization');
+      err.statusCode = 404;
+      throw err;
+    }
+  } else if (sourceType === 'incident') {
+    if (!incidentId || investigationId) {
+      const err = new Error('source_type=incident requires incident_id and forbids investigation_id');
+      err.statusCode = 400;
+      throw err;
+    }
+    const inc = db.prepare('SELECT id FROM incidents WHERE id = ? AND org_id = ?').get(incidentId, orgId);
+    if (!inc) {
+      const err = new Error('Incident not found in your organization');
+      err.statusCode = 404;
+      throw err;
+    }
+  } else if (sourceType === 'proactive') {
+    if (investigationId || incidentId) {
+      const err = new Error('source_type=proactive forbids both investigation_id and incident_id');
+      err.statusCode = 400;
+      throw err;
+    }
+  } else {
+    const err = new Error('source_type must be one of: investigation | incident | proactive');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Cross-org for owner/verifier: must belong to same org as the requester.
+  const owner = db.prepare('SELECT id FROM users WHERE id = ? AND org_id = ?').get(owner_id, orgId);
+  const verifier = db.prepare('SELECT id FROM users WHERE id = ? AND org_id = ?').get(verifier_id, orgId);
+  if (!owner || !verifier) {
+    const err = new Error('Owner and verifier must be users in your organization');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const capaNumber = nextCapaNumber();
+
+  const result = db.prepare(`
+    INSERT INTO capas (
+      capa_number, source_type, investigation_id, incident_id, org_id,
+      title, description, type, priority, category,
+      owner_id, verifier_id, due_date
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    capaNumber, sourceType, investigationId || null, incidentId || null, orgId,
+    title, description || null, safeType, safePriority, category || null,
+    Number(owner_id), Number(verifier_id), due_date,
+  );
+
+  const capaId = result.lastInsertRowid;
+  const sourceRef =
+    sourceType === 'investigation'
+      ? db.prepare('SELECT investigation_number FROM investigations WHERE id = ?').get(investigationId)?.investigation_number
+      : sourceType === 'incident'
+      ? db.prepare('SELECT incident_number FROM incidents WHERE id = ?').get(incidentId)?.incident_number
+      : null;
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+    VALUES (?, 'capa', ?, 'created', ?, ?)
+  `).run(
+    orgId, capaId,
+    sourceType === 'proactive'
+      ? `created proactive CAPA ${capaNumber}`
+      : `created CAPA ${capaNumber} from ${sourceRef || sourceType}`,
+    userId,
+  );
+
+  return capaId;
+}
+
+export { createCapaRow };
 
 router.get('/', (req, res) => {
   const { status, owner_id, overdue, search, page = 1, limit = 50 } = req.query;
@@ -24,11 +137,13 @@ router.get('/', (req, res) => {
   const total = db.prepare(`SELECT COUNT(*) as count FROM capas c WHERE ${whereClause}`).get(...params).count;
 
   const capas = db.prepare(`
-    SELECT c.*, inv.investigation_number, inv.incident_id,
+    SELECT c.*, inv.investigation_number, COALESCE(inv.incident_id, c.incident_id) as incident_id,
+           src_inc.incident_number as incident_number,
            o.name as owner_name, o.initials as owner_initials,
            v.name as verifier_name, v.initials as verifier_initials
     FROM capas c
     LEFT JOIN investigations inv ON inv.id = c.investigation_id
+    LEFT JOIN incidents src_inc ON src_inc.id = c.incident_id
     LEFT JOIN users o ON o.id = c.owner_id
     LEFT JOIN users v ON v.id = c.verifier_id
     WHERE ${whereClause}
@@ -53,11 +168,13 @@ router.get('/', (req, res) => {
 
 router.get('/:id', (req, res) => {
   const capa = db.prepare(`
-    SELECT c.*, inv.investigation_number, inv.incident_id,
+    SELECT c.*, inv.investigation_number, COALESCE(inv.incident_id, c.incident_id) as incident_id,
+           src_inc.incident_number as incident_number,
            o.name as owner_name, o.initials as owner_initials,
            v.name as verifier_name, v.initials as verifier_initials
     FROM capas c
     LEFT JOIN investigations inv ON inv.id = c.investigation_id
+    LEFT JOIN incidents src_inc ON src_inc.id = c.incident_id
     LEFT JOIN users o ON o.id = c.owner_id
     LEFT JOIN users v ON v.id = c.verifier_id
     WHERE c.id = ? AND c.org_id = ?
@@ -77,6 +194,36 @@ router.get('/:id', (req, res) => {
   `).all(capa.id);
 
   res.json(capa);
+});
+
+// Polymorphic CAPA create. Accepts source_type ∈ {investigation, incident, proactive}.
+// Elevated roles only (matches assign-capa intent on investigations).
+router.post('/', (req, res) => {
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Worker role cannot create CAPAs.' });
+  }
+  try {
+    const { source_type, investigation_id, incident_id } = req.body;
+    const capaId = createCapaRow({
+      orgId: req.user.org_id,
+      sourceType: source_type,
+      investigationId: investigation_id || null,
+      incidentId: incident_id || null,
+      body: req.body,
+      userId: req.user.id,
+    });
+    const capa = db.prepare(`
+      SELECT c.*, inv.investigation_number, src_inc.incident_number as incident_number
+      FROM capas c
+      LEFT JOIN investigations inv ON inv.id = c.investigation_id
+      LEFT JOIN incidents src_inc ON src_inc.id = c.incident_id
+      WHERE c.id = ?
+    `).get(capaId);
+    res.status(201).json(capa);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    throw err;
+  }
 });
 
 router.patch('/:id', (req, res) => {
