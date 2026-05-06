@@ -373,20 +373,18 @@ export default function InvestigationDetail() {
                   {(inv.attachments || []).length + (inv.linked_documents || []).length} item{(inv.attachments || []).length + (inv.linked_documents || []).length > 1 ? 's' : ''}
                 </span>
               )}
-              {canEdit && (
-                <button
-                  className="invd-attach-add"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  style={(inv.attachments || []).length + (inv.linked_documents || []).length === 0 ? { marginLeft: 'auto' } : undefined}
-                >
-                  {uploading ? (
-                    <><span className="invd-attach-spinner"/>Uploading…</>
-                  ) : (
-                    <><Icon name="plus" size={12}/>Add files</>
-                  )}
-                </button>
-              )}
+              <button
+                className="invd-attach-add"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                style={(inv.attachments || []).length + (inv.linked_documents || []).length === 0 ? { marginLeft: 'auto' } : undefined}
+              >
+                {uploading ? (
+                  <><span className="invd-attach-spinner"/>Uploading…</>
+                ) : (
+                  <><Icon name="plus" size={12}/>Add files</>
+                )}
+              </button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -397,20 +395,16 @@ export default function InvestigationDetail() {
             </div>
             <div className="invd-card-body">
               {((inv.attachments || []).length === 0 && (inv.linked_documents || []).length === 0) ? (
-                canEdit ? (
-                  <div className="invd-attach-empty">
-                    <p>No evidence uploaded or linked yet.</p>
-                    <button
-                      className="invd-attach-add-empty"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                    >
-                      {uploading ? 'Uploading…' : '+ Attach a file'}
-                    </button>
-                  </div>
-                ) : (
-                  <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No evidence uploaded or linked yet.</p>
-                )
+                <div className="invd-attach-empty">
+                  <p>No evidence uploaded or linked yet.</p>
+                  <button
+                    className="invd-attach-add-empty"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? 'Uploading…' : '+ Attach a file'}
+                  </button>
+                </div>
               ) : (
                 <div className="invd-evidence-grid">
                   {(inv.attachments || []).map(a => (
