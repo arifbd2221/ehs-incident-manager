@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getIncidents } from '../../api/incidents';
 import { useApp } from '../../context/AppContext';
@@ -27,6 +27,8 @@ export default function IncidentsList() {
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef(null);
 
   const fetchIncidents = () => {
     setLoading(true);
@@ -43,6 +45,15 @@ export default function IncidentsList() {
 
   useEffect(() => { fetchIncidents(); }, [tab, typeFilter, page, refreshKey]);
 
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handler = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) setFilterOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [filterOpen]);
+
   const filtered = useMemo(() => {
     if (!search.trim()) return incidents;
     const q = search.toLowerCase();
@@ -54,27 +65,68 @@ export default function IncidentsList() {
     );
   }, [incidents, search]);
 
+  const stats = useMemo(() => {
+    const open = incidents.filter(r => r.status === 'New').length;
+    const investigating = incidents.filter(r => r.status === 'Investigating').length;
+    const closed = incidents.filter(r => r.status === 'Closed').length;
+    return { open, investigating, closed };
+  }, [incidents]);
+
+  const activeTypeName = TYPES.find(t => t.id === typeFilter)?.name;
+
   const tabs = [
-    { id: 'all', label: 'All' },
-    { id: 'open', label: 'Open' },
-    { id: 'inprogress', label: 'In Progress' },
-    { id: 'closed', label: 'Closed' },
+    { id: 'all', label: 'All', count: total },
+    { id: 'open', label: 'Open', count: stats.open },
+    { id: 'inprogress', label: 'In Progress', count: stats.investigating },
+    { id: 'closed', label: 'Closed', count: stats.closed },
   ];
 
   return (
     <div className="page inc-page">
-      {/* Hero header */}
+      {/* Hero header with stats */}
       <div className="inc-hero">
-        <div>
-          <h1 className="inc-heading">Incidents</h1>
-          <p className="inc-subtitle">
-            Capture, classify, and route all safety events
-            <span className="count-badge">{total} total</span>
-          </p>
+        <div className="inc-hero-row">
+          <div className="inc-hero-icon">
+            <Icon name="incidents" size={24} />
+          </div>
+          <div className="inc-hero-text">
+            <h1 className="inc-heading">Incidents</h1>
+            <p className="inc-subtitle">Capture, classify, and route all safety events</p>
+          </div>
+          <div className="inc-hero-actions">
+            <button className="inc-btn-export"><Icon name="export" size={15}/>Export CSV</button>
+            <button className="inc-btn-report" onClick={() => setWizardOpen(true)}><Icon name="plus" size={15}/>Report incident</button>
+          </div>
         </div>
-        <div className="inc-hero-actions">
-          <button className="inc-btn-export"><Icon name="export" size={15}/>Export CSV</button>
-          <button className="inc-btn-report" onClick={() => setWizardOpen(true)}><Icon name="plus" size={15}/>Report incident</button>
+        <div className="inc-stats">
+          <div className="inc-stat" style={{ '--is-color': '#626DF9' }}>
+            <div className="inc-stat-icon"><Icon name="incidents" size={16} /></div>
+            <div>
+              <div className="inc-stat-val">{total}</div>
+              <div className="inc-stat-lbl">Total</div>
+            </div>
+          </div>
+          <div className="inc-stat" style={{ '--is-color': '#16a34a' }}>
+            <div className="inc-stat-icon"><Icon name="pulse" size={16} /></div>
+            <div>
+              <div className="inc-stat-val">{stats.open}</div>
+              <div className="inc-stat-lbl">Open</div>
+            </div>
+          </div>
+          <div className="inc-stat" style={{ '--is-color': '#2563eb' }}>
+            <div className="inc-stat-icon"><Icon name="investigation" size={16} /></div>
+            <div>
+              <div className="inc-stat-val">{stats.investigating}</div>
+              <div className="inc-stat-lbl">Investigating</div>
+            </div>
+          </div>
+          <div className="inc-stat" style={{ '--is-color': '#6b7280' }}>
+            <div className="inc-stat-icon"><Icon name="check" size={16} /></div>
+            <div>
+              <div className="inc-stat-val">{stats.closed}</div>
+              <div className="inc-stat-lbl">Closed</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -84,21 +136,71 @@ export default function IncidentsList() {
           {tabs.map(t => (
             <button key={t.id} className={`inc-tab ${tab === t.id ? 'active' : ''}`} onClick={() => { setTab(t.id); setPage(1); }}>
               {t.label}
-              <span className="tab-count">{t.id === 'all' ? total : '—'}</span>
+              <span className="tab-count">{t.count}</span>
             </button>
           ))}
         </div>
 
-        <select className="inc-type-select" value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setPage(1); }}>
-          <option value="">All types</option>
-          {TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
+        <div className="inc-filter-wrap" ref={filterRef}>
+          <button
+            className={`inc-filter-trigger ${filterOpen ? 'is-open' : ''} ${typeFilter ? 'has-filters' : ''}`}
+            onClick={() => setFilterOpen(o => !o)}
+          >
+            <Icon name="filter" size={14} />
+            Type
+            {typeFilter && <span className="inc-filter-badge">1</span>}
+          </button>
+          {filterOpen && (
+            <div className="inc-filter-dropdown">
+              <div className="inc-filter-section-label">Incident type</div>
+              <div className="inc-filter-options">
+                <button
+                  className={`inc-filter-opt ${!typeFilter ? 'active' : ''}`}
+                  onClick={() => { setTypeFilter(''); setPage(1); }}
+                >
+                  All types
+                </button>
+                {TYPES.map(ty => (
+                  <button
+                    key={ty.id}
+                    className={`inc-filter-opt ${typeFilter === ty.id ? 'active' : ''}`}
+                    onClick={() => { setTypeFilter(ty.id); setPage(1); }}
+                  >
+                    <span className="inc-filter-dot" style={{ background: ty.color }} />
+                    {ty.name}
+                  </button>
+                ))}
+              </div>
+              {typeFilter && (
+                <>
+                  <div className="inc-filter-divider" />
+                  <button className="inc-filter-clear" onClick={() => { setTypeFilter(''); setPage(1); }}>
+                    <Icon name="close" size={12} /> Clear filter
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="inc-search">
           <span className="search-icon"><Icon name="search" size={15}/></span>
           <input placeholder="Search incidents..." value={search} onChange={e => setSearch(e.target.value)}/>
         </div>
       </div>
+
+      {/* Active filter chip */}
+      {typeFilter && activeTypeName && (
+        <div className="inc-filter-chips">
+          <span className="inc-filter-chip">
+            <span className="inc-filter-dot" style={{ background: TYPES.find(t => t.id === typeFilter)?.color }} />
+            {activeTypeName}
+            <button className="inc-filter-chip-x" onClick={() => { setTypeFilter(''); setPage(1); }}>
+              <Icon name="close" size={10} />
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* Cards */}
       {loading ? (
@@ -134,12 +236,31 @@ export default function IncidentsList() {
                     {r.track && <span className={`inc-card-track tr-${(r.track || '').toLowerCase()}`}>{r.track}</span>}
                   </div>
 
+                  {/* Hover-expand detail reveal */}
+                  <div className="inc-card-expand">
+                    <div className="inc-card-expand-inner">
+                      {r.description && (
+                        <div className="inc-card-desc">{r.description}</div>
+                      )}
+                      <div className="inc-card-expand-row">
+                        {r.area && (
+                          <span className="inc-card-expand-detail">
+                            <Icon name="location" size={11} /> {r.area}
+                          </span>
+                        )}
+                        <span className="inc-card-expand-detail">
+                          <Icon name="clock" size={11} /> {formatDate(r.incident_datetime || r.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="inc-card-footer">
                     <div className="inc-card-meta">
                       {r.assignee_initials ? (
                         <span><span className="inc-card-avatar">{r.assignee_initials}</span></span>
                       ) : (
-                        <span><span className="inc-card-avatar" style={{ background: '#f3f4f6', color: '#9ca3af' }}>?</span></span>
+                        <span><span className="inc-card-avatar inc-card-avatar-empty">?</span></span>
                       )}
                       <span>{r.reporter_name}</span>
                       <span style={{ color: 'var(--sds-border)' }}>·</span>

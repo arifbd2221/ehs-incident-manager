@@ -194,52 +194,62 @@ export default function IncidentDetail() {
 
   const alertType = recommendedAction === 'closed' ? 'alert-closed' : recommendedAction === 'investigating' ? 'alert-investigating' : 'alert-triage';
 
+  const sevColors = { 1: '#dc2626', 2: '#ea580c', 3: '#f59e0b', 4: '#22c55e', 5: '#8b5cf6' };
+  const heroColor = sevColors[r.severity] || '#626DF9';
+
   return (
     <div className="page idet">
-      {/* Back link */}
-      <button className="idet-back" onClick={() => navigate('/incidents')}>
-        <Icon name="arrowL" size={14}/> Back to incidents
-      </button>
+      {/* Breadcrumb */}
+      <div className="idet-breadcrumb">
+        <button onClick={() => navigate('/incidents')}>
+          <Icon name="arrowL" size={13} /> Incidents
+        </button>
+        <span className="idet-bc-sep">/</span>
+        <span className="idet-bc-current">{r.incident_number}</span>
+      </div>
 
-      {/* Header */}
-      <div className="idet-header">
-        <div className="idet-header-left">
-          <div className="idet-meta-row">
-            <span className="idet-number">{r.incident_number}</span>
-            <span style={{ color: 'var(--sds-border)' }}>·</span>
-            <span className="idet-date">Reported {formatDate(r.created_at)}</span>
+      {/* Hero header card */}
+      <div className="idet-hero" style={{ '--idet-color': heroColor }}>
+        <div className="idet-hero-strip" />
+        <div className="idet-hero-body">
+          <div className="idet-hero-left">
+            <div className="idet-meta-row">
+              <span className="idet-number">{r.incident_number}</span>
+              <span className="idet-meta-sep">·</span>
+              <span className="idet-date">Reported {formatDate(r.created_at)}</span>
+            </div>
+            <h1 className="idet-title">{r.title}</h1>
+            <div className="idet-badges">
+              <TypePill tid={r.type}/>
+              <SevBadge s={r.severity}/>
+              <TrackBadge t={r.track}/>
+              <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
+                <span className="st-dot"/>{r.status}
+              </span>
+              {r.osha_recordable === 1 && <span className="inc-card-status st-triage"><span className="st-dot"/>OSHA</span>}
+              {r.riddor_reportable === 1 && <span className="inc-card-status" style={{ background: '#fef2f2', color: '#dc2626' }}><span className="st-dot" style={{ background: '#dc2626' }}/>RIDDOR</span>}
+            </div>
           </div>
-          <h1 className="idet-title">{r.title}</h1>
-          <div className="idet-badges">
-            <TypePill tid={r.type}/>
-            <SevBadge s={r.severity}/>
-            <TrackBadge t={r.track}/>
-            <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
-              <span className="st-dot"/>{r.status}
-            </span>
-            {r.osha_recordable === 1 && <span className="inc-card-status st-triage"><span className="st-dot"/>OSHA</span>}
-            {r.riddor_reportable === 1 && <span className="inc-card-status" style={{ background: '#fef2f2', color: '#dc2626' }}><span className="st-dot" style={{ background: '#dc2626' }}/>RIDDOR</span>}
-          </div>
-        </div>
 
-        <div className="idet-header-actions">
-          {recommendedAction === 'closed' ? (
-            <button className="idet-act-btn" disabled>Closed</button>
-          ) : recommendedAction === 'investigating' ? (
-            <button className="idet-act-btn primary" onClick={() => navigate('/investigations')}>
-              <Icon name="investigation" size={15}/>Open investigation
-            </button>
-          ) : (
-            <>
-              <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no action</button>
-              <button className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`} onClick={() => setModal('assign')}>
-                <Icon name="person" size={15}/>Assign
+          <div className="idet-header-actions">
+            {recommendedAction === 'closed' ? (
+              <button className="idet-act-btn" disabled>Closed</button>
+            ) : recommendedAction === 'investigating' ? (
+              <button className="idet-act-btn primary" onClick={() => navigate('/investigations')}>
+                <Icon name="investigation" size={15}/>Open investigation
               </button>
-              <button className={`idet-act-btn ${recommendedAction === 'escalate' ? 'primary' : ''}`} onClick={() => setModal('escalate')}>
-                <Icon name="investigation" size={15}/>Escalate
-              </button>
-            </>
-          )}
+            ) : (
+              <>
+                <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no action</button>
+                <button className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`} onClick={() => setModal('assign')}>
+                  <Icon name="person" size={15}/>Assign
+                </button>
+                <button className={`idet-act-btn ${recommendedAction === 'escalate' ? 'primary' : ''}`} onClick={() => setModal('escalate')}>
+                  <Icon name="investigation" size={15}/>Escalate
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
