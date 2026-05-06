@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { login as apiLogin, register as apiRegister, getMe, updateProfile as apiUpdateProfile } from '../api/auth';
+import { login as apiLogin, register as apiRegister, getMe, updateProfile as apiUpdateProfile, saveDashboardLayout } from '../api/auth';
 
 const AuthContext = createContext(null);
 
@@ -37,13 +37,19 @@ export function AuthProvider({ children }) {
     return result;
   };
 
+  const saveDashLayout = async (widgets) => {
+    const result = await saveDashboardLayout(widgets);
+    setUser(prev => ({ ...prev, dashboard_layout: result.dashboard_layout }));
+    return result;
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, updateUser, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, updateUser, saveDashLayout, logout }}>
       {children}
     </AuthContext.Provider>
   );

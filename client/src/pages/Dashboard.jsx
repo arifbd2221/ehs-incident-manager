@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getDashboard } from '../api/dashboard';
 import { listActiveStopWorks, acknowledgeStopWork } from '../api/stop_work';
@@ -9,6 +10,44 @@ import { TYPES, typeOf } from '../components/shared/Badges';
 import { timeAgo, formatDate } from '../utils/time';
 import '../styles/dashboard.css';
 
+/* ================================================================
+ * WIDGET REGISTRY — each widget has an id, label, icon, default
+ * visibility, and a "zone" (kpi | left | right) that determines
+ * where it renders in the grid.
+ * ================================================================ */
+const DEFAULT_WIDGETS = [
+  { id: 'kpi_trir',      label: 'TRIR',                icon: 'reports',       visible: true, zone: 'kpi' },
+  { id: 'kpi_dart',      label: 'DART',                icon: 'person',        visible: true, zone: 'kpi' },
+  { id: 'kpi_open',      label: 'Open Incidents',      icon: 'incidents',     visible: true, zone: 'kpi' },
+  { id: 'kpi_overdue',   label: 'Overdue CAPAs',       icon: 'warning',       visible: true, zone: 'kpi' },
+  { id: 'by_type',       label: 'Incidents by Type',   icon: 'dashboard',     visible: true, zone: 'left' },
+  { id: 'track',         label: 'Track Routing',       icon: 'shield',        visible: true, zone: 'left' },
+  { id: 'recent',        label: 'Recent Incidents',    icon: 'incidents',     visible: true, zone: 'left' },
+  { id: 'activity',      label: 'Activity Feed',       icon: 'pulse',         visible: true, zone: 'right' },
+  { id: 'quick_actions', label: 'Quick Actions',       icon: 'plus',          visible: true, zone: 'right' },
+];
+
+function mergeLayout(saved) {
+  if (!saved?.widgets?.length) return DEFAULT_WIDGETS;
+  const map = new Map(saved.widgets.map(w => [w.id, w]));
+  const merged = [];
+  const seen = new Set();
+  for (const sw of saved.widgets) {
+    const def = DEFAULT_WIDGETS.find(d => d.id === sw.id);
+    if (def) {
+      merged.push({ ...def, visible: sw.visible, zone: def.zone });
+      seen.add(sw.id);
+    }
+  }
+  for (const d of DEFAULT_WIDGETS) {
+    if (!seen.has(d.id)) merged.push(d);
+  }
+  return merged;
+}
+
+/* ================================================================
+ * SUB-COMPONENTS
+ * ================================================================ */
 function useCountUp(end, duration = 800, decimals = 0) {
   const [val, setVal] = useState(0);
   const rafRef = useRef();
@@ -34,12 +73,10 @@ function DonutChart({ data, size = 160, strokeWidth = 22 }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
-
   return (
     <div className="donut-chart" style={{ width: size, height: size }}>
       <svg width={size} height={size}>
-        <circle cx={size / 2} cy={size / 2} r={radius}
-          fill="none" stroke="#f3f4f6" strokeWidth={strokeWidth} />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f3f4f6" strokeWidth={strokeWidth} />
         {data.map((d, i) => {
           const pct = d.value / total;
           const dashLen = pct * circumference;
@@ -49,13 +86,8 @@ function DonutChart({ data, size = 160, strokeWidth = 22 }) {
             <circle key={i} cx={size / 2} cy={size / 2} r={radius}
               fill="none" stroke={d.color} strokeWidth={strokeWidth}
               strokeDasharray={`${dashLen} ${circumference - dashLen}`}
-              strokeDashoffset={dashOffset}
-              strokeLinecap="round"
-              style={{
-                transform: 'rotate(-90deg)',
-                transformOrigin: '50% 50%',
-                transition: 'stroke-dasharray 600ms cubic-bezier(0.4,0,0.2,1)',
-              }}
+              strokeDashoffset={dashOffset} strokeLinecap="round"
+              style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%', transition: 'stroke-dasharray 600ms cubic-bezier(0.4,0,0.2,1)' }}
             />
           );
         })}
@@ -71,11 +103,7 @@ function DonutChart({ data, size = 160, strokeWidth = 22 }) {
 function MiniBar({ pct, color }) {
   return (
     <div style={{ height: 4, background: '#f1f5f9', borderRadius: 4, flex: 1 }}>
-      <div style={{
-        height: '100%', borderRadius: 4, background: color,
-        width: `${Math.max(pct, 4)}%`,
-        transition: 'width 500ms cubic-bezier(0.4,0,0.2,1)',
-      }} />
+      <div style={{ height: '100%', borderRadius: 4, background: color, width: `${Math.max(pct, 4)}%`, transition: 'width 500ms cubic-bezier(0.4,0,0.2,1)' }} />
     </div>
   );
 }
@@ -107,13 +135,106 @@ function statusClass(status) {
   return 'st-new';
 }
 
+/* ================================================================
+ * CUSTOMIZE DRAWER
+ * ================================================================ */
+function CustomizeDrawer({ widgets, onChange, onSave, onClose, saving }) {
+  const dragItem = useRef(null);
+  const dragOver = useRef(null);
+
+  const toggle = (id) => {
+    onChange(widgets.map(w => w.id === id ? { ...w, visible: !w.visible } : w));
+  };
+
+  const handleDragStart = (idx) => { dragItem.current = idx; };
+  const handleDragEnter = (idx) => { dragOver.current = idx; };
+  const handleDragEnd = () => {
+    if (dragItem.current === null || dragOver.current === null || dragItem.current === dragOver.current) {
+      dragItem.current = null;
+      dragOver.current = null;
+      return;
+    }
+    const updated = [...widgets];
+    const [moved] = updated.splice(dragItem.current, 1);
+    updated.splice(dragOver.current, 0, moved);
+    dragItem.current = null;
+    dragOver.current = null;
+    onChange(updated);
+  };
+
+  const reset = () => onChange(DEFAULT_WIDGETS);
+  const visibleCount = widgets.filter(w => w.visible).length;
+
+  return createPortal(
+    <div className="cust-backdrop" onClick={onClose}>
+      <div className="cust-drawer" onClick={e => e.stopPropagation()}>
+        <div className="cust-header">
+          <div>
+            <div className="cust-title">Customize Dashboard</div>
+            <div className="cust-sub">Drag to reorder, toggle to show/hide</div>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Icon name="close" size={18} /></button>
+        </div>
+
+        <div className="cust-list">
+          {widgets.map((w, idx) => (
+            <div
+              key={w.id}
+              className={`cust-item ${w.visible ? '' : 'cust-hidden'}`}
+              draggable
+              onDragStart={() => handleDragStart(idx)}
+              onDragEnter={() => handleDragEnter(idx)}
+              onDragEnd={handleDragEnd}
+              onDragOver={e => e.preventDefault()}
+            >
+              <div className="cust-grip"><Icon name="sort" size={14} /></div>
+              <div className="cust-icon"><Icon name={w.icon} size={14} /></div>
+              <span className="cust-label">{w.label}</span>
+              <span className="cust-zone">{w.zone === 'kpi' ? 'KPI' : w.zone === 'left' ? 'Main' : 'Side'}</span>
+              <button
+                className={`cust-toggle ${w.visible ? 'on' : ''}`}
+                onClick={() => toggle(w.id)}
+              >
+                <span className="cust-toggle-dot" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="cust-footer">
+          <button className="btn btn-tertiary btn-sm" onClick={reset}>
+            <Icon name="close" size={14} />Reset to default
+          </button>
+          <div style={{ flex: 1 }} />
+          <span className="cust-count">{visibleCount} of {widgets.length} visible</span>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={onSave} disabled={saving}>
+            {saving ? 'Saving...' : 'Save layout'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ================================================================
+ * DASHBOARD
+ * ================================================================ */
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, saveDashLayout } = useAuth();
   const { setWizardOpen, refreshKey } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeStopWorks, setActiveStopWorks] = useState([]);
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [draftWidgets, setDraftWidgets] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  const widgets = useMemo(() => mergeLayout(user?.dashboard_layout), [user?.dashboard_layout]);
+  const vis = useCallback((id) => widgets.find(w => w.id === id)?.visible !== false, [widgets]);
 
   const loadStopWorks = useCallback(() => {
     listActiveStopWorks().then(setActiveStopWorks).catch(() => setActiveStopWorks([]));
@@ -123,6 +244,16 @@ export default function Dashboard() {
     getDashboard().then(setData).catch(() => {}).finally(() => setLoading(false));
     loadStopWorks();
   }, [refreshKey, loadStopWorks]);
+
+  const openDrawer = () => { setDraftWidgets([...widgets]); setDrawerOpen(true); };
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await saveDashLayout(draftWidgets.map(w => ({ id: w.id, visible: w.visible })));
+      setDrawerOpen(false);
+    } catch { }
+    setSaving(false);
+  };
 
   const elevated = ['supervisor', 'ehs_officer', 'ehs_manager', 'admin'].includes(user?.role);
   const handleAcknowledge = async (id) => {
@@ -176,9 +307,234 @@ export default function Dashboard() {
   const oshaCount = (recentIncidents || []).filter(r => r.osha_recordable).length;
   const riddorCount = (recentIncidents || []).filter(r => r.riddor_reportable).length;
 
+  const kpiWidgets = widgets.filter(w => w.zone === 'kpi' && w.visible);
+  const leftWidgets = widgets.filter(w => w.zone === 'left' && w.visible);
+  const rightWidgets = widgets.filter(w => w.zone === 'right' && w.visible);
+
+  const renderWidget = (id) => {
+    switch (id) {
+      case 'kpi_trir':
+        return (
+          <div className="kpi-card kpi-trir kpi-clickable" onClick={() => navigate('/reports')}>
+            <div className="kpi-top">
+              <div className="kpi-label">TRIR &middot; YTD</div>
+              <div className="kpi-icon"><Icon name="reports" size={18} /></div>
+            </div>
+            <div className="kpi-val"><KpiValue value={kpis.trir || 0} decimals={2} /></div>
+            <div className="kpi-foot">
+              <span className={`kpi-target ${trirOk ? 'good' : 'bad'}`}>
+                {trirOk ? '✓' : '↑'} Target {trirTarget.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        );
+      case 'kpi_dart':
+        return (
+          <div className="kpi-card kpi-dart kpi-clickable" onClick={() => navigate('/reports')}>
+            <div className="kpi-top">
+              <div className="kpi-label">DART &middot; YTD</div>
+              <div className="kpi-icon"><Icon name="person" size={18} /></div>
+            </div>
+            <div className="kpi-val"><KpiValue value={kpis.dart || 0} decimals={2} /></div>
+            <div className="kpi-foot">Days away / restricted / transfer</div>
+          </div>
+        );
+      case 'kpi_open':
+        return (
+          <div className="kpi-card kpi-open kpi-clickable" onClick={() => navigate('/incidents')}>
+            <div className="kpi-top">
+              <div className="kpi-label">Open incidents</div>
+              <div className="kpi-icon"><Icon name="incidents" size={18} /></div>
+            </div>
+            <div className="kpi-val"><KpiValue value={kpis.openIncidents || 0} /></div>
+            <div className="kpi-foot">
+              <span style={{ fontWeight: 600, color: '#dc2626' }}>{tc.A || 0}</span> Track A
+              <span style={{ color: 'var(--sds-border)' }}>&middot;</span>
+              <span style={{ fontWeight: 600, color: '#d97706' }}>{tc.B || 0}</span> Track B
+              <span style={{ color: 'var(--sds-border)' }}>&middot;</span>
+              <span style={{ fontWeight: 600, color: '#059669' }}>{tc.C || 0}</span> Track C
+            </div>
+          </div>
+        );
+      case 'kpi_overdue':
+        return (
+          <div className="kpi-card kpi-overdue kpi-clickable" onClick={() => navigate('/capas')}>
+            <div className="kpi-top">
+              <div className="kpi-label">Overdue CAPAs</div>
+              <div className="kpi-icon"><Icon name="warning" size={18} /></div>
+            </div>
+            <div className="kpi-val"><KpiValue value={kpis.overdueCAPAs || 0} /></div>
+            <div className="kpi-foot">
+              {kpis.overdueCAPAs > 0
+                ? <span className="kpi-target bad">Needs attention</span>
+                : <span className="kpi-target good">All on track</span>}
+            </div>
+          </div>
+        );
+      case 'by_type':
+        return (
+          <div className="dash-card">
+            <div className="dash-card-h">
+              <div className="title"><span className="dot-accent" />Incidents by type</div>
+              <span className="link" onClick={() => navigate('/incidents')}>View all <Icon name="arrow" size={14} /></span>
+            </div>
+            <div className="donut-section">
+              <DonutChart data={donutData} size={140} strokeWidth={20} />
+              <div className="donut-legend">
+                {donutData.map((d, i) => (
+                  <div className="donut-legend-item" key={i}>
+                    <span className="swatch" style={{ background: d.color }} />
+                    <span className="name">{d.name}</span>
+                    <MiniBar pct={(d.value / totalIncidents) * 100} color={d.color} />
+                    <span className="count">{d.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      case 'track':
+        return (
+          <div className="dash-card">
+            <div className="dash-card-h">
+              <div className="title"><span className="dot-accent" />Track routing</div>
+              <span style={{ fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 600 }}>{totalOpen} open</span>
+            </div>
+            <div className="track-pipeline">
+              <div className="track-lane t-a">
+                <div className="track-letter">A</div>
+                <div className="track-count">{tc.A || 0}</div>
+                <div className="track-name">Full investigation</div>
+                <div className="track-desc">Sev 1-2 &middot; Critical &amp; major</div>
+              </div>
+              <div className="track-lane t-b">
+                <div className="track-letter">B</div>
+                <div className="track-count">{tc.B || 0}</div>
+                <div className="track-name">Light investigation</div>
+                <div className="track-desc">Sev 3 &middot; Moderate risk</div>
+              </div>
+              <div className="track-lane t-c">
+                <div className="track-letter">C</div>
+                <div className="track-count">{tc.C || 0}</div>
+                <div className="track-name">Log &amp; close</div>
+                <div className="track-desc">Sev 4-5 &middot; Minor / obs.</div>
+              </div>
+            </div>
+            {(oshaCount > 0 || riddorCount > 0) && (
+              <div className="reg-alerts">
+                {oshaCount > 0 && (
+                  <div className="reg-alert osha">
+                    <span className="reg-badge">OSHA</span>
+                    <span className="reg-text"><b>{oshaCount}</b> recordable {oshaCount === 1 ? 'case' : 'cases'} in recent incidents</span>
+                  </div>
+                )}
+                {riddorCount > 0 && (
+                  <div className="reg-alert riddor">
+                    <span className="reg-badge">RIDDOR</span>
+                    <span className="reg-text"><b>{riddorCount}</b> reportable {riddorCount === 1 ? 'event' : 'events'} requiring HSE notification</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      case 'recent':
+        return (
+          <div className="dash-card">
+            <div className="dash-card-h">
+              <div className="title"><span className="dot-accent" />Recent incidents</div>
+              <span className="link" onClick={() => navigate('/incidents')}>All incidents <Icon name="arrow" size={14} /></span>
+            </div>
+            <div className="incident-feed">
+              {(recentIncidents || []).map(r => (
+                <div className="inc-row" key={r.id} onClick={() => navigate(`/incidents/${r.id}`)}>
+                  <div className={`inc-sev-ring s${r.severity}`}>S{r.severity}</div>
+                  <div className="inc-info">
+                    <div className="inc-title">{r.title}</div>
+                    <div className="inc-meta">
+                      <span style={{ fontFamily: "'SF Mono', Menlo, monospace", fontWeight: 600, fontSize: 10, color: 'var(--sds-fg-tertiary)' }}>{r.incident_number}</span>
+                      <span className="sep">&middot;</span>
+                      {r.site_name}
+                      {r.area && <><span className="sep">&middot;</span>{r.area}</>}
+                      <span className="sep">&middot;</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 2, background: typeOf(r.type)?.color || '#94a3b8' }} />
+                        {typeOf(r.type)?.name || r.type}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="inc-right">
+                    <span className={`inc-status ${statusClass(r.status)}`}>{r.status}</span>
+                    <span className="inc-time">{timeAgo(r.created_at)}</span>
+                  </div>
+                </div>
+              ))}
+              {(!recentIncidents || recentIncidents.length === 0) && (
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--sds-fg-tertiary)', fontSize: 13 }}>No recent incidents</div>
+              )}
+            </div>
+          </div>
+        );
+      case 'activity':
+        return (
+          <div className="dash-card" style={{ flex: 1 }}>
+            <div className="dash-card-h">
+              <div className="title"><span className="dot-accent" />Activity</div>
+              <span style={{ fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 600 }}>Last 7 days</span>
+            </div>
+            <div className="activity-feed">
+              {(recentActivity || []).map((e, i) => {
+                const mapped = ACTION_MAP[e.action] || { icon: 'bell', cls: 'act-system' };
+                return (
+                  <div className="act-item" key={i}>
+                    <div className={`act-dot ${mapped.cls}`}>
+                      <Icon name={mapped.icon} size={16} />
+                    </div>
+                    <div className="act-body">
+                      <div className="act-who">{e.user_name || 'System'}</div>
+                      <div className="act-desc">{e.description}</div>
+                      <div className="act-when">{timeAgo(e.created_at)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              {(!recentActivity || recentActivity.length === 0) && (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--sds-fg-tertiary)', fontSize: 12 }}>No recent activity</div>
+              )}
+            </div>
+          </div>
+        );
+      case 'quick_actions':
+        return (
+          <div className="dash-card">
+            <div className="dash-card-h">
+              <div className="title"><span className="dot-accent" />Quick actions</div>
+            </div>
+            <div className="dash-qa-list">
+              {[
+                { label: 'Report new incident', icon: 'plus', action: () => setWizardOpen(true), color: 'var(--sds-brand-primary)' },
+                { label: 'View investigations', icon: 'investigation', action: () => navigate('/investigations'), color: '#f59e0b' },
+                { label: 'CAPA board', icon: 'capa', action: () => navigate('/capas'), color: '#22c55e' },
+                { label: 'OSHA / RIDDOR reports', icon: 'reports', action: () => navigate('/reports'), color: '#0ea5e9' },
+              ].map((qa, i) => (
+                <button key={i} className="dash-qa-btn" style={{ '--qa-color': qa.color }} onClick={qa.action}>
+                  <span className="dash-qa-icon"><Icon name={qa.icon} size={15} /></span>
+                  {qa.label}
+                  <Icon name="arrow" size={14} />
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const hasLeftPair = vis('by_type') && vis('track');
+
   return (
     <div className="page">
-      {/* Active stop-work banner — sits above everything when present */}
       {activeStopWorks.length > 0 && (
         <div className="dash-stopwork-banner">
           <div className="dash-stopwork-icon"><Icon name="warning" size={22} color="#fff" /></div>
@@ -218,6 +574,9 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex gap-8">
+          <button className="btn btn-tertiary btn-sm" onClick={openDrawer}>
+            <Icon name="gear" size={15} />Customize
+          </button>
           <button className="btn btn-tertiary btn-sm" onClick={() => navigate('/reports')}>
             <Icon name="reports" size={15} />Reports
           </button>
@@ -228,218 +587,51 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Row */}
-      <div className="kpi-row">
-        <div className="kpi-card kpi-trir kpi-clickable" onClick={() => navigate('/reports')}>
-          <div className="kpi-top">
-            <div className="kpi-label">TRIR &middot; YTD</div>
-            <div className="kpi-icon"><Icon name="reports" size={18} /></div>
-          </div>
-          <div className="kpi-val"><KpiValue value={kpis.trir || 0} decimals={2} /></div>
-          <div className="kpi-foot">
-            <span className={`kpi-target ${trirOk ? 'good' : 'bad'}`}>
-              {trirOk ? '✓' : '↑'} Target {trirTarget.toFixed(2)}
-            </span>
-          </div>
+      {kpiWidgets.length > 0 && (
+        <div className="kpi-row" style={{ gridTemplateColumns: `repeat(${kpiWidgets.length}, 1fr)` }}>
+          {kpiWidgets.map(w => <div key={w.id}>{renderWidget(w.id)}</div>)}
         </div>
-
-        <div className="kpi-card kpi-dart kpi-clickable" onClick={() => navigate('/reports')}>
-          <div className="kpi-top">
-            <div className="kpi-label">DART &middot; YTD</div>
-            <div className="kpi-icon"><Icon name="person" size={18} /></div>
-          </div>
-          <div className="kpi-val"><KpiValue value={kpis.dart || 0} decimals={2} /></div>
-          <div className="kpi-foot">Days away / restricted / transfer</div>
-        </div>
-
-        <div className="kpi-card kpi-open kpi-clickable" onClick={() => navigate('/incidents')}>
-          <div className="kpi-top">
-            <div className="kpi-label">Open incidents</div>
-            <div className="kpi-icon"><Icon name="incidents" size={18} /></div>
-          </div>
-          <div className="kpi-val"><KpiValue value={kpis.openIncidents || 0} /></div>
-          <div className="kpi-foot">
-            <span style={{ fontWeight: 600, color: '#dc2626' }}>{tc.A || 0}</span> Track A
-            <span style={{ color: 'var(--sds-border)' }}>&middot;</span>
-            <span style={{ fontWeight: 600, color: '#d97706' }}>{tc.B || 0}</span> Track B
-            <span style={{ color: 'var(--sds-border)' }}>&middot;</span>
-            <span style={{ fontWeight: 600, color: '#059669' }}>{tc.C || 0}</span> Track C
-          </div>
-        </div>
-
-        <div className="kpi-card kpi-overdue kpi-clickable" onClick={() => navigate('/capas')}>
-          <div className="kpi-top">
-            <div className="kpi-label">Overdue CAPAs</div>
-            <div className="kpi-icon"><Icon name="warning" size={18} /></div>
-          </div>
-          <div className="kpi-val"><KpiValue value={kpis.overdueCAPAs || 0} /></div>
-          <div className="kpi-foot">
-            {kpis.overdueCAPAs > 0
-              ? <span className="kpi-target bad">Needs attention</span>
-              : <span className="kpi-target good">All on track</span>}
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Main grid */}
-      <div className="dash-grid">
-        <div className="dash-left">
-          {/* Incident type distribution + Track routing */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            <div className="dash-card">
-              <div className="dash-card-h">
-                <div className="title"><span className="dot-accent" />Incidents by type</div>
-                <span className="link" onClick={() => navigate('/incidents')}>View all <Icon name="arrow" size={14} /></span>
-              </div>
-              <div className="donut-section">
-                <DonutChart data={donutData} size={140} strokeWidth={20} />
-                <div className="donut-legend">
-                  {donutData.map((d, i) => (
-                    <div className="donut-legend-item" key={i}>
-                      <span className="swatch" style={{ background: d.color }} />
-                      <span className="name">{d.name}</span>
-                      <MiniBar pct={(d.value / totalIncidents) * 100} color={d.color} />
-                      <span className="count">{d.value}</span>
-                    </div>
-                  ))}
+      {(leftWidgets.length > 0 || rightWidgets.length > 0) && (
+        <div className="dash-grid" style={rightWidgets.length === 0 ? { gridTemplateColumns: '1fr' } : leftWidgets.length === 0 ? { gridTemplateColumns: '1fr' } : undefined}>
+          {leftWidgets.length > 0 && (
+            <div className="dash-left">
+              {hasLeftPair ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                  {renderWidget('by_type')}
+                  {renderWidget('track')}
                 </div>
-              </div>
-            </div>
-
-            <div className="dash-card">
-              <div className="dash-card-h">
-                <div className="title"><span className="dot-accent" />Track routing</div>
-                <span style={{ fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 600 }}>{totalOpen} open</span>
-              </div>
-              <div className="track-pipeline">
-                <div className="track-lane t-a">
-                  <div className="track-letter">A</div>
-                  <div className="track-count">{tc.A || 0}</div>
-                  <div className="track-name">Full investigation</div>
-                  <div className="track-desc">Sev 1-2 &middot; Critical &amp; major</div>
-                </div>
-                <div className="track-lane t-b">
-                  <div className="track-letter">B</div>
-                  <div className="track-count">{tc.B || 0}</div>
-                  <div className="track-name">Light investigation</div>
-                  <div className="track-desc">Sev 3 &middot; Moderate risk</div>
-                </div>
-                <div className="track-lane t-c">
-                  <div className="track-letter">C</div>
-                  <div className="track-count">{tc.C || 0}</div>
-                  <div className="track-name">Log &amp; close</div>
-                  <div className="track-desc">Sev 4-5 &middot; Minor / obs.</div>
-                </div>
-              </div>
-
-              {/* Regulatory flags */}
-              {(oshaCount > 0 || riddorCount > 0) && (
-                <div className="reg-alerts">
-                  {oshaCount > 0 && (
-                    <div className="reg-alert osha">
-                      <span className="reg-badge">OSHA</span>
-                      <span className="reg-text"><b>{oshaCount}</b> recordable {oshaCount === 1 ? 'case' : 'cases'} in recent incidents</span>
-                    </div>
-                  )}
-                  {riddorCount > 0 && (
-                    <div className="reg-alert riddor">
-                      <span className="reg-badge">RIDDOR</span>
-                      <span className="reg-text"><b>{riddorCount}</b> reportable {riddorCount === 1 ? 'event' : 'events'} requiring HSE notification</span>
-                    </div>
-                  )}
-                </div>
+              ) : (
+                <>
+                  {vis('by_type') && renderWidget('by_type')}
+                  {vis('track') && renderWidget('track')}
+                </>
               )}
-            </div>
-          </div>
-
-          {/* Recent incidents */}
-          <div className="dash-card">
-            <div className="dash-card-h">
-              <div className="title"><span className="dot-accent" />Recent incidents</div>
-              <span className="link" onClick={() => navigate('/incidents')}>All incidents <Icon name="arrow" size={14} /></span>
-            </div>
-            <div className="incident-feed">
-              {(recentIncidents || []).map(r => (
-                <div className="inc-row" key={r.id} onClick={() => navigate(`/incidents/${r.id}`)}>
-                  <div className={`inc-sev-ring s${r.severity}`}>S{r.severity}</div>
-                  <div className="inc-info">
-                    <div className="inc-title">{r.title}</div>
-                    <div className="inc-meta">
-                      <span style={{ fontFamily: "'SF Mono', Menlo, monospace", fontWeight: 600, fontSize: 10, color: 'var(--sds-fg-tertiary)' }}>{r.incident_number}</span>
-                      <span className="sep">&middot;</span>
-                      {r.site_name}
-                      {r.area && <><span className="sep">&middot;</span>{r.area}</>}
-                      <span className="sep">&middot;</span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: 2, background: typeOf(r.type)?.color || '#94a3b8' }} />
-                        {typeOf(r.type)?.name || r.type}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="inc-right">
-                    <span className={`inc-status ${statusClass(r.status)}`}>{r.status}</span>
-                    <span className="inc-time">{timeAgo(r.created_at)}</span>
-                  </div>
-                </div>
-              ))}
-              {(!recentIncidents || recentIncidents.length === 0) && (
-                <div style={{ padding: 32, textAlign: 'center', color: 'var(--sds-fg-tertiary)', fontSize: 13 }}>No recent incidents</div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right column */}
-        <div className="dash-right">
-          {/* Activity feed */}
-          <div className="dash-card" style={{ flex: 1 }}>
-            <div className="dash-card-h">
-              <div className="title"><span className="dot-accent" />Activity</div>
-              <span style={{ fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 600 }}>Last 7 days</span>
-            </div>
-            <div className="activity-feed">
-              {(recentActivity || []).map((e, i) => {
-                const mapped = ACTION_MAP[e.action] || { icon: 'bell', cls: 'act-system' };
-                return (
-                  <div className="act-item" key={i}>
-                    <div className={`act-dot ${mapped.cls}`}>
-                      <Icon name={mapped.icon} size={16} />
-                    </div>
-                    <div className="act-body">
-                      <div className="act-who">{e.user_name || 'System'}</div>
-                      <div className="act-desc">{e.description}</div>
-                      <div className="act-when">{timeAgo(e.created_at)}</div>
-                    </div>
-                  </div>
-                );
-              })}
-              {(!recentActivity || recentActivity.length === 0) && (
-                <div style={{ padding: 24, textAlign: 'center', color: 'var(--sds-fg-tertiary)', fontSize: 12 }}>No recent activity</div>
-              )}
-            </div>
-          </div>
-
-          {/* Quick actions */}
-          <div className="dash-card">
-            <div className="dash-card-h">
-              <div className="title"><span className="dot-accent" />Quick actions</div>
-            </div>
-            <div className="dash-qa-list">
-              {[
-                { label: 'Report new incident', icon: 'plus', action: () => setWizardOpen(true), color: 'var(--sds-brand-primary)' },
-                { label: 'View investigations', icon: 'investigation', action: () => navigate('/investigations'), color: '#f59e0b' },
-                { label: 'CAPA board', icon: 'capa', action: () => navigate('/capas'), color: '#22c55e' },
-                { label: 'OSHA / RIDDOR reports', icon: 'reports', action: () => navigate('/reports'), color: '#0ea5e9' },
-              ].map((qa, i) => (
-                <button key={i} className="dash-qa-btn" style={{ '--qa-color': qa.color }} onClick={qa.action}>
-                  <span className="dash-qa-icon"><Icon name={qa.icon} size={15} /></span>
-                  {qa.label}
-                  <Icon name="arrow" size={14} />
-                </button>
+              {leftWidgets.filter(w => w.id !== 'by_type' && w.id !== 'track').map(w => (
+                <div key={w.id}>{renderWidget(w.id)}</div>
               ))}
             </div>
-          </div>
+          )}
+          {rightWidgets.length > 0 && (
+            <div className="dash-right">
+              {rightWidgets.map(w => <div key={w.id}>{renderWidget(w.id)}</div>)}
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {/* Customize drawer */}
+      {drawerOpen && (
+        <CustomizeDrawer
+          widgets={draftWidgets}
+          onChange={setDraftWidgets}
+          onSave={handleSave}
+          onClose={() => setDrawerOpen(false)}
+          saving={saving}
+        />
+      )}
     </div>
   );
 }

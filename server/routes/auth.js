@@ -46,15 +46,17 @@ router.post('/login', (req, res) => {
   }
 
   const { password_hash, ...safeUser } = user;
+  if (safeUser.dashboard_layout) safeUser.dashboard_layout = JSON.parse(safeUser.dashboard_layout);
   const token = generateToken(safeUser);
   res.json({ token, user: safeUser });
 });
 
 router.get('/me', authMiddleware, (req, res) => {
   const user = db.prepare(
-    'SELECT id, org_id, site_id, email, name, initials, role, department, job_title, created_at FROM users WHERE id = ?'
+    'SELECT id, org_id, site_id, email, name, initials, role, department, job_title, created_at, dashboard_layout FROM users WHERE id = ?'
   ).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.dashboard_layout) user.dashboard_layout = JSON.parse(user.dashboard_layout);
   res.json({ user });
 });
 
@@ -86,6 +88,14 @@ router.patch('/profile', authMiddleware, (req, res) => {
   ).get(req.user.id);
   const token = generateToken(user);
   res.json({ token, user });
+});
+
+router.put('/dashboard-layout', authMiddleware, (req, res) => {
+  const { widgets } = req.body;
+  if (!Array.isArray(widgets)) return res.status(400).json({ error: 'widgets must be an array' });
+  const layout = JSON.stringify({ widgets });
+  db.prepare('UPDATE users SET dashboard_layout = ? WHERE id = ?').run(layout, req.user.id);
+  res.json({ dashboard_layout: { widgets } });
 });
 
 router.post('/password', authMiddleware, (req, res) => {

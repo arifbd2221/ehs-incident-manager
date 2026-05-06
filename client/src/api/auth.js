@@ -6,3 +6,4 @@ export const getMe = () => api.get('/auth/me').then(r => r.data);
 export const getSites = () => api.get('/auth/sites').then(r => r.data);
 export const updateProfile = (data) => api.patch('/auth/profile', data).then(r => r.data);
 export const changePassword = (current_password, new_password) => api.post('/auth/password', { current_password, new_password }).then(r => r.data);
+export const saveDashboardLayout = (widgets) => api.put('/auth/dashboard-layout', { widgets }).then(r => r.data);
