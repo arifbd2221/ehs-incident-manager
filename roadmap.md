@@ -69,8 +69,8 @@ here ships without explicit go-ahead.
 
 ### Navigation / pages
 - [ ] **P3-N1** **Site details page** — /sites/:id with assets, incidents, work_hours, regulatory subs scoped to that site.
-- [ ] **P3-N2** **Document folder structure** — folders/sub-folders for documents (currently a flat list keyed by `document_type` only).
-- [ ] **P3-N3** **Document preview** — inline PDF/image preview without leaving the page.
+- [x] **P3-N2** **Document folder structure** — folders/sub-folders for documents — commit `12862f8` (BE: migration `010_document_folders` + `/api/folders` CRUD + folder_id filter on docs; FE: breadcrumb, site filter, "+ New folder", folder tiles in grid + list, kebab rename/delete with content-count warning, native HTML5 DnD doc → folder / folder → folder / either → breadcrumb; Drive-style global search at root, scoped inside folders; folder navigation in the link-from-library modal on investigations).
+- [x] **P3-N3** **Document preview** — inline PDF/image/video/audio preview without leaving the page — commit `1873bb2` (Drive-inspired redesign on origin/main, merged in `eeafa48`).
 
 ### Cross-entity linking + history
 - [ ] **P3-L1** **Back-tracking everywhere** — "where is this referenced?" on inspections / CAPAs / incidents / assets / docs. The `entity_links` table already exists; need consistent surfacing.
@@ -89,8 +89,8 @@ here ships without explicit go-ahead.
 
 ### Operational features
 - [ ] **P3-OP1** **Asset maintenance** — schedules, due dates, last-done, escalations to CAPA when overdue.
-- [ ] **P3-OP2** **Inspection module** — full inspection lifecycle (templates → schedule → run → findings → CAPAs).
-- [ ] **P3-OP3** **Templates** — reusable templates for inspections, investigations, CAPAs, and the incident wizard.
+- [x] **P3-OP2** **Inspection module** — full inspection lifecycle (templates → schedule → run → findings → CAPAs) — commit `918279a` (origin/main; merged in `eeafa48`). Pages: `/inspections`, `/inspections/:id` editor + report; routes `/api/inspections`, `/api/answer-sets`; migrations `008_templates_inspections` + `009_template_versioning`.
+- [x] **P3-OP3** **Templates** — reusable templates with versioning + Google-Forms-style builder — commit `918279a` (origin/main; merged in `eeafa48`). Pages: `/templates`, `/templates/:id/edit`; route `/api/templates`.
 - [ ] **P3-OP4** **Scheduling** — recurring inspections, calibrations, training, walkthroughs; calendar view + reminders.
 
 ### Onboarding + data import
