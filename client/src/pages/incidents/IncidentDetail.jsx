@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote } from '../../api/incidents';
+import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
@@ -11,6 +11,7 @@ import AssignModal from './modals/AssignModal';
 import EscalateModal from './modals/EscalateModal';
 import CloseModal from './modals/CloseModal';
 import SeverityOverrideModal from './modals/SeverityOverrideModal';
+import WitnessModal from './modals/WitnessModal';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/incidents.css';
 
@@ -23,6 +24,9 @@ const tlDotClass = (action) => {
   if (action === 'assigned') return 'tl-assigned';
   if (action === 'note') return 'tl-note';
   if (action === 'incident_updated' || action === 'severity_overridden') return 'tl-note';
+  if (action === 'witness_added') return 'tl-assigned';
+  if (action === 'witness_updated') return 'tl-note';
+  if (action === 'witness_removed') return 'tl-attach';
   if (action === 'recordability_verified') return 'tl-verified';
   if (action === 'attached' || action === 'attachment_deleted') return 'tl-attach';
   if (action === 'stop_work_submitted' || action === 'stop_work_acknowledged' || action === 'stop_work_resolved' || action === 'stop_work_cancelled') return 'tl-stopwork';
@@ -36,6 +40,9 @@ const tlIcon = (action) => {
   if (action === 'note') return 'edit';
   if (action === 'incident_updated') return 'edit';
   if (action === 'severity_overridden') return 'warning';
+  if (action === 'witness_added') return 'person';
+  if (action === 'witness_updated') return 'edit';
+  if (action === 'witness_removed') return 'close';
   if (action === 'recordability_verified') return 'shield';
   if (action === 'attached') return 'file';
   if (action === 'attachment_deleted') return 'close';
@@ -143,6 +150,7 @@ export default function IncidentDetail() {
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
+  const [witnessModal, setWitnessModal] = useState(null); // null | 'add' | witness object
   const [toast, setToast] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, index: 0 });
   const [uploading, setUploading] = useState(false);
@@ -237,6 +245,42 @@ export default function IncidentDetail() {
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to update.');
       throw err;
+    }
+  };
+
+  const handleAddWitness = async (form) => {
+    try {
+      await addWitness(r.id, form);
+      setWitnessModal(null);
+      showToast(`Witness ${form.name} added.`);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to add witness.');
+      throw err;
+    }
+  };
+
+  const handleUpdateWitness = async (form) => {
+    if (!witnessModal || witnessModal === 'add') return;
+    try {
+      await updateWitness(r.id, witnessModal.id, form);
+      setWitnessModal(null);
+      showToast('Witness updated.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to update witness.');
+      throw err;
+    }
+  };
+
+  const handleDeleteWitness = async (witness) => {
+    if (!window.confirm(`Remove witness ${witness.name}? This is logged for audit.`)) return;
+    try {
+      await deleteWitness(r.id, witness.id);
+      showToast('Witness removed.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to remove witness.');
     }
   };
 
@@ -603,6 +647,51 @@ export default function IncidentDetail() {
             </div>
           </div>
 
+          {/* Witnesses (UX-D) */}
+          <div className="idet-card">
+            <div className="idet-card-h">
+              <div className="hicon hi-person"><Icon name="person" size={16}/></div>
+              Witnesses
+              {(r.witnesses || []).length > 0 && <span className="idet-attach-count">{r.witnesses.length}</span>}
+              {canEdit && (
+                <button className="idet-attach-add" onClick={() => setWitnessModal('add')}>
+                  <Icon name="plus" size={12}/>Add witness
+                </button>
+              )}
+            </div>
+            <div className="idet-card-body">
+              {(r.witnesses || []).length === 0 ? (
+                <div className="idet-witness-empty">
+                  No witnesses recorded yet.{canEdit ? ' Add a statement when one is collected.' : ''}
+                </div>
+              ) : (
+                <div className="idet-witnesses">
+                  {r.witnesses.map(w => (
+                    <div key={w.id} className="idet-witness">
+                      <div className="idet-witness-head">
+                        <div className="idet-witness-info">
+                          <div className="idet-witness-name">{w.name}</div>
+                          {w.contact && <div className="idet-witness-contact">{w.contact}</div>}
+                        </div>
+                        {canEdit && (
+                          <div className="idet-witness-actions">
+                            <button className="idet-edit-trigger" onClick={() => setWitnessModal(w)} title="Edit witness">
+                              <Icon name="edit" size={11}/>edit
+                            </button>
+                            <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteWitness(w)} title="Remove witness">
+                              <Icon name="close" size={11}/>remove
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {w.statement && <div className="idet-witness-statement">{w.statement}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Triage state */}
           <div className="idet-card">
             <div className="idet-card-h">
@@ -735,6 +824,8 @@ export default function IncidentDetail() {
       {modal === 'escalate' && createPortal(<EscalateModal incident={r} onCancel={() => setModal(null)} onConfirm={handleEscalate}/>, document.body)}
       {modal === 'close' && createPortal(<CloseModal incident={r} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
       {modal === 'severity' && createPortal(<SeverityOverrideModal incident={r} onCancel={() => setModal(null)} onConfirm={handleSeverityOverride}/>, document.body)}
+      {witnessModal === 'add' && createPortal(<WitnessModal incident={r} onCancel={() => setWitnessModal(null)} onConfirm={handleAddWitness}/>, document.body)}
+      {witnessModal && witnessModal !== 'add' && createPortal(<WitnessModal incident={r} witness={witnessModal} onCancel={() => setWitnessModal(null)} onConfirm={handleUpdateWitness}/>, document.body)}
 
       {/* Toast */}
       {toast && createPortal(

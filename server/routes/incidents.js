@@ -928,6 +928,99 @@ router.patch('/:id', (req, res) => {
   res.json(updated);
 });
 
+// ---------------------------------------------------------------------------
+// Witnesses CRUD (UX-D) — post-creation add/edit/remove.
+//
+// Reporters add witnesses at submission via the POST /incidents witnesses[]
+// payload, but witnesses often surface late (a colleague mentions someone
+// saw it the next day). All three handlers gate to elevated for parity with
+// the rest of the incident-mutation surface and write activity_log rows so
+// the chain of custody on the witness list is auditable.
+// ---------------------------------------------------------------------------
+router.post('/:id/witnesses', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot add witnesses post-creation.' });
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  const name = (req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Witness name is required.' });
+  const contact = (req.body.contact || '').trim() || null;
+  const statement = (req.body.statement || '').trim() || null;
+  const result = db.prepare('INSERT INTO witnesses (incident_id, name, contact, statement) VALUES (?, ?, ?, ?)').run(
+    incident.id, name, contact, statement,
+  );
+  const witness = db.prepare('SELECT * FROM witnesses WHERE id = ?').get(result.lastInsertRowid);
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+    VALUES (?, 'incident', ?, 'witness_added', ?, ?, ?)
+  `).run(
+    incident.org_id, incident.id,
+    `added witness ${witness.name}`,
+    req.user.id,
+    JSON.stringify({ id: witness.id, name: witness.name, contact: witness.contact, statement: witness.statement }),
+  );
+  res.status(201).json(witness);
+});
+
+router.patch('/:id/witnesses/:wid', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot edit witnesses.' });
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  const witness = db.prepare('SELECT * FROM witnesses WHERE id = ? AND incident_id = ?').get(req.params.wid, incident.id);
+  if (!witness) return res.status(404).json({ error: 'Witness not found' });
+
+  const fields = ['name', 'contact', 'statement'];
+  const sets = [];
+  const params = [];
+  const changes = {};
+  for (const f of fields) {
+    if (req.body[f] !== undefined) {
+      const raw = typeof req.body[f] === 'string' ? req.body[f].trim() : req.body[f];
+      const newVal = raw === '' ? null : raw;
+      if (newVal !== witness[f]) {
+        sets.push(`${f} = ?`);
+        params.push(newVal);
+        changes[f] = { from: witness[f] || null, to: newVal };
+      }
+    }
+  }
+  if (sets.length === 0) return res.status(400).json({ error: 'No changes to apply' });
+  if ('name' in changes && (!changes.name.to || !String(changes.name.to).trim())) {
+    return res.status(400).json({ error: 'Witness name cannot be empty.' });
+  }
+  params.push(witness.id);
+  db.prepare(`UPDATE witnesses SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  const updated = db.prepare('SELECT * FROM witnesses WHERE id = ?').get(witness.id);
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+    VALUES (?, 'incident', ?, 'witness_updated', ?, ?, ?)
+  `).run(
+    incident.org_id, incident.id,
+    `updated witness ${updated.name}`,
+    req.user.id,
+    JSON.stringify({ id: updated.id, name: updated.name, changes }),
+  );
+  res.json(updated);
+});
+
+router.delete('/:id/witnesses/:wid', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot remove witnesses.' });
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  const witness = db.prepare('SELECT * FROM witnesses WHERE id = ? AND incident_id = ?').get(req.params.wid, incident.id);
+  if (!witness) return res.status(404).json({ error: 'Witness not found' });
+  db.prepare('DELETE FROM witnesses WHERE id = ?').run(witness.id);
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+    VALUES (?, 'incident', ?, 'witness_removed', ?, ?, ?)
+  `).run(
+    incident.org_id, incident.id,
+    `removed witness ${witness.name}`,
+    req.user.id,
+    JSON.stringify({ id: witness.id, name: witness.name, contact: witness.contact, statement: witness.statement }),
+  );
+  res.status(204).send();
+});
+
 router.post('/:id/assign', (req, res) => {
   if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot assign incidents.' });
   const { assigned_to, triage_due, notes } = req.body;
