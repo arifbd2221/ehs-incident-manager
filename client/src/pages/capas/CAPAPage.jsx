@@ -72,6 +72,18 @@ export default function CAPAPage() {
   ];
 
   const progressClass = (c) => c.overdue ? 'pf-overdue' : c.progress >= 100 ? 'pf-done' : '';
+
+  // CAPA due-date urgency. Red <3d (incl. today), amber <7d, gray else.
+  // Overdue stays in its existing red treatment via `c.overdue`.
+  // Closed CAPAs get nothing — the date is historic.
+  const dueUrgency = (c) => {
+    if (!c.due_date || c.status === 'closed') return '';
+    if (c.overdue) return 'due-overdue';
+    const days = Math.ceil((new Date(c.due_date) - Date.now()) / 86400000);
+    if (days <= 2) return 'due-soon';
+    if (days <= 6) return 'due-near';
+    return '';
+  };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
   const handleDragStart = (e, capa) => {
@@ -299,7 +311,7 @@ export default function CAPAPage() {
                       <div className="capa-kcard-progress">
                         <div className="capa-kcard-progress-head">
                           <span className="pct">{c.progress || 0}%</span>
-                          <span className={`due ${c.overdue ? 'overdue' : ''}`}>Due {formatDateShort(c.due_date)}</span>
+                          <span className={`due ${dueUrgency(c)}`}>Due {formatDateShort(c.due_date)}</span>
                         </div>
                         <div className="capa-progress-track">
                           <div className={`capa-progress-fill ${progressClass(c)}`} style={{ width: `${c.progress || 0}%` }}/>
@@ -365,7 +377,7 @@ export default function CAPAPage() {
                   <div className={`capa-progress-fill ${progressClass(c)}`} style={{ width: `${c.progress || 0}%` }}/>
                 </div>
               </span>
-              <span className={`capa-list-due ${c.overdue ? 'overdue' : ''}`} style={!c.overdue ? { color: 'var(--sds-fg-tertiary)' } : {}}>{formatDateShort(c.due_date)}</span>
+              <span className={`capa-list-due ${dueUrgency(c)}`}>{formatDateShort(c.due_date)}</span>
               <span>
                 <span className={`capa-kcard-lane kl-${c.status}`}>
                   <span className="kl-dot"/>{LANE_LABELS[c.status] || c.status}

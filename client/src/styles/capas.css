@@ -313,9 +313,32 @@
 }
 .capa-kcard-progress-head .due {
   color: var(--sds-fg-tertiary);
+  font-weight: 500;
 }
+/* Urgency tiers (UX-G): red <3d (incl. overdue), amber <7d, gray else.
+   Pill-shaped chip so the urgency reads instantly without sucking
+   attention from the title row. */
+.capa-kcard-progress-head .due.due-overdue,
+.capa-kcard-progress-head .due.due-soon {
+  padding: 1px 7px;
+  border-radius: 50px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+  font-weight: 700;
+}
+.capa-kcard-progress-head .due.due-near {
+  padding: 1px 7px;
+  border-radius: 50px;
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+  font-weight: 600;
+}
+/* Backwards compat with anything still passing the old .overdue class */
 .capa-kcard-progress-head .due.overdue {
-  color: #dc2626;
+  padding: 1px 7px;
+  border-radius: 50px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
   font-weight: 700;
 }
 .capa-progress-track {
@@ -511,10 +534,18 @@
 }
 .capa-list-due {
   font-size: 12px;
+  color: var(--sds-fg-tertiary);
+  font-weight: 500;
 }
+.capa-list-due.due-overdue,
+.capa-list-due.due-soon,
 .capa-list-due.overdue {
-  color: #dc2626;
+  color: #b91c1c;
   font-weight: 700;
+}
+.capa-list-due.due-near {
+  color: #b45309;
+  font-weight: 600;
 }
 
 /* Empty */
