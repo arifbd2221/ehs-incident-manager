@@ -137,15 +137,49 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 
 ## State
 
-- **Local commits ahead of `origin/main`**: see `git log origin/main..backend` — all Wave 3 + Wave 4 + UX-A commits pushed to `origin/backend`.
-- **Branch**: `backend`
-- **Running**: dev servers usually started via `npm run dev` from the project root (BE on `:3001`, FE on `:5173`). Demo accounts in seed.
+- **Branch**: `backend` — synced with `origin/backend`.
+- **Phase 2**: code complete. Only F6.2 (manual demo walkthrough) outstanding.
+- **Wave 7**: E7.1 done.
+- **Productionization backlog** (UX-A through UX-H): A, B, G, H done. C, D, E, F pending.
+- **BUG-001**: closed.
+- **Phase 3** (P3-* items): all open, captured 2026-05-06.
+- **Migrations applied**: 001–007.
+- **Running**: dev servers via `cd server && node index.js` (BE :3001) and `cd client && npm run dev` (FE :5173). Demo accounts in seed.
+
+## Most recent session — 2026-05-06
+
+Session shipped 14 commits to `origin/backend`. Headline UI changes:
+
+| Area | What changed | Commit |
+|---|---|---|
+| Asset types modal | 2-pane redesign + DEFAULT badges + field-count badges | `8096bbb` |
+| Default fields per type | Migration 006 — Vehicle/Machine/Building/Tool/Chemical come pre-loaded | `74f3557` |
+| Drop "Area" + Display ID | Migration 007 + system-fields banner with Display name + Unique identifier | `6ac9d51` `22b921f` |
+| Start-from picker | New asset type → Blank / From existing / From template (8 industry templates) | `dd5ee85` |
+| UX-A post-report attachments | Add + delete + audit on incident detail | `ba14826` |
+| UX-B inline notes | Amber composer + interleaved NOTE rows on activity timeline | `31f8be7` |
+| UX-G CAPA due-date colors | Red / amber / gray pills on kanban + list | `48ca9b2` |
+| UX-H cross-page stop-work | Pulsing red bar above TopBar on every page | `48ca9b2` |
+| BUG-001 | Verified fixed; no code change needed | `b4d4952` |
+| Phase 3 backlog | 16 P3-* items captured into roadmap | `9dc6a35` |
+
+Latest commit on `origin/backend` is the most recent roadmap update; run `git log -10` to see the chain.
 
 ## Quick re-orientation for a fresh session
 
-1. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System/MEMORY.md` (index of memory files).
-2. Read `plan-phase-2.md` (full design + acceptance criteria + waves) and this `roadmap.md` (live status with commit SHAs).
-3. `git fetch origin && git status` — confirm branch state vs `origin/main`.
-4. `cd server && rm -f db/incident_management.db db/*.db-wal db/*.db-shm && node db/seed.js && cd .. && npm run dev` — clean reset + boot.
-5. Login as `elena@sdsmanager.com / password123`. Quick sanity click: Dashboard, Sites, Assets, Documents, Investigations, Wizard.
-6. **Next task**: Phase 2 code is complete — F6.2 is a manual walkthrough. After that, the productionization UX backlog (UX-B inline notes on activity timeline is the highest-value next step) and BUG-001 are the queue.
+1. Read this `roadmap.md` first — full status with commit SHAs.
+2. Read `plan-phase-2.md` if you need design rationale for any Phase-2 wave.
+3. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System-project-ehs-incident-manager/memory/MEMORY.md` for user preferences and project context.
+4. `git fetch origin && git status` — should show `backend` in sync with `origin/backend`.
+5. Boot: `cd server && node index.js` and `cd client && npm run dev`. Login as `elena@sdsmanager.com / password123`.
+6. **What's likely next** (in user-priority order):
+   - **UX-C** editable description / area / dept / body_parts on incident detail (~1.5h) — BE PATCH already supports all of these
+   - **UX-E** severity override UI (~45min) — BE fully wired, just missing the modal
+   - **UX-D** witness add/edit (~1h) — small new route + card
+   - **UX-F** global search jump-to in TopBar (~1.5h)
+   - Then Phase 3 (P3-N1 site details / P3-OP2 inspection module / P3-AI1 investigation auto-fill, etc.) — these are bigger and the user will direct.
+7. **Operating norms** (per user feedback during Phase 2):
+   - Treat as an actual app, not hackathon polish.
+   - Each task = one focused commit + push to `origin/backend`.
+   - Always leave dev servers running at the end so the user can click-test.
+   - Don't claim FE success without actually exercising the UI; "Vite transforms cleanly" alone is not proof.

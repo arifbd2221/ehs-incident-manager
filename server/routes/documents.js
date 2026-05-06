@@ -36,7 +36,7 @@ const PARENT_TABLES = {
 };
 
 router.get('/', (req, res) => {
-  const { document_type, active, q, page = 1, limit = 100 } = req.query;
+  const { document_type, active, q, folder_id, site_id, page = 1, limit = 100 } = req.query;
   const orgId = req.user.org_id;
 
   const where = ['d.org_id = ?'];
@@ -48,6 +48,23 @@ router.get('/', (req, res) => {
     where.push('(d.name LIKE ? OR d.document_number LIKE ?)');
     const like = `%${q}%`;
     params.push(like, like);
+  }
+  // Folder scope. `folder_id=null` (literal) or `folder_id=` (empty) → root only.
+  // A numeric folder_id → that folder. Omitted entirely → no folder filter (full
+  // library, used by the link-from-library modal's global search).
+  if (folder_id !== undefined) {
+    if (folder_id === '' || folder_id === 'null' || folder_id === '0') {
+      where.push('d.folder_id IS NULL');
+    } else {
+      where.push('d.folder_id = ?');
+      params.push(Number(folder_id));
+    }
+  }
+  // Site filter only applies to docs that live in a folder. Root docs (folder
+  // IS NULL) are org-wide and always visible regardless of site.
+  if (site_id) {
+    where.push('(d.folder_id IS NULL OR EXISTS (SELECT 1 FROM document_folders f WHERE f.id = d.folder_id AND f.site_id = ?))');
+    params.push(Number(site_id));
   }
 
   const whereClause = where.join(' AND ');
@@ -113,11 +130,22 @@ router.post('/', upload.single('file'), (req, res) => {
   }
 
   if (!req.file) return res.status(400).json({ error: 'A file is required' });
-  const { name, document_type } = req.body;
+  const { name, document_type, folder_id } = req.body;
 
   if (!document_type || !DOCUMENT_TYPES.has(document_type)) {
     try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
     return res.status(400).json({ error: `document_type must be one of: ${[...DOCUMENT_TYPES].join(', ')}` });
+  }
+
+  // Optional folder placement — verify it belongs to caller's org.
+  let folderId = null;
+  if (folder_id !== undefined && folder_id !== null && folder_id !== '' && folder_id !== 'null') {
+    const f = db.prepare('SELECT id FROM document_folders WHERE id = ? AND org_id = ?').get(Number(folder_id), req.user.org_id);
+    if (!f) {
+      try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
+      return res.status(404).json({ error: 'Folder not found in your organization' });
+    }
+    folderId = f.id;
   }
 
   const number = nextDocumentNumber();
@@ -125,9 +153,9 @@ router.post('/', upload.single('file'), (req, res) => {
   const fileUrl = `/uploads/${req.file.filename}`;
 
   const result = db.prepare(`
-    INSERT INTO documents (document_number, org_id, name, document_type, file_url, stored_filename, mime_type, size_bytes, uploaded_by, active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-  `).run(number, req.user.org_id, finalName, document_type, fileUrl, req.file.filename, req.file.mimetype, req.file.size, req.user.id);
+    INSERT INTO documents (document_number, org_id, name, document_type, file_url, stored_filename, mime_type, size_bytes, uploaded_by, folder_id, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `).run(number, req.user.org_id, finalName, document_type, fileUrl, req.file.filename, req.file.mimetype, req.file.size, req.user.id, folderId);
 
   const doc = db.prepare(`
     SELECT d.*, u.name as uploaded_by_name, u.initials as uploaded_by_initials
@@ -153,6 +181,19 @@ router.patch('/:id', (req, res) => {
       sets.push(`${key} = ?`);
       params.push(key === 'active' ? (req.body[key] ? 1 : 0) : req.body[key]);
     }
+  }
+  // folder_id is mutated separately (move). null → root; numeric → that folder
+  // in the caller's org. We accept the literal "null" string too for HTTP/JSON
+  // ergonomics from the frontend.
+  if (req.body.folder_id !== undefined) {
+    let nextFolderId = null;
+    if (req.body.folder_id !== null && req.body.folder_id !== '' && req.body.folder_id !== 'null') {
+      const f = db.prepare('SELECT id FROM document_folders WHERE id = ? AND org_id = ?').get(Number(req.body.folder_id), req.user.org_id);
+      if (!f) return res.status(404).json({ error: 'Folder not found in your organization' });
+      nextFolderId = f.id;
+    }
+    sets.push('folder_id = ?');
+    params.push(nextFolderId);
   }
   if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
   sets.push("updated_at = datetime('now')");
