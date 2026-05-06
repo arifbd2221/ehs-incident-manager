@@ -213,6 +213,21 @@ export default function InvestigationsPage() {
                         <span className="meta-sep">·</span>
                         {timeAgo(inv.created_at)}
                       </div>
+                      {/* Hover-reveal detail rows */}
+                      <div className="inv-kcard-expand">
+                        {inv.location && (
+                          <div className="inv-kcard-detail"><Icon name="location" size={11}/><span>Area: {inv.location}</span></div>
+                        )}
+                        {inv.lead_name && (
+                          <div className="inv-kcard-detail"><Icon name="person" size={11}/><span>Lead: {inv.lead_name}</span></div>
+                        )}
+                        {inv.reporter_name && (
+                          <div className="inv-kcard-detail"><Icon name="edit" size={11}/><span>Reporter: {inv.reporter_name}</span></div>
+                        )}
+                        {inv.incident_type && (
+                          <div className="inv-kcard-detail"><Icon name="incidents" size={11}/><span style={{ textTransform: 'capitalize' }}>{inv.incident_type.replace('_', ' ')}</span></div>
+                        )}
+                      </div>
                       {(inv.riddor_reportable === 1 || inv.capa_count > 0) && (
                         <div className="inv-kcard-flags">
                           {inv.riddor_reportable === 1 && <span className="inv-kflag kf-riddor"><span className="kf-dot"/>RIDDOR</span>}

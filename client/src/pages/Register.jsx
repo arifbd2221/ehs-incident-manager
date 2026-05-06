@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { getSites } from '../api/auth';
+import Icon from '../components/shared/Icon';
 
 const STRENGTH_LEVELS = [
   { label: 'Too short', color: '#94a3b8', pct: 0 },
@@ -71,95 +72,163 @@ export default function Register() {
   };
 
   return (
-    <div className="login-page">
-      <div className="login-card reg-card">
-        <div className="login-logo">
-          <img src="/assets/sds-mark.svg" alt="SDS Manager" />
-          <h1>Create your account</h1>
-          <p>Join EHS Incident Management</p>
-        </div>
+    <div className="auth-page">
+      <div className="auth-brand">
+        <div className="auth-brand-content">
+          <div className="auth-brand-logo">
+            <img src="/assets/sds-mark.svg" alt="SDS Manager" />
+          </div>
+          <h1 className="auth-brand-title">SDS Manager</h1>
+          <p className="auth-brand-sub">EHS Incident Management Platform</p>
 
-        <div className="reg-steps">
-          <div className={`reg-step ${step >= 1 ? 'active' : ''}`}><span>1</span>Credentials</div>
-          <div className="reg-step-line"><div className={`reg-step-fill ${step >= 2 ? 'filled' : ''}`} /></div>
-          <div className={`reg-step ${step >= 2 ? 'active' : ''}`}><span>2</span>Profile</div>
-        </div>
-
-        {error && <div className="login-error">{error}</div>}
-
-        <form onSubmit={step === 1 ? (e) => { e.preventDefault(); goStep2(); } : handleSubmit}>
-          <div className={`reg-panel ${step === 1 ? 'visible' : 'hidden'} ${dir}`}>
-            <div className="login-field">
-              <label>Email address</label>
-              <input className="input" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="you@company.com" />
+          <div className="auth-features">
+            <div className="auth-feature">
+              <div className="auth-feature-icon"><Icon name="incidents" size={18} /></div>
+              <div>
+                <div className="auth-feature-title">Incident Tracking</div>
+                <div className="auth-feature-desc">Report and manage workplace incidents with severity routing</div>
+              </div>
             </div>
-            <div className="login-field">
-              <label>Password</label>
-              <input className="input" type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Min. 8 characters" />
-              {form.password && (
-                <div className="pw-strength">
-                  <div className="pw-bar"><div className="pw-fill" style={{ width: `${sl.pct}%`, background: sl.color }} /></div>
-                  <div className="pw-label" style={{ color: sl.color }}>{sl.label}</div>
+            <div className="auth-feature">
+              <div className="auth-feature-icon"><Icon name="capa" size={18} /></div>
+              <div>
+                <div className="auth-feature-title">CAPA Workflow</div>
+                <div className="auth-feature-desc">Corrective and preventive actions with verification cycles</div>
+              </div>
+            </div>
+            <div className="auth-feature">
+              <div className="auth-feature-icon"><Icon name="clipboard" size={18} /></div>
+              <div>
+                <div className="auth-feature-title">Inspections</div>
+                <div className="auth-feature-desc">Custom templates with conditional logic and scoring</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="auth-brand-footer">
+            <span>Trusted by safety teams worldwide</span>
+          </div>
+        </div>
+        <div className="auth-brand-orbs">
+          <div className="auth-orb auth-orb-1" />
+          <div className="auth-orb auth-orb-2" />
+          <div className="auth-orb auth-orb-3" />
+        </div>
+      </div>
+
+      <div className="auth-form-side">
+        <div className="auth-card auth-card-register">
+          <div className="auth-card-header">
+            <h2>Create your account</h2>
+            <p>Join EHS Incident Management</p>
+          </div>
+
+          <div className="auth-steps">
+            <div className={`auth-step ${step >= 1 ? 'active' : ''} ${step > 1 ? 'done' : ''}`}>
+              <span>{step > 1 ? <Icon name="check" size={12} /> : '1'}</span>
+              Credentials
+            </div>
+            <div className="auth-step-line"><div className={`auth-step-fill ${step >= 2 ? 'filled' : ''}`} /></div>
+            <div className={`auth-step ${step >= 2 ? 'active' : ''}`}>
+              <span>2</span>
+              Profile
+            </div>
+          </div>
+
+          {error && <div className="auth-error"><Icon name="warning" size={14} />{error}</div>}
+
+          <form onSubmit={step === 1 ? (e) => { e.preventDefault(); goStep2(); } : handleSubmit}>
+            <div className={`reg-panel ${step === 1 ? 'visible' : 'hidden'} ${dir}`}>
+              <div className="auth-field">
+                <label>Email address</label>
+                <div className="auth-input-wrap">
+                  <Icon name="person" size={16} />
+                  <input className="auth-input" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="you@company.com" />
                 </div>
-              )}
-            </div>
-            <div className="login-field" style={{ marginBottom: 20 }}>
-              <label>Confirm password</label>
-              <input className="input" type="password" value={form.confirm} onChange={e => set('confirm', e.target.value)} placeholder="Re-enter password" />
-            </div>
-            <button className="btn btn-primary login-btn" type="submit">
-              Continue
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-            </button>
-          </div>
-
-          <div className={`reg-panel ${step === 2 ? 'visible' : 'hidden'} ${dir}`}>
-            <div className="login-field">
-              <label>Full name <span className="req">*</span></label>
-              <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="John Smith" />
-            </div>
-            <div className="reg-row">
-              <div className="login-field">
-                <label>Job title</label>
-                <input className="input" value={form.job_title} onChange={e => set('job_title', e.target.value)} placeholder="e.g. EHS Officer" />
               </div>
-              <div className="login-field">
-                <label>Department</label>
-                <input className="input" value={form.department} onChange={e => set('department', e.target.value)} placeholder="e.g. Safety" />
+              <div className="auth-field">
+                <label>Password</label>
+                <div className="auth-input-wrap">
+                  <Icon name="shield" size={16} />
+                  <input className="auth-input" type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Min. 8 characters" />
+                </div>
+                {form.password && (
+                  <div className="pw-strength">
+                    <div className="pw-bar"><div className="pw-fill" style={{ width: `${sl.pct}%`, background: sl.color }} /></div>
+                    <div className="pw-label" style={{ color: sl.color }}>{sl.label}</div>
+                  </div>
+                )}
               </div>
-            </div>
-            <div className="reg-row">
-              <div className="login-field">
-                <label>Role</label>
-                <select className="input" value={form.role} onChange={e => set('role', e.target.value)}>
-                  <option value="worker">Worker</option>
-                  <option value="supervisor">Supervisor</option>
-                  <option value="ehs_lead">EHS Lead</option>
-                  <option value="manager">Manager</option>
-                </select>
+              <div className="auth-field">
+                <label>Confirm password</label>
+                <div className="auth-input-wrap">
+                  <Icon name="shield" size={16} />
+                  <input className="auth-input" type="password" value={form.confirm} onChange={e => set('confirm', e.target.value)} placeholder="Re-enter password" />
+                </div>
               </div>
-              <div className="login-field">
-                <label>Site</label>
-                <select className="input" value={form.site_id} onChange={e => set('site_id', e.target.value)}>
-                  <option value="">Select site...</option>
-                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-              <button className="btn btn-secondary login-btn" type="button" onClick={goStep1} style={{ flex: '0 0 auto', width: 'auto', padding: '0 20px' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M14 7l-5 5 5 5V7z"/></svg>
-                Back
-              </button>
-              <button className={`btn btn-primary login-btn ${loading ? 'login-loading' : ''}`} type="submit" disabled={loading}>
-                {loading ? <><span className="login-spinner" />Creating...</> : 'Create account'}
+              <button className="btn btn-primary auth-submit" type="submit">
+                Continue
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
               </button>
             </div>
-          </div>
-        </form>
 
-        <div className="reg-footer">
-          Already have an account? <Link to="/login">Sign in</Link>
+            <div className={`reg-panel ${step === 2 ? 'visible' : 'hidden'} ${dir}`}>
+              <div className="auth-field">
+                <label>Full name <span className="req">*</span></label>
+                <div className="auth-input-wrap">
+                  <Icon name="person" size={16} />
+                  <input className="auth-input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="John Smith" />
+                </div>
+              </div>
+              <div className="reg-row">
+                <div className="auth-field">
+                  <label>Job title</label>
+                  <div className="auth-input-wrap">
+                    <Icon name="gear" size={16} />
+                    <input className="auth-input" value={form.job_title} onChange={e => set('job_title', e.target.value)} placeholder="e.g. EHS Officer" />
+                  </div>
+                </div>
+                <div className="auth-field">
+                  <label>Department</label>
+                  <div className="auth-input-wrap">
+                    <Icon name="factory" size={16} />
+                    <input className="auth-input" value={form.department} onChange={e => set('department', e.target.value)} placeholder="e.g. Safety" />
+                  </div>
+                </div>
+              </div>
+              <div className="reg-row">
+                <div className="auth-field">
+                  <label>Role</label>
+                  <select className="input" value={form.role} onChange={e => set('role', e.target.value)}>
+                    <option value="worker">Worker</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="ehs_lead">EHS Lead</option>
+                    <option value="manager">Manager</option>
+                  </select>
+                </div>
+                <div className="auth-field">
+                  <label>Site</label>
+                  <select className="input" value={form.site_id} onChange={e => set('site_id', e.target.value)}>
+                    <option value="">Select site...</option>
+                    {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button className="btn btn-secondary" type="button" onClick={goStep1} style={{ padding: '0 20px', gap: 4 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M14 7l-5 5 5 5V7z"/></svg>
+                  Back
+                </button>
+                <button className={`btn btn-primary auth-submit ${loading ? 'auth-loading' : ''}`} type="submit" disabled={loading} style={{ flex: 1 }}>
+                  {loading ? <><span className="login-spinner" />Creating...</> : 'Create account'}
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <div className="auth-footer">
+            Already have an account? <Link to="/login">Sign in</Link>
+          </div>
         </div>
       </div>
     </div>

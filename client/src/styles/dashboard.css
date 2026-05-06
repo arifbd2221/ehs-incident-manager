@@ -521,6 +521,39 @@
   color: var(--sds-fg-heading);
 }
 
+/* Quick actions */
+.dash-qa-list {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px;
+}
+.dash-qa-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  border: none; background: transparent;
+  cursor: pointer; transition: all 180ms cubic-bezier(0.4,0,0.2,1);
+  font-family: var(--sds-font-family); font-size: 13px; font-weight: 600;
+  color: var(--sds-fg-heading); width: 100%; text-align: left;
+}
+.dash-qa-btn:hover {
+  background: color-mix(in srgb, var(--qa-color) 6%, transparent);
+}
+.dash-qa-btn:active { transform: scale(0.98); }
+.dash-qa-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--qa-color) 10%, transparent);
+  color: var(--qa-color);
+  transition: transform 200ms cubic-bezier(0.34,1.56,0.64,1);
+}
+.dash-qa-btn:hover .dash-qa-icon { transform: scale(1.1); }
+.dash-qa-btn > svg:last-child {
+  margin-left: auto; color: var(--sds-fg-tertiary);
+  transition: transform 150ms ease, color 150ms ease;
+}
+.dash-qa-btn:hover > svg:last-child {
+  transform: translateX(3px); color: var(--qa-color);
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
   .dash-grid {
