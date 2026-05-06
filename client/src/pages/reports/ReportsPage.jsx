@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { getOsha300, getOsha300A, getRiddor, getMetrics } from '../../api/reports';
 import { getSites } from '../../api/users';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import ComboBox from '../../components/shared/ComboBox';
 import CertifyOsha300AModal from '../../components/modals/CertifyOsha300AModal';
 import { formatDateShort, formatDate } from '../../utils/time';
 import '../../styles/reports.css';
@@ -37,6 +38,8 @@ export default function ReportsPage() {
     getSites().then(data => { setSites(data); if (data.length > 0) setSiteId(String(data[0].id)); });
   }, []);
 
+  const siteOpts = useMemo(() => sites.map(s => ({ value: String(s.id), label: s.name })), [sites]);
+
   return (
     <div className="page">
       {/* Hero */}
@@ -45,9 +48,7 @@ export default function ReportsPage() {
           <h1 className="rpt-heading">Reports</h1>
           <p className="rpt-subtitle">Continuous regulatory output, auto-generated from incident data.</p>
         </div>
-        <select className="rpt-site-select" value={siteId} onChange={e => setSiteId(e.target.value)}>
-          {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+        <ComboBox className="rpt-site-select" options={siteOpts} value={siteId} onChange={setSiteId} placeholder="Search sites…" />
       </div>
 
       {/* Report type selector */}

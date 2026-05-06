@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Icon from '../../../components/shared/Icon';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 
 export default function CloseInvestigationModal({ investigation, onCancel, onConfirm }) {
   const [reason, setReason] = useState('');
@@ -20,7 +21,13 @@ export default function CloseInvestigationModal({ investigation, onCancel, onCon
           </div>
           <div className="form-group">
             <label className="form-label">Closure reason <span className="optional">(optional)</span></label>
-            <textarea className="form-textarea" rows={3} placeholder="e.g. Root cause addressed by existing control; no further action required." value={reason} onChange={e => setReason(e.target.value)}/>
+            <SmartTextarea
+              value={reason}
+              onChange={setReason}
+              rows={3}
+              examples={['Root cause addressed by existing control; no further action required.', 'Investigation findings show incident was non-work-related per OSHA criteria.', 'Duplicate investigation — findings consolidated into INV-023.']}
+              chips={['Existing controls sufficient', 'Non-work-related', 'Consolidated into another INV']}
+            />
           </div>
         </div>
         <div className="idet-modal-footer">

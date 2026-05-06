@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { listSites, createSite, updateSite, deleteSite } from '../../api/sites';
 import Icon from '../../components/shared/Icon';
+import ComboBox from '../../components/shared/ComboBox';
 import '../../styles/sites.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -280,11 +281,12 @@ export default function Sites() {
                   </div>
                   <div className="sm-field" style={{ animationDelay: '100ms' }}>
                     <label className="sm-label">Time zone</label>
-                    <select className="sm-input" value={form.timezone} onChange={e => set('timezone', e.target.value)}>
-                      {TIMEZONES.map(tz => (
-                        <option key={tz.value} value={tz.value}>{tz.label}</option>
-                      ))}
-                    </select>
+                    <ComboBox
+                      options={TIMEZONES}
+                      value={form.timezone}
+                      onChange={v => set('timezone', v)}
+                      placeholder="Search timezones…"
+                    />
                   </div>
                 </div>
               )}

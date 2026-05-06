@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 import { getUsers } from '../../../api/users';
 
 export default function EscalateModal({ incident, onCancel, onConfirm }) {
@@ -14,6 +16,13 @@ export default function EscalateModal({ incident, onCancel, onConfirm }) {
       if (data.length > 0) setLead(String(data[0].id));
     });
   }, []);
+
+  const userOpts = useMemo(() => users.map(u => ({ value: String(u.id), label: `${u.name} (${u.role})` })), [users]);
+  const trackOpts = [
+    { value: 'A', label: 'Track A — Full investigation' },
+    { value: 'B', label: 'Track B — Light investigation' },
+    { value: 'C', label: 'Track C — Log & close' },
+  ];
 
   return (
     <div className="idet-modal-backdrop" onClick={onCancel}>
@@ -36,22 +45,22 @@ export default function EscalateModal({ incident, onCancel, onConfirm }) {
           <div className="form-grid">
             <div className="form-group">
               <label className="form-label">Investigation track</label>
-              <select className="form-select" value={track} onChange={e => setTrack(e.target.value)}>
-                <option value="A">Track A — Full investigation</option>
-                <option value="B">Track B — Light investigation</option>
-                <option value="C">Track C — Log & close</option>
-              </select>
+              <ComboBox options={trackOpts} value={track} onChange={setTrack} searchable={false} />
             </div>
             <div className="form-group">
               <label className="form-label">Lead investigator</label>
-              <select className="form-select" value={lead} onChange={e => setLead(e.target.value)}>
-                {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-              </select>
+              <ComboBox options={userOpts} value={lead} onChange={setLead} placeholder="Search users…" />
             </div>
           </div>
           <div className="form-group">
             <label className="form-label">Notes for investigator <span className="optional">(optional)</span></label>
-            <textarea className="form-textarea" rows={3} placeholder="Anything the investigator should know up front." value={notes} onChange={e => setNotes(e.target.value)}/>
+            <SmartTextarea
+              value={notes}
+              onChange={setNotes}
+              rows={3}
+              examples={['Witness reports conflicting accounts — interview both shift leads.', 'Affected area has been cordoned off, photos taken by security.', 'CCTV footage available from camera 3B, request from IT.']}
+              chips={['Witness statements needed', 'Area cordoned off', 'CCTV available']}
+            />
           </div>
         </div>
         <div className="idet-modal-footer">

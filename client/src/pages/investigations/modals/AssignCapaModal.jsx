@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 import { getUsers } from '../../../api/users';
 
 export default function AssignCapaModal({ investigation, onCancel, onConfirm }) {
@@ -16,6 +18,10 @@ export default function AssignCapaModal({ investigation, onCancel, onConfirm }) 
   }, []);
 
   const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const userOpts = useMemo(() => users.map(u => ({ value: String(u.id), label: `${u.name} (${u.role})` })), [users]);
+  const verifierOpts = useMemo(() => userOpts.filter(o => o.value !== form.owner_id), [userOpts, form.owner_id]);
+  const typeOpts = [{ value: 'corrective', label: 'Corrective' }, { value: 'preventive', label: 'Preventive' }];
+  const priorityOpts = [{ value: 'critical', label: 'Critical' }, { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }];
   const valid = form.title.trim() && form.due_date && form.owner_id && form.verifier_id && form.owner_id !== form.verifier_id;
 
   return (
@@ -36,33 +42,21 @@ export default function AssignCapaModal({ investigation, onCancel, onConfirm }) 
           <div className="form-grid">
             <div className="form-group">
               <label className="form-label">Type</label>
-              <select className="form-select" value={form.type} onChange={e => update('type', e.target.value)}>
-                <option value="corrective">Corrective</option>
-                <option value="preventive">Preventive</option>
-              </select>
+              <ComboBox options={typeOpts} value={form.type} onChange={v => update('type', v)} searchable={false} />
             </div>
             <div className="form-group">
               <label className="form-label">Priority</label>
-              <select className="form-select" value={form.priority} onChange={e => update('priority', e.target.value)}>
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
+              <ComboBox options={priorityOpts} value={form.priority} onChange={v => update('priority', v)} searchable={false} />
             </div>
           </div>
           <div className="form-grid">
             <div className="form-group">
               <label className="form-label">Owner</label>
-              <select className="form-select" value={form.owner_id} onChange={e => update('owner_id', e.target.value)}>
-                {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-              </select>
+              <ComboBox options={userOpts} value={form.owner_id} onChange={v => update('owner_id', v)} placeholder="Search users…" />
             </div>
             <div className="form-group">
               <label className="form-label">Verifier (≠ owner)</label>
-              <select className="form-select" value={form.verifier_id} onChange={e => update('verifier_id', e.target.value)}>
-                {users.filter(u => String(u.id) !== form.owner_id).map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-              </select>
+              <ComboBox options={verifierOpts} value={form.verifier_id} onChange={v => update('verifier_id', v)} placeholder="Search users…" />
             </div>
           </div>
           <div className="form-group">
@@ -71,7 +65,13 @@ export default function AssignCapaModal({ investigation, onCancel, onConfirm }) 
           </div>
           <div className="form-group">
             <label className="form-label">Description <span className="optional">(optional)</span></label>
-            <textarea className="form-textarea" rows={3} placeholder="What needs to be done and how completion will be verified." value={form.description} onChange={e => update('description', e.target.value)}/>
+            <SmartTextarea
+              value={form.description}
+              onChange={v => update('description', v)}
+              rows={3}
+              examples={['Revise SOP-LAB-014 to include mandatory fume-hood checks before each shift.', 'Install secondary containment bunding around chemical storage IBC rack.', 'Retrain all operators on LOTO procedure per updated Work Instruction WI-032.']}
+              chips={['Update SOP', 'Install engineering control', 'Retrain team']}
+            />
           </div>
           {form.owner_id === form.verifier_id && form.owner_id && (
             <div className="modal-info-banner" style={{ background: 'linear-gradient(135deg, #fef2f2, #fff1f2)', borderColor: '#fecaca' }}>

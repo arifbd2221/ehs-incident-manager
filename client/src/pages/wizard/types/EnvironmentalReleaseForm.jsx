@@ -1,4 +1,15 @@
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
+
+const CONTAINMENT_STATUSES = [
+  { value: '', label: 'Select...' },
+  { value: 'Fully contained', label: 'Fully contained' },
+  { value: 'Partially contained', label: 'Partially contained' },
+  { value: 'Not contained — active release', label: 'Not contained — active release' },
+  { value: 'Contained after initial release', label: 'Contained after initial release' },
+  { value: 'Fully cleaned up', label: 'Fully cleaned up' },
+];
 
 export default function EnvironmentalReleaseForm({ data, onChange }) {
   return (
@@ -19,15 +30,17 @@ export default function EnvironmentalReleaseForm({ data, onChange }) {
         </div>
         <div className="field">
           <label className="label">Containment status</label>
-          <select className="select" value={data.containment_status || ''} onChange={e => onChange({ ...data, containment_status: e.target.value })}>
-            <option value="">Select...</option>
-            <option>Fully contained</option><option>Partially contained</option><option>Not contained — active release</option><option>Contained after initial release</option><option>Fully cleaned up</option>
-          </select>
+          <ComboBox options={CONTAINMENT_STATUSES} value={data.containment_status || ''} onChange={v => onChange({ ...data, containment_status: v })} placeholder="Search statuses…" />
         </div>
       </div>
       <div className="field">
         <label className="label">Cleanup / response actions</label>
-        <textarea className="textarea" value={data.cleanup_actions || ''} onChange={e => onChange({ ...data, cleanup_actions: e.target.value })} placeholder="Describe all cleanup and response actions taken."/>
+        <SmartTextarea
+          value={data.cleanup_actions || ''}
+          onChange={v => onChange({ ...data, cleanup_actions: v })}
+          examples={['Spill contained with absorbent booms, area evacuated. Hazmat contractor called for cleanup.', 'Leak isolated at valve V-12, secondary containment held. Residual pumped to waste IBC.', 'Area ventilated with portable fans. Air monitoring confirmed safe levels before re-entry.']}
+          chips={['Spill contained', 'Leak isolated', 'Area evacuated', 'Hazmat called']}
+        />
       </div>
     </>
   );

@@ -1,4 +1,22 @@
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
+
+const HAZARDS = [
+  { value: '', label: 'Select...' },
+  { value: 'Slip / Trip / Fall — Wet surface', label: 'Slip / Trip / Fall — Wet surface' },
+  { value: 'Slip / Trip / Fall — Obstruction', label: 'Slip / Trip / Fall — Obstruction' },
+  { value: 'Fall from height — Unguarded edge', label: 'Fall from height — Unguarded edge' },
+  { value: 'Electrical — Exposed wiring', label: 'Electrical — Exposed wiring' },
+  { value: 'Mechanical — Missing machine guard', label: 'Mechanical — Missing machine guard' },
+  { value: 'Mechanical — Defective equipment', label: 'Mechanical — Defective equipment' },
+  { value: 'Chemical — Unlabeled container', label: 'Chemical — Unlabeled container' },
+  { value: 'Chemical — Improper storage', label: 'Chemical — Improper storage' },
+  { value: 'Fire — Blocked fire exit', label: 'Fire — Blocked fire exit' },
+  { value: 'Structural — Damaged floor / wall', label: 'Structural — Damaged floor / wall' },
+  { value: 'Housekeeping — Cluttered walkway', label: 'Housekeeping — Cluttered walkway' },
+  { value: 'Lockout/Tagout — Missing', label: 'Lockout/Tagout — Missing' },
+];
 
 export default function UnsafeConditionForm({ data, onChange }) {
   return (
@@ -7,15 +25,7 @@ export default function UnsafeConditionForm({ data, onChange }) {
         <div className="card-h"><Icon name="warning" size={18} color="var(--sds-brand-primary)"/>Hazard type</div>
         <div className="field">
           <label className="label">Primary hazard <span className="req">*</span></label>
-          <select className="select" value={data.primary_hazard || ''} onChange={e => onChange({ ...data, primary_hazard: e.target.value })}>
-            <option value="">Select...</option>
-            <option>Slip / Trip / Fall — Wet surface</option><option>Slip / Trip / Fall — Obstruction</option>
-            <option>Fall from height — Unguarded edge</option><option>Electrical — Exposed wiring</option>
-            <option>Mechanical — Missing machine guard</option><option>Mechanical — Defective equipment</option>
-            <option>Chemical — Unlabeled container</option><option>Chemical — Improper storage</option>
-            <option>Fire — Blocked fire exit</option><option>Structural — Damaged floor / wall</option>
-            <option>Housekeeping — Cluttered walkway</option><option>Lockout/Tagout — Missing</option>
-          </select>
+          <ComboBox options={HAZARDS} value={data.primary_hazard || ''} onChange={v => onChange({ ...data, primary_hazard: v })} placeholder="Search hazards…" />
         </div>
       </div>
       <div className="grid-2">
@@ -42,7 +52,12 @@ export default function UnsafeConditionForm({ data, onChange }) {
       </div>
       <div className="field">
         <label className="label">Recommended corrective action</label>
-        <textarea className="textarea" value={data.corrective_action || ''} onChange={e => onChange({ ...data, corrective_action: e.target.value })} placeholder="Describe your recommended fix or improvement."/>
+        <SmartTextarea
+          value={data.corrective_action || ''}
+          onChange={v => onChange({ ...data, corrective_action: v })}
+          examples={['Replace missing machine guard on press #4 and add interlock switch.', 'Clear obstructed walkway, install permanent floor marking for storage zones.', 'Repair damaged floor tiles in chemical storage room and apply anti-slip coating.']}
+          chips={['Replace guard', 'Clear obstruction', 'Repair damage', 'Add signage']}
+        />
       </div>
     </>
   );

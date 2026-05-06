@@ -1,4 +1,18 @@
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+
+const ILLNESS_CATEGORIES = [
+  { value: '', label: 'Select...' },
+  { value: 'Skin disorder — Contact dermatitis', label: 'Skin disorder — Contact dermatitis' },
+  { value: 'Respiratory — Occupational asthma', label: 'Respiratory — Occupational asthma' },
+  { value: 'Hearing loss — Noise-induced', label: 'Hearing loss — Noise-induced' },
+  { value: 'Poisoning — Lead / Solvent', label: 'Poisoning — Lead / Solvent' },
+  { value: 'Musculoskeletal — Carpal tunnel', label: 'Musculoskeletal — Carpal tunnel' },
+  { value: 'Infectious — Bloodborne pathogen', label: 'Infectious — Bloodborne pathogen' },
+  { value: 'Heat / cold related', label: 'Heat / cold related' },
+  { value: 'Occupational cancer', label: 'Occupational cancer' },
+  { value: 'Mental health — Work-related stress', label: 'Mental health — Work-related stress' },
+];
 
 export default function IllnessForm({ data, onChange }) {
   return (
@@ -21,18 +35,7 @@ export default function IllnessForm({ data, onChange }) {
         <div className="card-h"><Icon name="warning" size={18} color="var(--sds-brand-primary)"/>Illness category</div>
         <div className="field">
           <label className="label">Category <span className="req">*</span></label>
-          <select className="select" value={data.illness_category || ''} onChange={e => onChange({ ...data, illness_category: e.target.value })}>
-            <option value="">Select...</option>
-            <option>Skin disorder — Contact dermatitis</option>
-            <option>Respiratory — Occupational asthma</option>
-            <option>Hearing loss — Noise-induced</option>
-            <option>Poisoning — Lead / Solvent</option>
-            <option>Musculoskeletal — Carpal tunnel</option>
-            <option>Infectious — Bloodborne pathogen</option>
-            <option>Heat / cold related</option>
-            <option>Occupational cancer</option>
-            <option>Mental health — Work-related stress</option>
-          </select>
+          <ComboBox options={ILLNESS_CATEGORIES} value={data.illness_category || ''} onChange={v => onChange({ ...data, illness_category: v })} placeholder="Search categories…" />
         </div>
         <div className="field">
           <label className="label">Substance / agent that caused or contributed</label>

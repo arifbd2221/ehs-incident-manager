@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 import { getUsers } from '../../../api/users';
 
 export default function AssignModal({ incident, onCancel, onConfirm }) {
@@ -14,6 +16,8 @@ export default function AssignModal({ incident, onCancel, onConfirm }) {
       if (data.length > 0) setOwner(String(data[0].id));
     });
   }, []);
+
+  const userOpts = useMemo(() => users.map(u => ({ value: String(u.id), label: `${u.name} (${u.role})` })), [users]);
 
   return (
     <div className="idet-modal-backdrop" onClick={onCancel}>
@@ -31,9 +35,7 @@ export default function AssignModal({ incident, onCancel, onConfirm }) {
           </div>
           <div className="form-group">
             <label className="form-label">Owner</label>
-            <select className="form-select" value={owner} onChange={e => setOwner(e.target.value)}>
-              {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-            </select>
+            <ComboBox options={userOpts} value={owner} onChange={setOwner} placeholder="Search users…" />
           </div>
           <div className="form-group">
             <label className="form-label">Triage by</label>
@@ -41,7 +43,13 @@ export default function AssignModal({ incident, onCancel, onConfirm }) {
           </div>
           <div className="form-group">
             <label className="form-label">Notes <span className="optional">(optional)</span></label>
-            <textarea className="form-textarea" rows={2} placeholder="What you want the owner to look into." value={notes} onChange={e => setNotes(e.target.value)}/>
+            <SmartTextarea
+              value={notes}
+              onChange={setNotes}
+              rows={2}
+              examples={['Verify affected worker has been seen by medical.', 'Check if the area has been made safe before shift change.', 'Collect witness names and initial statements.']}
+              chips={['Verify medical status', 'Check area safety', 'Collect witness info']}
+            />
           </div>
         </div>
         <div className="idet-modal-footer">

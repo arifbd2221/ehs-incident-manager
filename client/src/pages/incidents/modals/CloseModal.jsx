@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 
 export default function CloseModal({ incident, onCancel, onConfirm }) {
   const [reason, setReason] = useState('first-aid');
@@ -21,18 +23,29 @@ export default function CloseModal({ incident, onCancel, onConfirm }) {
           </div>
           <div className="form-group">
             <label className="form-label">Closure reason</label>
-            <select className="form-select" value={reason} onChange={e => setReason(e.target.value)}>
-              <option value="first-aid">First-aid only — no recordable case</option>
-              <option value="observation">Observation logged — no incident</option>
-              <option value="duplicate">Duplicate of another report</option>
-              <option value="not-work-related">Not work-related</option>
-              <option value="superseded">Superseded by later report</option>
-              <option value="resolved">Already resolved at scene</option>
-            </select>
+            <ComboBox
+              options={[
+                { value: 'first-aid', label: 'First-aid only — no recordable case' },
+                { value: 'observation', label: 'Observation logged — no incident' },
+                { value: 'duplicate', label: 'Duplicate of another report' },
+                { value: 'not-work-related', label: 'Not work-related' },
+                { value: 'superseded', label: 'Superseded by later report' },
+                { value: 'resolved', label: 'Already resolved at scene' },
+              ]}
+              value={reason}
+              onChange={setReason}
+              searchable={false}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">Notes <span className="optional">(optional)</span></label>
-            <textarea className="form-textarea" rows={3} placeholder="Anything that explains the close." value={notes} onChange={e => setNotes(e.target.value)}/>
+            <SmartTextarea
+              value={notes}
+              onChange={setNotes}
+              rows={3}
+              examples={['First aid administered on site, no further action needed.', 'Duplicate of INC-042, already under investigation.', 'Reviewed by supervisor — resolved at the scene before shift end.']}
+              chips={['First aid only', 'Duplicate report', 'Resolved at scene']}
+            />
           </div>
         </div>
         <div className="idet-modal-footer">

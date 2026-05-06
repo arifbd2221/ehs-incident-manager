@@ -983,7 +983,8 @@
 }
 
 /* Findings */
-.invd-findings-area {
+.invd-findings-area,
+.invd-findings-st .st-input {
   width: 100%;
   padding: 14px;
   border-radius: 10px;
@@ -998,7 +999,8 @@
   font-family: inherit;
   transition: border-color 150ms;
 }
-.invd-findings-area:focus {
+.invd-findings-area:focus,
+.invd-findings-st .st-input:focus {
   border-color: #626DF9;
   box-shadow: 0 0 0 3px rgba(98, 109, 249, 0.1);
 }

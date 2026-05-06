@@ -1,6 +1,42 @@
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
 import BodyMap3D from '../../../components/shared/BodyMap3D';
 import '../../../styles/bodymap.css';
+
+const INJURY_TYPES = [
+  { value: '', label: 'Select...' },
+  { value: 'Chemical burn — 1st degree', label: 'Chemical burn — 1st degree' },
+  { value: 'Laceration / Cut', label: 'Laceration / Cut' },
+  { value: 'Puncture wound', label: 'Puncture wound' },
+  { value: 'Contusion / Bruise', label: 'Contusion / Bruise' },
+  { value: 'Fracture — Open', label: 'Fracture — Open' },
+  { value: 'Fracture — Closed', label: 'Fracture — Closed' },
+  { value: 'Sprain / Strain', label: 'Sprain / Strain' },
+  { value: 'Crush injury', label: 'Crush injury' },
+  { value: 'Amputation', label: 'Amputation' },
+  { value: 'Burn — 2nd / 3rd degree', label: 'Burn — 2nd / 3rd degree' },
+  { value: 'Concussion / Head injury', label: 'Concussion / Head injury' },
+  { value: 'Inhalation injury', label: 'Inhalation injury' },
+];
+const MECHANISMS = [
+  { value: '', label: 'Select...' },
+  { value: 'Contact with chemical substance', label: 'Contact with chemical substance' },
+  { value: 'Struck by moving object', label: 'Struck by moving object' },
+  { value: 'Caught in / between equipment', label: 'Caught in / between equipment' },
+  { value: 'Fall from height', label: 'Fall from height' },
+  { value: 'Fall on same level', label: 'Fall on same level' },
+  { value: 'Overexertion — lifting / pulling', label: 'Overexertion — lifting / pulling' },
+  { value: 'Vehicle accident — on-site', label: 'Vehicle accident — on-site' },
+];
+const TREATMENTS = [
+  { value: '', label: 'Select...' },
+  { value: 'First aid only', label: 'First aid only' },
+  { value: 'Medical treatment', label: 'Medical treatment' },
+  { value: 'Days away from work', label: 'Days away from work' },
+  { value: 'Restricted duty', label: 'Restricted duty' },
+  { value: 'Hospitalization', label: 'Hospitalization' },
+  { value: 'Fatality', label: 'Fatality' },
+];
 
 const PPE_ITEMS = [
   { name: 'Gloves', color: '#22c55e', bg: 'rgba(34,197,94,0.1)', icon: (
@@ -71,22 +107,11 @@ export default function InjuryForm({ data, onChange }) {
         <div className="col gap-16">
           <div className="field">
             <label className="label">Type of injury</label>
-            <select className="select" value={data.injury_type || ''} onChange={e => onChange({ ...data, injury_type: e.target.value })}>
-              <option value="">Select...</option>
-              <option>Chemical burn — 1st degree</option><option>Laceration / Cut</option><option>Puncture wound</option>
-              <option>Contusion / Bruise</option><option>Fracture — Open</option><option>Fracture — Closed</option>
-              <option>Sprain / Strain</option><option>Crush injury</option><option>Amputation</option>
-              <option>Burn — 2nd / 3rd degree</option><option>Concussion / Head injury</option><option>Inhalation injury</option>
-            </select>
+            <ComboBox options={INJURY_TYPES} value={data.injury_type || ''} onChange={v => onChange({ ...data, injury_type: v })} placeholder="Search injury types…" />
           </div>
           <div className="field">
             <label className="label">Mechanism of injury</label>
-            <select className="select" value={data.mechanism || ''} onChange={e => onChange({ ...data, mechanism: e.target.value })}>
-              <option value="">Select...</option>
-              <option>Contact with chemical substance</option><option>Struck by moving object</option>
-              <option>Caught in / between equipment</option><option>Fall from height</option><option>Fall on same level</option>
-              <option>Overexertion — lifting / pulling</option><option>Vehicle accident — on-site</option>
-            </select>
+            <ComboBox options={MECHANISMS} value={data.mechanism || ''} onChange={v => onChange({ ...data, mechanism: v })} placeholder="Search mechanisms…" />
           </div>
           <div className="field">
             <label className="label">Object / substance that directly harmed</label>
@@ -94,11 +119,7 @@ export default function InjuryForm({ data, onChange }) {
           </div>
           <div className="field">
             <label className="label">Treatment required</label>
-            <select className="select" value={data.treatment || ''} onChange={e => onChange({ ...data, treatment: e.target.value })}>
-              <option value="">Select...</option>
-              <option>First aid only</option><option>Medical treatment</option><option>Days away from work</option>
-              <option>Restricted duty</option><option>Hospitalization</option><option>Fatality</option>
-            </select>
+            <ComboBox options={TREATMENTS} value={data.treatment || ''} onChange={v => onChange({ ...data, treatment: v })} placeholder="Search treatments…" />
           </div>
         </div>
       </div>

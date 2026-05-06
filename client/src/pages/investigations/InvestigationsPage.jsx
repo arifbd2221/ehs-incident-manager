@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getInvestigations, updateInvestigation, closeInvestigation } from '../../api/investigations';
 import { useApp } from '../../context/AppContext';
 import Icon from '../../components/shared/Icon';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import { SevBadge } from '../../components/shared/Badges';
 import { timeAgo } from '../../utils/time';
 import '../../styles/investigations.css';
@@ -361,12 +362,12 @@ export default function InvestigationsPage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Closure reason</label>
-                <textarea
-                  className="form-textarea"
-                  rows={3}
-                  placeholder="Investigation findings, resolution summary..."
+                <SmartTextarea
                   value={closeReason}
-                  onChange={e => setCloseReason(e.target.value)}
+                  onChange={setCloseReason}
+                  rows={3}
+                  examples={['Root cause addressed by existing control; no further action required.', 'CAPA completed and verified — corrective measures in place.', 'Findings show incident was non-work-related per OSHA criteria.']}
+                  chips={['Existing controls sufficient', 'CAPA verified', 'Non-work-related']}
                 />
               </div>
             </div>
