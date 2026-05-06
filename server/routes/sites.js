@@ -21,8 +21,15 @@
 
 import { Router } from 'express';
 import db from '../db/connection.js';
+import { writeActivity, diffFields } from '../services/activity_log.js';
 
 const router = Router();
+
+const SITE_AUDIT_FIELDS = [
+  'name', 'address', 'country', 'naics_code', 'establishment_id',
+  'hse_establishment_id', 'annual_avg_employees', 'total_hours_worked',
+  'timezone', 'parent_id',
+];
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
@@ -237,6 +244,17 @@ router.post('/', (req, res) => {
   );
 
   const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(result.lastInsertRowid);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'site',
+    entity_id: site.id,
+    action: 'site_created',
+    description: `created site ${site.name}`,
+    user_id: req.user.id,
+    metadata: site.parent_id ? { parent_id: site.parent_id } : null,
+  });
+
   res.status(201).json(site);
 });
 
@@ -282,6 +300,20 @@ router.patch('/:id', (req, res) => {
   db.prepare(`UPDATE sites SET ${sets.join(', ')} WHERE id = ?`).run(...params);
 
   const updated = db.prepare('SELECT * FROM sites WHERE id = ?').get(site.id);
+
+  const changes = diffFields(site, updated, SITE_AUDIT_FIELDS);
+  if (changes) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'site',
+      entity_id: site.id,
+      action: 'site_updated',
+      description: `updated site ${updated.name}`,
+      user_id: req.user.id,
+      metadata: changes,
+    });
+  }
+
   res.json(updated);
 });
 
@@ -311,6 +343,17 @@ router.delete('/:id', (req, res) => {
   }
 
   db.prepare('DELETE FROM sites WHERE id = ?').run(site.id);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'site',
+    entity_id: site.id,
+    action: 'site_deleted',
+    description: `deleted site ${site.name}`,
+    user_id: req.user.id,
+    metadata: { name: site.name, country: site.country, parent_id: site.parent_id },
+  });
+
   res.json({ success: true });
 });
 

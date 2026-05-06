@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getCapa, updateCapa, completeCapa, verifyCapa, rejectCapa } from '../../api/capas';
 import Icon from '../../components/shared/Icon';
 import { timeAgo, formatDateShort } from '../../utils/time';
+import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/capas.css';
 
 const LANE_LABELS = { pending: 'Pending', progress: 'In progress', verify: 'Pending verification', closed: 'Verified · Closed' };
@@ -338,6 +339,8 @@ export default function CAPADetail() {
           </div>
         </div>
       </div>
+
+      <ReferencedByCard entityType="capa" entityId={capa.id} />
 
       {/* Toast */}
       {toast && createPortal(

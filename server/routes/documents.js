@@ -19,8 +19,11 @@ import db from '../db/connection.js';
 import { upload, uploadDir } from '../middleware/upload.js';
 import { nextDocumentNumber } from '../services/numbering.js';
 import { listLinksTouching, LINKABLE_TYPES } from '../services/entity_links.js';
+import { writeActivity, diffFields } from '../services/activity_log.js';
 
 const router = Router();
+
+const DOCUMENT_AUDIT_FIELDS = ['name', 'document_type', 'folder_id', 'active'];
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
@@ -162,6 +165,22 @@ router.post('/', upload.single('file'), (req, res) => {
     FROM documents d LEFT JOIN users u ON u.id = d.uploaded_by
     WHERE d.id = ?
   `).get(result.lastInsertRowid);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'document',
+    entity_id: doc.id,
+    action: 'document_uploaded',
+    description: `uploaded document ${doc.name}`,
+    user_id: req.user.id,
+    metadata: {
+      document_type: doc.document_type,
+      folder_id: doc.folder_id,
+      mime_type: doc.mime_type,
+      size_bytes: doc.size_bytes,
+    },
+  });
+
   res.status(201).json(doc);
 });
 
@@ -205,6 +224,31 @@ router.patch('/:id', (req, res) => {
     FROM documents d LEFT JOIN users u ON u.id = d.uploaded_by
     WHERE d.id = ?
   `).get(doc.id);
+
+  // Use a distinct action when only folder_id moved — Drive-style "moved" reads
+  // better in audit than "updated".
+  const onlyFolder = req.body.folder_id !== undefined
+    && req.body.name === undefined
+    && req.body.document_type === undefined
+    && req.body.active === undefined;
+  const action = onlyFolder ? 'document_moved' : 'document_updated';
+  const description = onlyFolder
+    ? `moved document ${updated.name}`
+    : `updated document ${updated.name}`;
+
+  const changes = diffFields(doc, updated, DOCUMENT_AUDIT_FIELDS);
+  if (changes) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'document',
+      entity_id: doc.id,
+      action,
+      description,
+      user_id: req.user.id,
+      metadata: changes,
+    });
+  }
+
   res.json(updated);
 });
 
@@ -215,6 +259,17 @@ router.delete('/:id', (req, res) => {
 
   // Soft-delete; keep the file on disk so historical links don't break.
   db.prepare("UPDATE documents SET active = 0, updated_at = datetime('now') WHERE id = ?").run(doc.id);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'document',
+    entity_id: doc.id,
+    action: 'document_deleted',
+    description: `deleted document ${doc.name}`,
+    user_id: req.user.id,
+    metadata: { document_number: doc.document_number, document_type: doc.document_type },
+  });
+
   res.json({ success: true, soft_deleted: true });
 });
 

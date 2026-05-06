@@ -10,6 +10,7 @@
 
 import { Router } from 'express';
 import db from '../db/connection.js';
+import { writeActivity } from '../services/activity_log.js';
 
 const router = Router();
 
@@ -84,6 +85,19 @@ router.post('/', (req, res) => {
     'SELECT * FROM answer_set_options WHERE answer_set_id = ? ORDER BY position ASC'
   ).all(setId);
 
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'answer_set',
+    entity_id: setId,
+    action: 'answer_set_created',
+    description: `created answer set ${answerSet.name}`,
+    user_id: req.user.id,
+    metadata: {
+      option_count: answerSet.options.length,
+      options: answerSet.options.map(o => ({ label: o.label, score: o.score, is_failed: !!o.is_failed })),
+    },
+  });
+
   res.status(201).json(answerSet);
 });
 
@@ -129,12 +143,42 @@ router.patch('/:id', (req, res) => {
     }
   });
 
+  // Snapshot options before the update for the audit diff.
+  const optionsBefore = db.prepare(
+    'SELECT label, score, color, is_failed, position FROM answer_set_options WHERE answer_set_id = ? ORDER BY position ASC'
+  ).all(answerSet.id);
+
   update();
 
   const updated = db.prepare('SELECT * FROM answer_sets WHERE id = ?').get(answerSet.id);
   updated.options = db.prepare(
     'SELECT * FROM answer_set_options WHERE answer_set_id = ? ORDER BY position ASC'
   ).all(answerSet.id);
+
+  // Audit-relevant: when an answer set is mutated, every prior inspection
+  // that recorded against it can no longer be re-displayed identically.
+  // Capture name + options diff so the trail is reconstructible.
+  const meta = { changes: {} };
+  if (name !== undefined && name.trim() !== answerSet.name) {
+    meta.changes.name = [answerSet.name, updated.name];
+  }
+  if (Array.isArray(options)) {
+    meta.changes.options = [
+      optionsBefore.map(o => ({ label: o.label, score: o.score, is_failed: !!o.is_failed })),
+      updated.options.map(o => ({ label: o.label, score: o.score, is_failed: !!o.is_failed })),
+    ];
+  }
+  if (Object.keys(meta.changes).length > 0) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'answer_set',
+      entity_id: answerSet.id,
+      action: 'answer_set_updated',
+      description: `updated answer set ${updated.name}`,
+      user_id: req.user.id,
+      metadata: meta,
+    });
+  }
 
   res.json(updated);
 });
@@ -183,8 +227,26 @@ router.delete('/:id', (req, res) => {
     });
   }
 
+  // Snapshot options for the audit metadata before CASCADE wipes them.
+  const optionsBefore = db.prepare(
+    'SELECT label, score, color, is_failed, position FROM answer_set_options WHERE answer_set_id = ? ORDER BY position ASC'
+  ).all(answerSet.id);
+
   // CASCADE will delete answer_set_options automatically
   db.prepare('DELETE FROM answer_sets WHERE id = ?').run(answerSet.id);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'answer_set',
+    entity_id: answerSet.id,
+    action: 'answer_set_deleted',
+    description: `deleted answer set ${answerSet.name}`,
+    user_id: req.user.id,
+    metadata: {
+      name: answerSet.name,
+      options: optionsBefore.map(o => ({ label: o.label, score: o.score, is_failed: !!o.is_failed })),
+    },
+  });
 
   res.json({ success: true });
 });

@@ -1740,3 +1740,106 @@ body {
   .swb-pulse { animation: none; }
   .swb { animation: none; }
 }
+
+/* ================================================================
+ * Referenced-by card (refby-) — P3-L1 shared component
+ * ================================================================ */
+.refby-card { margin-top: 16px; }
+
+.refby-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 50px;
+  background: var(--sds-bg-page);
+  color: var(--sds-fg-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.refby-empty {
+  padding: 18px 4px;
+  color: var(--sds-fg-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.refby-group { margin-top: 14px; }
+.refby-group:first-of-type { margin-top: 8px; }
+
+.refby-group-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sds-fg-secondary);
+  margin-bottom: 8px;
+}
+.refby-group-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 50px;
+  background: var(--sds-bg-page);
+  color: var(--sds-fg-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.refby-rows { display: flex; flex-direction: column; }
+
+.refby-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.refby-row:hover { background: var(--sds-bg-surface-alt); }
+.refby-row + .refby-row { border-top: 1px solid var(--sds-border); border-radius: 0; }
+.refby-row:last-child { border-radius: 0 0 8px 8px; }
+
+.refby-num {
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sds-fg-tertiary);
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+.refby-main { flex: 1; min-width: 0; }
+.refby-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sds-fg-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.refby-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.refby-meta-text {
+  font-size: 11px;
+  color: var(--sds-fg-tertiary);
+}
+
+.refby-status {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sds-fg-secondary);
+  flex-shrink: 0;
+  text-transform: capitalize;
+}

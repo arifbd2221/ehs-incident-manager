@@ -10,6 +10,7 @@ import { timeAgo, formatDate } from '../../utils/time';
 import AssignModal from './modals/AssignModal';
 import EscalateModal from './modals/EscalateModal';
 import CloseModal from './modals/CloseModal';
+import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/incidents.css';
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -610,6 +611,8 @@ export default function IncidentDetail() {
         </div>,
         document.body
       )}
+
+      <ReferencedByCard entityType="incident" entityId={incident.id} />
 
       {/* Modals — portal to escape .page transform */}
       {modal === 'assign' && createPortal(<AssignModal incident={r} onCancel={() => setModal(null)} onConfirm={handleAssign}/>, document.body)}

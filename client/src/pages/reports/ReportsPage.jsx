@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getOsha300, getOsha300A, getRiddor, getMetrics } from '../../api/reports';
-import { getSites } from '../../api/users';
+import { getOsha300, getOsha300A, getRiddor, getMetrics, getAuditLog, getAuditActions } from '../../api/reports';
+import { getSites, getUsers } from '../../api/users';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import CertifyOsha300AModal from '../../components/modals/CertifyOsha300AModal';
@@ -9,12 +9,16 @@ import { formatDateShort, formatDate } from '../../utils/time';
 import '../../styles/reports.css';
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+// Audit log is narrower than ELEVATED — compliance/upper-management only.
+// Mirrors AUDIT_ROLES on the BE; supervisors are intentionally excluded.
+const AUDIT_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 
 const REPORT_TYPES = [
   { id: 'osha300', cls: 'rt-osha300', badge: 'OSHA · US', title: 'OSHA 300 Log', desc: 'Running log of recordable injuries & illnesses.' },
   { id: 'osha300a', cls: 'rt-osha300a', badge: 'OSHA · US', title: 'OSHA 300A Summary', desc: 'Annual summary, posted Feb 1 – Apr 30.' },
   { id: 'riddor', cls: 'rt-riddor', badge: 'HSE · UK', title: 'RIDDOR F2508', desc: 'Event-triggered to HSE. Sheffield site only.' },
   { id: 'metrics', cls: 'rt-metrics', badge: 'Internal', title: 'Safety Metrics', desc: 'TRIR, DART, severity rate.' },
+  { id: 'audit', cls: 'rt-audit', badge: 'Internal · Audit', title: 'Audit Log', desc: 'Filterable trail of every change. Export for inspector requests.', requiresAudit: true },
 ];
 
 function ReportLoading() {
@@ -29,6 +33,10 @@ function ReportLoading() {
 }
 
 export default function ReportsPage() {
+  const { user } = useAuth();
+  const canSeeAudit = AUDIT_ROLES.has(user?.role);
+  const visibleReports = REPORT_TYPES.filter(r => !r.requiresAudit || canSeeAudit);
+
   const [tab, setTab] = useState('osha300');
   const [sites, setSites] = useState([]);
   const [siteId, setSiteId] = useState('');
@@ -36,6 +44,12 @@ export default function ReportsPage() {
   useEffect(() => {
     getSites().then(data => { setSites(data); if (data.length > 0) setSiteId(String(data[0].id)); });
   }, []);
+
+  // Defensive: if a user without audit access deep-links into audit somehow,
+  // bounce them to the first visible report.
+  useEffect(() => {
+    if (tab === 'audit' && !canSeeAudit) setTab('osha300');
+  }, [tab, canSeeAudit]);
 
   return (
     <div className="page">
@@ -52,7 +66,7 @@ export default function ReportsPage() {
 
       {/* Report type selector */}
       <div className="rpt-type-grid">
-        {REPORT_TYPES.map(r => (
+        {visibleReports.map(r => (
           <div key={r.id} className={`rpt-type-card ${r.cls} ${tab === r.id ? 'active' : ''}`} onClick={() => setTab(r.id)}>
             <div className="rpt-type-badge">{r.badge}</div>
             <div className="rpt-type-title">{r.title}</div>
@@ -66,6 +80,428 @@ export default function ReportsPage() {
       {tab === 'osha300a' && <Osha300AReport siteId={siteId}/>}
       {tab === 'riddor' && <RiddorReport siteId={siteId}/>}
       {tab === 'metrics' && <MetricsReport siteId={siteId}/>}
+      {tab === 'audit' && <AuditLogReport/>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AuditLogReport — P3-A1 chunk 3
+//
+// Internal forensic surface for ehs_officer / ehs_manager / admin. Filter the
+// activity_log by entity, date range, actor, action; preview matching rows
+// in a paginated table; download a CSV slice for inspector requests. The
+// download itself is logged on the BE so chain-of-custody is provable.
+// Reuses existing .rpt-panel / .rpt-table / .field shared classes.
+// ---------------------------------------------------------------------------
+const ENTITY_TYPES = [
+  'incident', 'investigation', 'capa',
+  'site', 'asset', 'asset_category',
+  'document', 'folder', 'link',
+  'user', 'template', 'inspection', 'answer_set', 'system',
+];
+
+// MultiPicker — generic multi-select with optional grouping.
+//
+// Popover is portal'd to document.body because the surrounding .rpt-panel
+// has overflow:hidden, which clips an absolute-positioned dropdown. Fixed
+// positioning relative to the trigger's bounding rect; repositions on scroll
+// and resize while open. Used twice on this page: action picker (grouped
+// by entity_type) and entity-type picker (flat list).
+//
+// Props:
+//   items     — array of { key, label, count?, group? }
+//   value     — string[] of selected keys
+//   onChange  — (next: string[]) => void
+//   placeholder — text shown on trigger when no selection
+//   labelOne  — text on trigger for single selection (default = the key)
+//   labelMany — formatter for multi: (n) => string
+//   isGrouped — bool, render group headers + select-all
+//   disabled  — disable trigger
+function MultiPicker({ items, value, onChange, placeholder, labelOne, labelMany, isGrouped, disabled }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
+  const triggerRef = useRef(null);
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePos = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (r) setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    updatePos();
+    const onDocClick = (e) => {
+      if (triggerRef.current?.contains(e.target)) return;
+      if (popoverRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [open]);
+
+  const groups = useMemo(() => {
+    if (!isGrouped) return null;
+    const m = {};
+    for (const it of items) (m[it.group || '—'] = m[it.group || '—'] || []).push(it);
+    return m;
+  }, [items, isGrouped]);
+
+  const selectedSet = new Set(value);
+
+  const toggleKey = (key) => {
+    const next = new Set(selectedSet);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    onChange([...next]);
+  };
+  const toggleGroupAll = (groupKey, allChecked) => {
+    const next = new Set(selectedSet);
+    for (const it of groups[groupKey]) {
+      if (allChecked) next.delete(it.key);
+      else next.add(it.key);
+    }
+    onChange([...next]);
+  };
+  const clearAll = () => onChange([]);
+
+  let label = placeholder;
+  if (value.length === 1) label = labelOne ? labelOne(value[0]) : value[0];
+  else if (value.length > 1) label = labelMany ? labelMany(value.length) : `${value.length} selected`;
+
+  return (
+    <div className="al-multi">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`select al-multi-trigger ${value.length ? 'has-value' : ''}`}
+        onClick={() => !disabled && setOpen(o => !o)}
+        disabled={disabled}
+      >
+        <span className="al-multi-label">{label}</span>
+        <Icon name="arrow" size={11} />
+      </button>
+      {open && createPortal(
+        <div
+          ref={popoverRef}
+          className="al-multi-popover"
+          style={{ top: pos.top, left: pos.left, width: Math.max(pos.width, 280) }}
+        >
+          <div className="al-multi-head">
+            <span>{value.length} selected</span>
+            {value.length > 0 && (
+              <button type="button" className="al-multi-clear" onClick={clearAll}>Clear</button>
+            )}
+          </div>
+          <div className="al-multi-body">
+            {items.length === 0 && (
+              <div className="al-multi-empty">Nothing to pick here yet.</div>
+            )}
+            {isGrouped && groups && Object.entries(groups).map(([gk, gitems]) => {
+              const allChecked = gitems.every(i => selectedSet.has(i.key));
+              const someChecked = !allChecked && gitems.some(i => selectedSet.has(i.key));
+              return (
+                <div key={gk} className="al-multi-group">
+                  <label className="al-multi-grouph">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      ref={el => { if (el) el.indeterminate = someChecked; }}
+                      onChange={() => toggleGroupAll(gk, allChecked)}
+                    />
+                    <span className="al-multi-groupname">{gk}</span>
+                    <span className="al-multi-groupcount">{gitems.length}</span>
+                  </label>
+                  {gitems.map(it => (
+                    <label key={`${gk}-${it.key}`} className="al-multi-item">
+                      <input
+                        type="checkbox"
+                        checked={selectedSet.has(it.key)}
+                        onChange={() => toggleKey(it.key)}
+                      />
+                      <span className="al-multi-action">{it.label || it.key}</span>
+                      {typeof it.count === 'number' && <span className="al-multi-count">{it.count}</span>}
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
+            {!isGrouped && items.map(it => (
+              <label key={it.key} className="al-multi-item al-multi-item-flat">
+                <input
+                  type="checkbox"
+                  checked={selectedSet.has(it.key)}
+                  onChange={() => toggleKey(it.key)}
+                />
+                <span className="al-multi-action">{it.label || it.key}</span>
+                {typeof it.count === 'number' && <span className="al-multi-count">{it.count}</span>}
+              </label>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function AuditLogReport() {
+  const [filters, setFilters] = useState({
+    entity_types: [], entity_number: '', actor_ids: [], actions: [], from: '', to: '', q: '',
+  });
+  const [data, setData] = useState({ rows: [], total: 0, page: 1, limit: 50 });
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [actions, setActions] = useState([]);
+
+  // Org user list for the actor picker.
+  useEffect(() => {
+    getUsers().then(setUsers).catch(() => setUsers([]));
+  }, []);
+
+  // Distinct actions present in the org's activity_log — populates the
+  // action dropdown so the user doesn't have to memorize verb strings.
+  useEffect(() => {
+    getAuditActions().then(setActions).catch(() => setActions([]));
+  }, []);
+
+  const setF = (k, v) => setFilters(f => ({ ...f, [k]: v }));
+
+  const buildQuery = (extra = {}) => {
+    const q = { ...filters, ...extra };
+    // FE arrays → BE comma-separated strings.
+    if (Array.isArray(q.entity_types)) {
+      if (q.entity_types.length > 0) q.entity_type = q.entity_types.join(',');
+      delete q.entity_types;
+    }
+    if (Array.isArray(q.actions)) {
+      if (q.actions.length > 0) q.action = q.actions.join(',');
+      delete q.actions;
+    }
+    if (Array.isArray(q.actor_ids)) {
+      if (q.actor_ids.length > 0) q.actor_id = q.actor_ids.join(',');
+      delete q.actor_ids;
+    }
+    Object.keys(q).forEach(k => {
+      if (q[k] === '' || q[k] === null || q[k] === undefined) delete q[k];
+      if (Array.isArray(q[k]) && q[k].length === 0) delete q[k];
+    });
+    return q;
+  };
+
+  const fetchPage = (page = 1) => {
+    setLoading(true);
+    setErr('');
+    getAuditLog({ ...buildQuery(), page, limit: data.limit })
+      .then(setData)
+      .catch(e => setErr(e.response?.data?.error || 'Failed to load audit log'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchPage(1); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onApply = (e) => { e?.preventDefault(); fetchPage(1); };
+
+  const downloadCsv = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams(buildQuery()).toString();
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`/api/reports/audit-log/export.csv${params ? '?' + params : ''}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `Export failed: ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      // Pull filename out of Content-Disposition if present, otherwise default.
+      let filename = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+      const cd = resp.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      if (m) filename = m[1];
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr(e.message || 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const totalPages = Math.max(1, Math.ceil(data.total / data.limit));
+
+  return (
+    <div className="rpt-panel">
+      <div className="rpt-panel-header">
+        <div>
+          <div className="rpt-panel-title">Audit Log</div>
+          <div className="rpt-panel-sub">Filter, preview, and export the system's audit trail. Every export is itself logged.</div>
+        </div>
+      </div>
+
+      <div className="rpt-panel-body">
+        {/* Filter form — uses shared .field / .input / .select classes */}
+        <form className="al-filters" onSubmit={onApply}>
+          <div className="al-filter-row">
+            <div className="field">
+              <label className="label">
+                Entity types <span className="al-label-hint">multi-select</span>
+              </label>
+              <MultiPicker
+                items={ENTITY_TYPES.map(t => ({ key: t, label: t }))}
+                value={filters.entity_types}
+                onChange={(next) => setF('entity_types', next)}
+                placeholder="All entities"
+                labelMany={(n) => `${n} types selected`}
+                isGrouped={false}
+                disabled={!!filters.entity_number}
+              />
+            </div>
+            <div className="field">
+              <label className="label">
+                Entity number <span className="al-label-hint">overrides type</span>
+              </label>
+              <input
+                className="input"
+                placeholder="INC-2026-0150, CAPA-048, AST-2026-00001…"
+                value={filters.entity_number}
+                onChange={e => setF('entity_number', e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label className="label">
+                Actors <span className="al-label-hint">multi-select</span>
+              </label>
+              <MultiPicker
+                items={users.map(u => ({
+                  key: String(u.id),
+                  label: `${u.name}${u.role ? ` · ${u.role}` : ''}`,
+                }))}
+                value={filters.actor_ids}
+                onChange={(next) => setF('actor_ids', next)}
+                placeholder="Anyone"
+                labelOne={(key) => {
+                  const u = users.find(x => String(x.id) === String(key));
+                  return u ? u.name : key;
+                }}
+                labelMany={(n) => `${n} actors selected`}
+                isGrouped={false}
+              />
+            </div>
+            <div className="field">
+              <label className="label">
+                Actions <span className="al-label-hint">multi-select</span>
+              </label>
+              <MultiPicker
+                items={(filters.entity_types.length > 0
+                  ? actions.filter(a => filters.entity_types.includes(a.entity_type))
+                  : actions
+                ).map(a => ({ key: a.action, label: a.action, count: a.count, group: a.entity_type }))}
+                value={filters.actions}
+                onChange={(next) => setF('actions', next)}
+                placeholder="Any action"
+                labelMany={(n) => `${n} actions selected`}
+                isGrouped={true}
+              />
+            </div>
+          </div>
+          <div className="al-filter-row">
+            <div className="field">
+              <label className="label">From (inclusive)</label>
+              <input className="input" type="date" value={filters.from} onChange={e => setF('from', e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="label">To (exclusive)</label>
+              <input className="input" type="date" value={filters.to} onChange={e => setF('to', e.target.value)} />
+            </div>
+            <div className="field" style={{ flex: 2 }}>
+              <label className="label">Description contains</label>
+              <input className="input" placeholder="search description text" value={filters.q} onChange={e => setF('q', e.target.value)} />
+            </div>
+            <div className="field al-filter-actions">
+              <button type="submit" className="btn btn-primary" disabled={loading}>
+                <Icon name="filter" size={14}/> Apply filters
+              </button>
+              <button type="button" className="btn btn-secondary" disabled={exporting || data.total === 0} onClick={downloadCsv}>
+                <Icon name="download" size={14}/> {exporting ? 'Exporting…' : 'Export CSV'}
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {err && <div className="al-err"><Icon name="warning" size={14}/> {err}</div>}
+
+        <div className="al-meta">
+          <span><b>{data.total}</b> row{data.total === 1 ? '' : 's'} match these filters</span>
+          {data.total > 0 && (
+            <span className="al-meta-note">
+              <Icon name="shield" size={12}/> Every export writes an <code>audit_log_exported</code> row with the filters used.
+            </span>
+          )}
+        </div>
+
+        <div className="rpt-table-wrap">
+          <table className="rpt-table">
+            <thead>
+              <tr>
+                <th style={{ width: 50 }}>ID</th>
+                <th style={{ width: 145 }}>When</th>
+                <th style={{ width: 110 }}>Entity</th>
+                <th style={{ width: 70 }}>#</th>
+                <th style={{ width: 170 }}>Action</th>
+                <th>Description</th>
+                <th style={{ width: 130 }}>Actor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr><td colSpan={7} className="al-loading">Loading…</td></tr>
+              )}
+              {!loading && data.rows.length === 0 && (
+                <tr><td colSpan={7} className="al-empty">No audit-log rows match these filters.</td></tr>
+              )}
+              {!loading && data.rows.map(r => (
+                <tr key={r.id}>
+                  <td className="al-mono">{r.id}</td>
+                  <td className="al-mono">{r.created_at}</td>
+                  <td>{r.entity_type}</td>
+                  <td className="al-mono">{r.entity_id ?? '—'}</td>
+                  <td className="al-mono">{r.action}</td>
+                  <td>{r.description}</td>
+                  <td>{r.user_initials || r.user_name || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {data.total > data.limit && (
+          <div className="al-pager">
+            <button className="btn btn-secondary btn-sm" disabled={data.page <= 1 || loading} onClick={() => fetchPage(data.page - 1)}>
+              <Icon name="arrowL" size={12}/> Prev
+            </button>
+            <span className="al-pager-meta">Page {data.page} of {totalPages}</span>
+            <button className="btn btn-secondary btn-sm" disabled={data.page >= totalPages || loading} onClick={() => fetchPage(data.page + 1)}>
+              Next <Icon name="arrow" size={12}/>
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

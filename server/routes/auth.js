@@ -2,8 +2,11 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import db from '../db/connection.js';
 import { generateToken, authMiddleware } from '../middleware/auth.js';
+import { writeActivity, diffFields } from '../services/activity_log.js';
 
 const router = Router();
+
+const PROFILE_AUDIT_FIELDS = ['name', 'department', 'job_title', 'site_id'];
 
 router.post('/register', (req, res) => {
   const { email, password, name, role, site_id, department, job_title } = req.body;
@@ -30,6 +33,16 @@ router.post('/register', (req, res) => {
 
   const user = db.prepare('SELECT id, org_id, site_id, email, name, initials, role, department, job_title FROM users WHERE id = ?').get(result.lastInsertRowid);
   const token = generateToken(user);
+
+  writeActivity({
+    org_id: user.org_id,
+    entity_type: 'user',
+    entity_id: user.id,
+    action: 'user_registered',
+    description: `registered ${user.name} (${user.email})`,
+    user_id: user.id,
+    metadata: { role: user.role, site_id: user.site_id, department: user.department },
+  });
 
   res.status(201).json({ token, user });
 });
@@ -66,6 +79,10 @@ router.get('/sites', (req, res) => {
 });
 
 router.patch('/profile', authMiddleware, (req, res) => {
+  const before = db.prepare(
+    'SELECT id, org_id, site_id, email, name, initials, role, department, job_title FROM users WHERE id = ?'
+  ).get(req.user.id);
+
   const { name, department, job_title, site_id } = req.body;
   const sets = [];
   const params = [];
@@ -86,6 +103,20 @@ router.patch('/profile', authMiddleware, (req, res) => {
   const user = db.prepare(
     'SELECT id, org_id, site_id, email, name, initials, role, department, job_title, created_at FROM users WHERE id = ?'
   ).get(req.user.id);
+
+  const changes = diffFields(before, user, PROFILE_AUDIT_FIELDS);
+  if (changes) {
+    writeActivity({
+      org_id: user.org_id,
+      entity_type: 'user',
+      entity_id: user.id,
+      action: 'profile_updated',
+      description: `updated profile for ${user.name}`,
+      user_id: req.user.id,
+      metadata: changes,
+    });
+  }
+
   const token = generateToken(user);
   res.json({ token, user });
 });
@@ -109,6 +140,16 @@ router.post('/password', authMiddleware, (req, res) => {
   }
 
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(new_password, 10), req.user.id);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'user',
+    entity_id: req.user.id,
+    action: 'password_changed',
+    description: `password changed for ${req.user.name || req.user.email}`,
+    user_id: req.user.id,
+  });
+
   res.json({ message: 'Password updated successfully' });
 });
 

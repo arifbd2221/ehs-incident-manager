@@ -1,11 +1,23 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
 import { calculateMetrics } from '../services/metrics.js';
+import { writeActivity } from '../services/activity_log.js';
 
 const router = Router();
 
+// Hard cap on a single CSV export. Prevents accidental OOM from a wildcard
+// pull on a multi-year activity_log. If hit, the response sets a hard-limit
+// flag in the audit row so the EHS manager knows to narrow filters.
+const AUDIT_EXPORT_HARD_LIMIT = 10000;
+
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
+
+// Audit-log access is narrower than ELEVATED. Compliance/upper-management
+// roles only — supervisors run operations day-to-day and shouldn't see the
+// org-wide forensic trail. Mirrored on the FE in ReportsPage.jsx.
+const AUDIT_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
+const canSeeAudit = (user) => AUDIT_ROLES.has(user?.role);
 
 const OSHA_300A_AFFIRMATION =
   'I certify that I have examined this document and that to the best of my knowledge the entries are true, accurate, and complete.';
@@ -251,6 +263,224 @@ router.get('/metrics', (req, res) => {
   if (!site_id) return res.status(400).json({ error: 'site_id is required' });
   const metrics = calculateMetrics(Number(site_id));
   res.json(metrics);
+});
+
+// ---------------------------------------------------------------------------
+// Audit-log export (P3-A1 chunk 3)
+//
+// Internal forensic trail surface for the EHS manager. Not "submitted to the
+// authority" automatically — the manager downloads the CSV and includes it in
+// whatever submission an inspector requests. The export itself is logged
+// (action='audit_log_exported') so the chain of custody is provable: who
+// pulled which slice, when, with what filters.
+// ---------------------------------------------------------------------------
+
+// Resolve a human-readable entity number (e.g. "INC-2026-0150", "CAPA-048")
+// to {entity_type, entity_id}. Returns null if the prefix is unrecognized
+// or the row doesn't exist in the org. Case-insensitive on the prefix.
+function resolveEntityNumber(orgId, raw) {
+  if (!raw) return null;
+  const s = String(raw).trim().toUpperCase();
+  const lookups = [
+    { prefix: 'INC-',  type: 'incident',      table: 'incidents',      col: 'incident_number' },
+    { prefix: 'INV-',  type: 'investigation', table: 'investigations', col: 'investigation_number' },
+    { prefix: 'CAPA-', type: 'capa',          table: 'capas',          col: 'capa_number' },
+    { prefix: 'AST-',  type: 'asset',         table: 'assets',         col: 'asset_number' },
+    { prefix: 'DOC-',  type: 'document',      table: 'documents',      col: 'document_number' },
+    { prefix: 'INS-',  type: 'inspection',    table: 'inspections',    col: 'inspection_number' },
+  ];
+  for (const l of lookups) {
+    if (s.startsWith(l.prefix)) {
+      const row = db.prepare(`SELECT id FROM ${l.table} WHERE ${l.col} = ? AND org_id = ?`).get(s, orgId);
+      if (row) return { entity_type: l.type, entity_id: row.id, raw: s };
+      return { entity_type: l.type, entity_id: -1, raw: s, not_found: true };
+    }
+  }
+  return null;
+}
+
+function buildAuditWhere(orgId, query) {
+  const where = ['al.org_id = ?'];
+  const params = [orgId];
+
+  // entity_number takes precedence over entity_type + entity_id when present.
+  // Resolves to a (type, id) pair; if the number doesn't exist we still apply
+  // a type filter and force entity_id = -1 so the result set is empty (rather
+  // than silently widening to "all incidents" when the user typo'd the number).
+  let resolvedType = null;
+  let resolvedId = null;
+  if (query.entity_number) {
+    const r = resolveEntityNumber(orgId, query.entity_number);
+    if (r) {
+      resolvedType = r.entity_type;
+      resolvedId = r.entity_id;
+    } else {
+      // Unrecognized prefix — fall through to whatever the user picked
+      // explicitly via entity_type / entity_id.
+    }
+  }
+
+  if (resolvedType) {
+    where.push('al.entity_type = ?');
+    params.push(resolvedType);
+    if (resolvedId !== null) {
+      where.push('al.entity_id = ?');
+      params.push(resolvedId);
+    }
+  } else {
+    if (query.entity_type) {
+      const types = String(query.entity_type).split(',').map(s => s.trim()).filter(Boolean);
+      if (types.length > 0) {
+        where.push(`al.entity_type IN (${types.map(() => '?').join(',')})`);
+        params.push(...types);
+      }
+    }
+    if (query.entity_id) { where.push('al.entity_id = ?'); params.push(Number(query.entity_id)); }
+  }
+
+  // actor_id accepts a single id or a comma-separated list (FE multi-picker
+  // sends e.g. actor_id=1,3 to match "everything Elena and James did").
+  if (query.actor_id) {
+    const ids = String(query.actor_id).split(',').map(s => Number(s.trim())).filter(n => Number.isFinite(n));
+    if (ids.length === 1) {
+      where.push('al.user_id = ?');
+      params.push(ids[0]);
+    } else if (ids.length > 1) {
+      where.push(`al.user_id IN (${ids.map(() => '?').join(',')})`);
+      params.push(...ids);
+    }
+  }
+  // `action` accepts a single value or comma-separated list — multi-select
+  // from the FE picker sends e.g. action=site_created,site_updated.
+  if (query.action) {
+    const actions = String(query.action).split(',').map(s => s.trim()).filter(Boolean);
+    if (actions.length === 1) {
+      where.push('al.action = ?');
+      params.push(actions[0]);
+    } else if (actions.length > 1) {
+      where.push(`al.action IN (${actions.map(() => '?').join(',')})`);
+      params.push(...actions);
+    }
+  }
+  if (query.from) { where.push('al.created_at >= ?'); params.push(query.from); }
+  // `to` is treated as exclusive upper bound (so passing 2026-05-07 returns
+  // everything strictly before that date — i.e., all of 2026-05-06).
+  if (query.to) { where.push('al.created_at < ?'); params.push(query.to); }
+  if (query.q) { where.push('al.description LIKE ?'); params.push(`%${query.q}%`); }
+
+  return { where: where.join(' AND '), params };
+}
+
+// Distinct (entity_type, action) pairs present in this org's activity_log.
+// FE groups by entity_type so the user can pick "all site actions" or
+// individual actions inside a group. Same `action` string appearing under
+// multiple entity types shows up as separate rows (e.g., 'created' for
+// incident vs 'created' for capa) — that distinction matters when the user
+// is narrowing what they want to see.
+router.get('/audit-log/actions', (req, res) => {
+  if (!canSeeAudit(req.user)) {
+    return res.status(403).json({ error: 'Audit log access is limited to EHS compliance roles.' });
+  }
+  const rows = db.prepare(`
+    SELECT entity_type, action, COUNT(*) AS count
+    FROM activity_log
+    WHERE org_id = ?
+    GROUP BY entity_type, action
+    ORDER BY entity_type ASC, count DESC, action ASC
+  `).all(req.user.org_id);
+  res.json({ actions: rows });
+});
+
+router.get('/audit-log', (req, res) => {
+  if (!canSeeAudit(req.user)) {
+    return res.status(403).json({ error: 'Audit log access is limited to EHS compliance roles.' });
+  }
+  const orgId = req.user.org_id;
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+  const offset = (page - 1) * limit;
+
+  const { where, params } = buildAuditWhere(orgId, req.query);
+
+  const total = db.prepare(`SELECT COUNT(*) as c FROM activity_log al WHERE ${where}`)
+    .get(...params).c;
+
+  const rows = db.prepare(`
+    SELECT al.id, al.org_id, al.entity_type, al.entity_id, al.action, al.description,
+           al.user_id, al.metadata, al.created_at,
+           u.name AS user_name, u.initials AS user_initials, u.email AS user_email
+    FROM activity_log al
+    LEFT JOIN users u ON u.id = al.user_id
+    WHERE ${where}
+    ORDER BY al.created_at DESC, al.id DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset);
+
+  res.json({ rows, total, page, limit });
+});
+
+router.get('/audit-log/export.csv', (req, res) => {
+  if (!canSeeAudit(req.user)) {
+    return res.status(403).json({ error: 'Audit log access is limited to EHS compliance roles.' });
+  }
+  const orgId = req.user.org_id;
+  const { where, params } = buildAuditWhere(orgId, req.query);
+
+  const rows = db.prepare(`
+    SELECT al.id, al.created_at, al.entity_type, al.entity_id, al.action, al.description,
+           al.user_id, al.metadata,
+           u.name AS user_name, u.email AS user_email
+    FROM activity_log al
+    LEFT JOIN users u ON u.id = al.user_id
+    WHERE ${where}
+    ORDER BY al.created_at DESC, al.id DESC
+    LIMIT ?
+  `).all(...params, AUDIT_EXPORT_HARD_LIMIT);
+
+  // RFC 4180-ish CSV escape: wrap in quotes when the value contains a comma,
+  // quote, CR, or LF; double any embedded quotes.
+  const escape = (v) => {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  };
+
+  const header = [
+    'id', 'created_at', 'entity_type', 'entity_id', 'action', 'description',
+    'user_id', 'user_name', 'user_email', 'metadata',
+  ];
+
+  const lines = [header.join(',')];
+  for (const r of rows) {
+    lines.push([
+      r.id, r.created_at, r.entity_type, r.entity_id ?? '', r.action,
+      r.description, r.user_id ?? '', r.user_name ?? '', r.user_email ?? '',
+      r.metadata ?? '{}',
+    ].map(escape).join(','));
+  }
+  // Excel-compatible: BOM for UTF-8 + CRLF row separator (matches what tools
+  // ingest cleanly without "fix encoding" warnings).
+  const csv = '﻿' + lines.join('\r\n') + '\r\n';
+
+  writeActivity({
+    org_id: orgId,
+    entity_type: 'system',
+    entity_id: null,
+    action: 'audit_log_exported',
+    description: `exported ${rows.length} audit-log row(s) as CSV`,
+    user_id: req.user.id,
+    metadata: {
+      filters: req.query,
+      row_count: rows.length,
+      hit_hard_limit: rows.length >= AUDIT_EXPORT_HARD_LIMIT,
+    },
+  });
+
+  const filename = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(csv);
 });
 
 export default router;

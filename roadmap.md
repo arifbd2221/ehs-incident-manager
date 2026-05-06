@@ -74,10 +74,22 @@ here ships without explicit go-ahead.
 
 ### Cross-entity linking + history
 - [ ] **P3-L1** **Back-tracking everywhere** — "where is this referenced?" on inspections / CAPAs / incidents / assets / docs. The `entity_links` table already exists; need consistent surfacing.
+  - **Done in chunk (uncommitted):** shared `referencesFor()` service + `GET /api/links/references?type=X&id=Y` endpoint; reusable `<ReferencedByCard>` component dropped into `AssetDetail`, `IncidentDetail`, `InvestigationDetail`, `CAPADetail`. Returns four buckets (incidents/investigations/capas/documents) merging direct FKs (e.g., `incidents.asset_id`, `capas.incident_id`) with polymorphic `entity_links` rows in either direction.
+  - **Open follow-ups before P3-L1 is fully closed:**
+    1. **Inspections back-tracking** — inspections aren't in `LINKABLE_TYPES` and have no FK to assets/incidents/CAPAs. Needs a small migration to add them, plus deciding what an inspection links to (assets it inspected, CAPAs it generated). Then add `inspection` to the `referencesFor()` switch.
+    2. **Documents detail page** — the BE supports `entity_type='document'` but there's no `/documents/:id` page in the FE, so the Referenced-by card has nowhere to render for documents. Needs a small detail surface (or surface the back-references inline on the existing Drive-style preview).
 - [x] **P3-L2** **Media on investigations** — attachments card on investigation detail (parallel to UX-A on incidents) — commit `e75e8ce` (FE-only; BE polymorphic route already supported `entity_type='investigation'`). Follow-up `77a2eab` aligned upload to UX-A's worker-can-upload behavior. Page-scoped `.invd-attach-*` styles mirror UX-A's `.idet-attach-*` design (hover-reveal red ×, dashed CTA empty state). Bug-fix folded in: rendering read `a.original_name` / `a.size` but schema columns are `filename` / `size_bytes` — never exercised before because nothing seeded investigation attachments.
 
 ### Audit
-- [ ] **P3-A1** **Proper activity logging** — wider coverage (every mutation writes a row), consistent shape, filterable by entity / actor / action / timestamp window.
+- [ ] **P3-A1** **Proper activity logging + audit export** — wider coverage (every mutation writes a row), consistent shape, filterable + exportable. Compliance framing: OSHA / HSE / ISO 45001 inspectors can request the chain of custody for any record on demand.
+  - **Done in 4 chunks (uncommitted at end of session):**
+    1. **Foundation** — migration `013_activity_log_widen` (CHECK adds asset/document/folder/site/user/link), shared `services/activity_log.js` (`writeActivity` + `diffFields` for old/new diffs in metadata). Wired into `sites.js` (3 routes), `assets.js` (3, plus `asset_archived` / `asset_restored` distinct from `asset_updated`), `documents.js` (3, plus `document_moved` when only `folder_id` changes), `folders.js` (3, plus distinct `folder_renamed` / `folder_moved` / `folder_updated` actions), `links.js` (2), `auth.js` (3 — registered / profile_updated / password_changed; login intentionally skipped as noise). 15 audit rows verified end-to-end.
+    2. **Admin config + partial-coverage gaps** — migration `014_activity_log_admin_types` (CHECK adds asset_category, answer_set). Wired into `asset_categories.js` (8 actions covering category + per-field CRUD + reorder), `answer_sets.js` (3, with options before/after diff in metadata). Filled gaps in `investigations.js` (delete five-why preserves removed Q/A in metadata; team_member_added), `templates.js` (PATCH metadata + items_updated rollup), `inspections_routes.js` (PATCH metadata with `status_at_edit` flag — item-level PUT skipped because the route already enforces 409 immutability after completion).
+    3. **Audit-log export endpoint + Reports tab** — `GET /api/reports/audit-log` (paginated) and `GET /api/reports/audit-log/export.csv` (UTF-8 BOM + RFC 4180 escaping; `Content-Disposition: attachment`). New "Audit Log" card on the Reports page (slate/gray `rt-audit` accent). The export itself writes an `audit_log_exported` row with the filters used → tamper-evident chain of custody.
+    4. **Polish** — entity-number resolver (accepts `INC-2026-0150` / `CAPA-048` / `AST-2026-00001` etc., case-insensitive, falls back to entity_type/id on bogus prefix). Role-narrowed: audit endpoints require `ehs_officer` / `ehs_manager` / `admin` only (supervisor blocked). Multi-select pickers for actions (grouped by entity_type with select-all per group), entity types (flat), and actors (flat). Distinct-actions endpoint feeds the dropdown. Popover portal'd to `document.body` because `.rpt-panel` has `overflow: hidden`; scrollable body, `position: fixed`, repositions on scroll/resize.
+  - **Intentionally deferred:**
+    - Per-answer inspection-item logging (`#9` from the audit survey) — the route's status='in_progress' guard returns 409 for completed/abandoned inspections, so a successful mutation can't reach a state worth auditing. Code comment in `inspections_routes.js` documents where to add the log if the route is ever loosened.
+    - Verb normalization (`#10`) — cosmetic only; would touch every existing log call site and risk silent breakage if any FE/dashboard filters on `action` strings.
 
 ### Org / multi-tenancy
 - [ ] **P3-O1** **Concept of organization** — proper multi-tenant model. Today there's a single org row in the seed; needs sign-up, invite flows, switching, isolation tests.
@@ -86,17 +98,22 @@ here ships without explicit go-ahead.
 ### AI assistance
 - [ ] **P3-AI1** **Auto-fill investigation (AI + manual modes)** — five-Why suggestions, root-cause prompts, contributing-factors checklist, recommended CAPAs.
 - [ ] **P3-AI2** **Prompt-driven autofill** — system asks targeted questions ("Was the press locked out?"), user answers free-text, AI normalizes into structured fields.
+- [ ] **P3-AI3** **Video → incident report** — extend the existing voice-intake flow (Phase 2 T5.1 / T5.2 / F5.1) to accept video. Pipeline: video upload → audio extracted → transcript (Whisper or similar) → re-use `services/voice_extract.js` (Anthropic tool-use schema) → structured incident draft + same confirmation UX as voice. Visual frames could later feed a separate hazard-detection model — out of scope for v1.
 
 ### Operational features
 - [ ] **P3-OP1** **Asset maintenance** — schedules, due dates, last-done, escalations to CAPA when overdue.
 - [x] **P3-OP2** **Inspection module** — full inspection lifecycle (templates → schedule → run → findings → CAPAs) — commit `918279a` (origin/main; merged in `eeafa48`). Pages: `/inspections`, `/inspections/:id` editor + report; routes `/api/inspections`, `/api/answer-sets`; migrations `008_templates_inspections` + `009_template_versioning`.
 - [x] **P3-OP3** **Templates** — reusable templates with versioning + Google-Forms-style builder — commit `918279a` (origin/main; merged in `eeafa48`). Pages: `/templates`, `/templates/:id/edit`; route `/api/templates`.
 - [ ] **P3-OP4** **Scheduling** — recurring inspections, calibrations, training, walkthroughs; calendar view + reminders.
+- [ ] **P3-OP5** **Risk register / risk assessment module** — distinct from the 5×5 matrix used by `ReportWizard.jsx` (which scores incidents *post-event*). This is a *proactive* register: identify hazards at sites/assets, assess L×C, assign mitigations, periodic review, link to incidents/CAPAs that arose from a given risk. Likely needs `risks` + `risk_assessments` tables, `risk_review_due` field, and entity_links wiring. Big enough to be its own phase — scope before starting.
 
 ### Onboarding + data import
 - [ ] **P3-OB1** **User onboarding flow** — first-login walkthrough, sample data toggle, role-tailored "what to do first".
 - [ ] **P3-OB2** **CSV import** — users, sites, assets, work_hours, etc. With dry-run + error report.
 - [ ] **P3-OB3** **Document versioning** — supersede a doc with a new file while keeping the audit trail of prior revisions.
+
+### Regulatory expansion
+- [ ] **P3-RG1** **Australian regulation** — third regulator alongside US OSHA (300/300A/301) and UK HSE/RIDDOR. Add `country='AU'` support on sites and integrate Safe Work Australia's notifiable-incident workflow. Each AU state has its own Work Health & Safety Act (e.g., NSW WHS s38, Vic OHS Act 2004 s37) with different categories (death, serious injury/illness, dangerous incident) and notification deadlines (immediately for death/serious; written follow-up within 48h–7d depending on state). Schema: likely `notifiable_incidents` table joining incident + state + category + phone_notified_at + written_submitted_at + reference_number; new report variant on the Reports page; per-state submission deadline tracking on the dashboard.
 
 ---
 
@@ -137,14 +154,36 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 
 ## State
 
-- **Branch**: `backend` — synced with `origin/backend`. PR #6 (`backend → main`) was open at end of last session with the L2 + worker-upload follow-up + search-input fix.
+- **Branch**: `backend` — pushed through `d38cbc0` (P3-N1 + main merge). Working tree at end of session has 4 stacked uncommitted chunks on top: P3-L1 prototype, P3-A1 chunks 1+2+3+4. PR #6 was merged earlier in this session (`52479ba`).
 - **Phase 2**: code complete. Only F6.2 (manual demo walkthrough) outstanding.
 - **Wave 7**: E7.1 done.
 - **Productionization backlog** (UX-A through UX-H): A, B, G, H done. C, D, E, F pending.
 - **BUG-001**: closed.
-- **Phase 3** (P3-* items): **N2 (folders), N3 (preview), L2 (media on investigations), OP2 (inspections), OP3 (templates) done.** Open: N1, L1, A1, O1, O2, AI1, AI2, OP1, OP4, OB1, OB2, OB3.
-- **Migrations applied**: 001–010 (008 templates+inspections from main, 009 template_versioning from main, 010 document_folders from this project).
+- **Phase 3** (P3-* items): **N1 (site detail + hierarchy, this session), N2 (folders), N3 (preview), L2 (media on investigations), OP2 (inspections), OP3 (templates) done.**
+  - **In code, uncommitted at end of session:** L1 (back-tracking BE service + ReferencedByCard on 4 detail pages — inspections + documents detail are open follow-ups under L1); A1 (4 chunks: migrations 013/014, `services/activity_log.js`, 9 mutation files wired, audit-log export with multi-select filters + role gate at ehs_officer/ehs_manager/admin).
+  - **Open** (not started): O1, O2, AI1, AI2, **AI3** (video intake — new), OP1, OP4, **OP5** (risk register — new), OB1, OB2, OB3, **RG1** (Australian regulation — new).
+- **Migrations applied**: 001–014 (008 templates+inspections + 009 template_versioning from main, 010 document_folders earlier, 011 dashboard_layout from main, 012 site_hierarchy this session for P3-N1, 013 activity_log_widen + 014 activity_log_admin_types this session for P3-A1).
 - **Running**: dev servers via `cd server && node --watch index.js` (BE :3001) and `cd client && npm run dev` (FE :5173). Demo accounts in seed.
+
+## Most recent session — 2026-05-06 (evening) — P3-N1 + L1 prototype + A1 foundation + new roadmap items
+
+Session shipped P3-N1 (site detail page + hierarchy) end-to-end, then prototyped P3-L1 back-tracking across four detail pages, then delivered the P3-A1 compliance audit-logging stack in four chunks (foundation, admin config + gaps, audit export, multi-select polish + role gate). Pulled `origin/main` mid-session bringing dashboard customisation + assets/incidents redesigns. Three new roadmap items added at the user's direction (P3-AI3 video intake, P3-OP5 risk register, P3-RG1 Australian regulation).
+
+| Area | What changed | Commit / status |
+|---|---|---|
+| P3-N1 site detail + hierarchy | Migration 012 (parent_id), enriched `GET /api/sites/:id` (parent + ancestors + children + counts + recents), cycle/depth/cross-org validation. New `/admin/sites/:id` page with stacked-cards layout (`sd-*` page-scoped styles); list cards become clickable; "Sub-site of …" parent chip; parent-picker in modal that excludes self+descendants. Login demo grid gains Wendy (worker) for role-gate click-testing. | `25ad9af` (pushed to `origin/backend`) |
+| Merge from main | PR #6 merged earlier (`52479ba`); pulled main into backend (`d38cbc0`) bringing dashboard customisation (`8328863`), assets page redesign (`260584e`), incidents page redesign (`38597f4`). Migration 011 (`dashboard_layout`) auto-applied. | `d38cbc0` (pushed) |
+| P3-L1 back-tracking prototype | New `referencesFor()` service + `GET /api/links/references?type=X&id=Y`. Shared `<ReferencedByCard>` component dropped into AssetDetail / IncidentDetail / InvestigationDetail / CAPADetail (one import + one JSX line per page). Refby card groups by Incidents / Investigations / CAPAs / Documents; click-through navigates. Open follow-ups: inspections aren't in `LINKABLE_TYPES`; documents have no detail page. | uncommitted |
+| P3-A1 chunk 1 (foundation) | Migration 013 (CHECK widened), `services/activity_log.js` helper, sites + assets + documents + folders + links + auth all log compliance-relevant mutations with field-level diff metadata. | uncommitted |
+| P3-A1 chunk 2 (admin + gaps) | Migration 014 (asset_category + answer_set), asset_categories full CRUD + per-field operations logged, answer_sets (options before/after captured), filled investigation/template/inspection partial-coverage gaps. | uncommitted |
+| P3-A1 chunk 3 (export endpoint + UI) | `/api/reports/audit-log` + `/audit-log/export.csv` (UTF-8 BOM, RFC 4180), new "Audit Log" card on Reports (slate-gray `rt-audit`), filterable preview table + CSV download. Export logged → tamper-evident. | uncommitted |
+| P3-A1 chunk 4 (polish) | Entity-number resolver (INC-/INV-/CAPA-/AST-/DOC-/INS-), audit-role gate (ehs_officer/manager/admin only — supervisor blocked), multi-select pickers (actions grouped + select-all-per-group, entity types flat, actors flat), `MultiPicker` component portal'd to body to escape `.rpt-panel` `overflow:hidden` clip. | uncommitted |
+| Roadmap updates | Added **P3-AI3** (video intake), **P3-OP5** (risk register / risk assessment — distinct from the 5×5 incident-scoring matrix), **P3-RG1** (Australian regulation — Safe Work Australia notifiable-incident workflow alongside OSHA + RIDDOR). Updated P3-L1 description to call out the inspection + document-detail open follow-ups. Updated P3-A1 description with all four chunks + the deferred items (`#9` per-answer, `#10` verb-normalisation). | this commit |
+
+**Honest hallucination report at end of session** (per user-requested "what's your hallucination risk?" pattern):
+- **Low risk on BE**: every endpoint exercised via curl with multiple parameter combinations, every audit row inspected by id, role gates verified for Elena (ehs_manager) / Marcus (supervisor) / Wendy (worker), CSV format inspected.
+- **Medium-high risk on FE**: the `MultiPicker` component, the portal'd popover with computed `getBoundingClientRect` positioning, scroll-fix, indeterminate checkbox state, disabled state styling — none of these were click-tested in a browser. Build clean + HMR clean confirms parse correctness, not visual correctness.
+- **Stale-cache risk**: `ActionPicker` was renamed to `MultiPicker` mid-session; if the user has Reports open in a browser tab, hard-refresh before judging visuals.
 
 ## Most recent session — 2026-05-06 (afternoon → evening)
 
@@ -169,13 +208,13 @@ Two PRs merged into `main`: **#5** (folder system + seed fix + investigation lin
 1. Read this `roadmap.md` first — full status with commit SHAs.
 2. Read `plan-phase-2.md` if you need design rationale for any Phase-2 wave.
 3. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System-project-ehs-incident-manager/memory/MEMORY.md` for user preferences and project context.
-4. `git fetch origin && git status` — should show `backend` in sync with `origin/backend`. If PR #6 has been merged on GitHub, `git pull origin main` to fold it back; merge should be a fast-forward.
+4. `git fetch origin && git status` — local `backend` is `d38cbc0` plus 4 uncommitted stacked chunks (P3-L1 + P3-A1 chunks 1–4). `origin/backend` is at `d38cbc0`.
 5. Boot: `cd server && node --watch index.js` and `cd client && npm run dev`. Login as `elena@sdsmanager.com / password123`.
-6. **What's likely next** (last user-stated priority order from session 2026-05-06):
-   - **P3-N1** site details page (`/sites/:id` with assets, incidents, work_hours, regulatory subs) — medium scope, ~1.5–2h. Stacked cards (no tabs).
-   - **P3-L1** back-tracking ("Referenced by" cards on detail pages of incidents/investigations/CAPAs/assets/documents — surface `entity_links`). User direction was: do **one detail page first**, get OK, then propagate.
-   - **P3-A1** activity logging audit — enumerate every POST/PATCH/DELETE route, find gaps, normalize shape. User direction: stop at enumeration + per-route sign-off; no mass refactor without explicit go-ahead. UI surface deferred to a separate task.
-   - Then UX-C/D/E/F (productionization backlog) and the remaining P3 themes (org, AI, ops, onboarding).
+6. **What's likely next**:
+   - **First**: commit the 4 stacked chunks once user has clicked through — order: L1, A1-1, A1-2, A1-3 (combined with chunk 4 polish since they're cohesive). Hard-refresh the browser before judging the new MultiPicker UI.
+   - **Then close P3-L1 properly**: add inspection back-tracking (extend `LINKABLE_TYPES` + decide what links to what); add a `/documents/:id` detail page so the Refby card has a home for documents.
+   - **UX-C/D/E/F** productionization backlog (incident editable / witnesses / severity override / global search) — BE already wires C/D/E.
+   - **Remaining P3 themes** in user-priority order: org/multi-tenancy (O1/O2), AI assistance (AI1/AI2/AI3 video), ops (OP1 maintenance / OP4 scheduling / OP5 risk register), regulatory (RG1 Australia), onboarding (OB1/OB2/OB3).
 7. **Operating norms** (per user feedback during Phase 2 + Phase 3):
    - Treat as an actual app, not hackathon polish.
    - Each task = one focused commit + push to `origin/backend`.

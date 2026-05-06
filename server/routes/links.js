@@ -11,7 +11,8 @@
 
 import { Router } from 'express';
 import db from '../db/connection.js';
-import { createLink, deleteLink, getLink, listLinksFrom, listLinksTo, listLinksTouching, LINKABLE_TYPES } from '../services/entity_links.js';
+import { createLink, deleteLink, getLink, listLinksFrom, listLinksTo, listLinksTouching, referencesFor, LINKABLE_TYPES } from '../services/entity_links.js';
+import { writeActivity } from '../services/activity_log.js';
 
 const router = Router();
 
@@ -58,6 +59,19 @@ router.post('/', (req, res) => {
   try {
     const result = createLink({ source_type, source_id, target_type, target_id, link_role: link_role || null, created_by: req.user.id });
     const link = getLink(result.id);
+
+    if (result.created) {
+      writeActivity({
+        org_id: req.user.org_id,
+        entity_type: 'link',
+        entity_id: link.id,
+        action: 'link_created',
+        description: `linked ${source_type}:${source_id} → ${target_type}:${target_id}`,
+        user_id: req.user.id,
+        metadata: { source_type, source_id, target_type, target_id, link_role: link_role || null },
+      });
+    }
+
     res.status(result.created ? 201 : 200).json({ link, created: result.created });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -88,6 +102,24 @@ router.get('/', (req, res) => {
   return res.status(400).json({ error: 'Provide either {source_type,source_id} or {target_type,target_id} or {entity_type,entity_id}' });
 });
 
+// "Referenced by" — back-tracking endpoint (P3-L1).
+// Given an entity, return everything that points at it grouped by entity type.
+router.get('/references', (req, res) => {
+  const { type, id } = req.query;
+  if (!type || !id) {
+    return res.status(400).json({ error: 'type and id query params are required' });
+  }
+  if (!LINKABLE_TYPES.has(type)) {
+    return res.status(400).json({ error: `Invalid type. Allowed: ${[...LINKABLE_TYPES].join(', ')}` });
+  }
+  if (!entityInOrg(type, Number(id), req.user.org_id)) {
+    return res.status(404).json({ error: 'Entity not found in your organization' });
+  }
+  const refs = referencesFor(type, Number(id), req.user.org_id);
+  const total = refs.incidents.length + refs.investigations.length + refs.capas.length + refs.documents.length;
+  res.json({ ...refs, total });
+});
+
 router.delete('/:id', (req, res) => {
   if (!isElevated(req.user)) {
     return res.status(403).json({ error: 'Worker role cannot delete links.' });
@@ -100,6 +132,21 @@ router.delete('/:id', (req, res) => {
     return res.status(404).json({ error: 'Link not found' });
   }
   deleteLink(link.id);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'link',
+    entity_id: link.id,
+    action: 'link_deleted',
+    description: `unlinked ${link.source_type}:${link.source_id} → ${link.target_type}:${link.target_id}`,
+    user_id: req.user.id,
+    metadata: {
+      source_type: link.source_type, source_id: link.source_id,
+      target_type: link.target_type, target_id: link.target_id,
+      link_role: link.link_role,
+    },
+  });
+
   res.json({ success: true });
 });
 
