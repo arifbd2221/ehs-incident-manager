@@ -902,6 +902,27 @@ router.patch('/:id', (req, res) => {
     );
   }
 
+  // UX-C: log non-restricted field edits so OSHA 1904.33 amendment chain
+  // of custody is captured. Severity is logged separately above.
+  const auditedFields = ['title', 'description', 'area', 'specific_location', 'department', 'immediate_actions_taken'];
+  const fieldChanges = {};
+  for (const f of auditedFields) {
+    if (req.body[f] !== undefined && req.body[f] !== incident[f]) {
+      fieldChanges[f] = { from: incident[f] || null, to: req.body[f] };
+    }
+  }
+  if (Object.keys(fieldChanges).length > 0) {
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+      VALUES (?, 'incident', ?, 'incident_updated', ?, ?, ?)
+    `).run(
+      incident.org_id, incident.id,
+      `updated ${Object.keys(fieldChanges).join(', ')}`,
+      req.user.id,
+      JSON.stringify(fieldChanges),
+    );
+  }
+
   const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(req.params.id);
   updated.type_data = JSON.parse(updated.type_data || '{}');
   res.json(updated);

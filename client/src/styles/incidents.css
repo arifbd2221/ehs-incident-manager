@@ -1448,6 +1448,45 @@
   font-weight: 600;
 }
 
+/* ---- Inline edit (UX-C) — field-level edit affordances ---- */
+.idet-edit-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  color: var(--sds-brand-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 8px;
+  margin-left: 6px;
+  border-radius: var(--sds-radius-sm);
+  transition: background 150ms;
+}
+.idet-edit-trigger:hover {
+  background: var(--sds-brand-primary-tint);
+}
+.idet-edit-row {
+  display: flex;
+  gap: var(--sds-space-sm);
+  margin-top: var(--sds-space-sm);
+  justify-content: flex-end;
+}
+.idet-edit-empty {
+  color: var(--sds-fg-muted);
+  font-style: italic;
+  font-weight: 400;
+}
+.idet-fact.is-editing {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.idet-fact.is-editing .idet-fact-label {
+  margin-bottom: 2px;
+}
+
 /* ---- MODALS — Glassmorphism ---- */
 .idet-modal-backdrop {
   position: fixed;
