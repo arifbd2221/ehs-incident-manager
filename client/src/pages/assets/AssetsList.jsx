@@ -45,6 +45,9 @@ export default function AssetsList() {
   const [siteFilter, setSiteFilter] = useState('');
   const [catFilter, setCatFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState('grid');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef(null);
 
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -79,6 +82,19 @@ export default function AssetsList() {
   }, []);
   useEffect(refreshAssets, [activeTab, siteFilter, catFilter]);
 
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handler = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) setFilterOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [filterOpen]);
+
+  const activeFilterCount = (siteFilter ? 1 : 0) + (catFilter ? 1 : 0);
+  const activeSiteName = sites.find(s => String(s.id) === String(siteFilter))?.name;
+  const activeCatObj = categories.find(c => String(c.id) === String(catFilter));
+
   const filtered = useMemo(() => {
     if (!search.trim()) return assets;
     const q = search.toLowerCase();
@@ -90,6 +106,14 @@ export default function AssetsList() {
       (a.asset_type || '').toLowerCase().includes(q)
     );
   }, [assets, search]);
+
+  const stats = useMemo(() => {
+    const total = assets.length;
+    const active = assets.filter(a => a.active).length;
+    const archived = total - active;
+    const types = new Set(assets.map(a => a.asset_type).filter(Boolean)).size;
+    return { total, active, archived, types };
+  }, [assets]);
 
   const openNew = () => {
     setEditing('new');
@@ -136,8 +160,6 @@ export default function AssetsList() {
   };
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  // Reload the category's field defs whenever the user picks a different
-  // category in the asset modal. Empty array clears them.
   useEffect(() => {
     if (!form.asset_category_id) { setCategoryFieldDefs([]); return; }
     listCategoryFields(form.asset_category_id).then(setCategoryFieldDefs).catch(() => setCategoryFieldDefs([]));
@@ -254,98 +276,357 @@ export default function AssetsList() {
 
   return (
     <div className="page assets-page">
-      <div className="assets-header">
-        <div>
-          <h1 className="assets-title"><Icon name="factory" size={26} /> Assets</h1>
-          <p className="assets-sub">Equipment, vehicles, areas, and other registered assets.</p>
+      {/* Hero header with stats */}
+      <div className="assets-hero">
+        <div className="assets-hero-row">
+          <div className="assets-hero-icon">
+            <Icon name="factory" size={24} />
+          </div>
+          <div className="assets-hero-text">
+            <h1 className="assets-title">Assets</h1>
+            <p className="assets-sub">Equipment, vehicles, areas, and other registered assets</p>
+          </div>
+          <div className="assets-hero-actions">
+            {canEdit && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowAssetTypes(true)}
+                title="Define asset types and their custom fields"
+              >
+                <Icon name="settings" size={14} /> Asset types
+              </button>
+            )}
+            {canEdit && (
+              <button className="btn btn-primary" onClick={openNew}>
+                <Icon name="plus" size={16} /> New asset
+              </button>
+            )}
+          </div>
         </div>
-        <div style={{ flex: 1 }} />
-        {canEdit && (
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowAssetTypes(true)}
-            style={{ marginRight: 8 }}
-            title="Define asset types and their custom fields"
-          >
-            <Icon name="settings" size={14} /> Asset types
-          </button>
-        )}
-        {canEdit && (
-          <button className="btn btn-primary" onClick={openNew}>
-            <Icon name="plus" size={16} /> New asset
-          </button>
-        )}
+        <div className="assets-stats">
+          <div className="assets-stat" style={{ '--as-color': '#626DF9' }}>
+            <div className="assets-stat-icon"><Icon name="factory" size={16} /></div>
+            <div>
+              <div className="assets-stat-val">{stats.total}</div>
+              <div className="assets-stat-lbl">Total</div>
+            </div>
+          </div>
+          <div className="assets-stat" style={{ '--as-color': '#2E7D32' }}>
+            <div className="assets-stat-icon"><Icon name="check" size={16} /></div>
+            <div>
+              <div className="assets-stat-val">{stats.active}</div>
+              <div className="assets-stat-lbl">Active</div>
+            </div>
+          </div>
+          <div className="assets-stat" style={{ '--as-color': '#ED6C02' }}>
+            <div className="assets-stat-icon"><Icon name="clock" size={16} /></div>
+            <div>
+              <div className="assets-stat-val">{stats.archived}</div>
+              <div className="assets-stat-lbl">Archived</div>
+            </div>
+          </div>
+          <div className="assets-stat" style={{ '--as-color': '#8b5cf6' }}>
+            <div className="assets-stat-icon"><Icon name="gear" size={16} /></div>
+            <div>
+              <div className="assets-stat-val">{stats.types}</div>
+              <div className="assets-stat-lbl">Types</div>
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* Tabs */}
       <div className="assets-tabs">
         {[
-          { id: 'active', label: 'Active' },
-          { id: 'archived', label: 'Archived' },
-          { id: 'all', label: 'All' },
+          { id: 'active', label: 'Active', count: stats.active },
+          { id: 'archived', label: 'Archived', count: stats.archived },
+          { id: 'all', label: 'All', count: stats.total },
         ].map(t => (
           <div key={t.id} className={`assets-tab ${activeTab === t.id ? 'active' : ''}`}
             onClick={() => setActiveTab(t.id)}>
             {t.label}
+            <span className="assets-tab-count">{t.count}</span>
           </div>
         ))}
       </div>
 
+      {/* Toolbar */}
       <div className="assets-toolbar">
         <div className="assets-search">
           <Icon name="search" size={16} />
-          <input className="input" placeholder="Search by name, number, serial, location, type…"
+          <input className="input" placeholder="Search assets..."
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <select className="input assets-filter" value={siteFilter} onChange={e => setSiteFilter(e.target.value)}>
-          <option value="">All sites</option>
-          {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <select className="input assets-filter" value={catFilter} onChange={e => setCatFilter(e.target.value)}>
-          <option value="">All types</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <div className="af-wrap" ref={filterRef}>
+          <button
+            className={`af-trigger ${filterOpen ? 'is-open' : ''} ${activeFilterCount ? 'has-filters' : ''}`}
+            onClick={() => setFilterOpen(o => !o)}
+          >
+            <Icon name="filter" size={14} />
+            Filters
+            {activeFilterCount > 0 && <span className="af-badge">{activeFilterCount}</span>}
+          </button>
+          {filterOpen && (
+            <div className="af-dropdown">
+              <div className="af-section">
+                <div className="af-section-label">Site</div>
+                <div className="af-option-list">
+                  <button
+                    className={`af-option ${!siteFilter ? 'active' : ''}`}
+                    onClick={() => setSiteFilter('')}
+                  >
+                    All sites
+                  </button>
+                  {sites.map(s => (
+                    <button
+                      key={s.id}
+                      className={`af-option ${String(siteFilter) === String(s.id) ? 'active' : ''}`}
+                      onClick={() => { setSiteFilter(String(s.id)); }}
+                    >
+                      <Icon name="factory" size={12} />
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="af-divider" />
+              <div className="af-section">
+                <div className="af-section-label">Type</div>
+                <div className="af-option-list">
+                  <button
+                    className={`af-option ${!catFilter ? 'active' : ''}`}
+                    onClick={() => setCatFilter('')}
+                  >
+                    All types
+                  </button>
+                  {categories.map(c => (
+                    <button
+                      key={c.id}
+                      className={`af-option ${String(catFilter) === String(c.id) ? 'active' : ''}`}
+                      onClick={() => { setCatFilter(String(c.id)); }}
+                    >
+                      <span className="af-dot" style={{ background: c.color || '#626DF9' }} />
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {activeFilterCount > 0 && (
+                <>
+                  <div className="af-divider" />
+                  <button className="af-clear" onClick={() => { setSiteFilter(''); setCatFilter(''); }}>
+                    <Icon name="close" size={12} /> Clear all filters
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="assets-view-toggle">
+          <button
+            className={`assets-view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+            onClick={() => setViewMode('grid')}
+            title="Grid view"
+          >
+            <Icon name="dashboard" size={15} />
+          </button>
+          <button
+            className={`assets-view-btn ${viewMode === 'table' ? 'active' : ''}`}
+            onClick={() => setViewMode('table')}
+            title="Table view"
+          >
+            <Icon name="sort" size={15} />
+          </button>
+        </div>
       </div>
 
-      {loading && <div className="assets-loading">Loading…</div>}
-
-      {!loading && filtered.length === 0 && (
-        <div className="assets-empty">
-          {assets.length === 0
-            ? (canEdit ? 'No assets yet. Click "New asset" to add one.' : 'No assets registered yet.')
-            : 'No assets match your filters.'}
+      {/* Active filter chips */}
+      {activeFilterCount > 0 && (
+        <div className="af-chips">
+          {activeSiteName && (
+            <span className="af-chip">
+              <Icon name="factory" size={11} /> {activeSiteName}
+              <button className="af-chip-x" onClick={() => setSiteFilter('')}><Icon name="close" size={10} /></button>
+            </span>
+          )}
+          {activeCatObj && (
+            <span className="af-chip">
+              <span className="af-dot" style={{ background: activeCatObj.color || '#626DF9' }} />
+              {activeCatObj.name}
+              <button className="af-chip-x" onClick={() => setCatFilter('')}><Icon name="close" size={10} /></button>
+            </span>
+          )}
         </div>
       )}
 
-      <div className="assets-grid">
-        {filtered.map(a => (
-          <div key={a.id} className={`asset-card ${!a.active ? 'archived' : ''}`}
-            onClick={() => navigate(`/assets/${a.id}`)}>
-            <div className="asset-card-h">
-              <div className="asset-type-pill" style={{ background: a.category_color || '#90A4AE' }}>
-                {a.asset_type || '—'}
-              </div>
-              {!a.active && <span className="asset-badge-archived">archived</span>}
+      {/* Skeleton loading */}
+      {loading && (
+        <div className="assets-skel-grid">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <div key={i} className="assets-skel-card" style={{ animationDelay: `${i * 60}ms` }}>
+              <div className="skel skel-pill" />
+              <div className="skel skel-title" />
+              <div className="skel skel-id" />
+              <div className="skel skel-row" />
+              <div className="skel skel-row" style={{ width: '55%' }} />
             </div>
-            <div className="asset-name">{a.name}</div>
-            <div className="asset-num">{a.display_id || a.asset_number}</div>
-            <div className="asset-meta">
-              <div className="asset-meta-row"><Icon name="factory" size={13} /> {a.site_name || '—'}</div>
-              {a.location_description && <div className="asset-meta-row"><Icon name="location" size={13} /> {a.location_description}</div>}
-              {a.serial_number && <div className="asset-meta-row">SN: {a.serial_number}</div>}
-            </div>
-            {canEdit && (
-              <div className="asset-actions">
-                <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); openEdit(a); }}>
-                  <Icon name="edit" size={13} /> Edit
-                </button>
-                {a.active
-                  ? <button className="btn btn-ghost btn-sm asset-archive" onClick={(e) => handleDelete(a, e)}>Archive</button>
-                  : <button className="btn btn-ghost btn-sm" onClick={(e) => handleRestore(a, e)}>Restore</button>}
-              </div>
-            )}
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && filtered.length === 0 && (
+        <div className="card card-pad empty-state">
+          <div className="empty-state-icon">
+            <Icon name="factory" size={28} />
           </div>
-        ))}
-      </div>
+          <div className="empty-state-title">
+            {assets.length === 0 ? 'No assets registered yet' : 'No assets match your filters'}
+          </div>
+          <div className="empty-state-desc">
+            {assets.length === 0
+              ? 'Register equipment, vehicles, and areas to track them across incidents and inspections.'
+              : 'Try adjusting your search or filter criteria.'}
+          </div>
+          {assets.length === 0 && canEdit && (
+            <button className="btn btn-primary" onClick={openNew}>
+              <Icon name="plus" size={16} /> Add your first asset
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Grid view */}
+      {!loading && filtered.length > 0 && viewMode === 'grid' && (
+        <div className="assets-grid">
+          {filtered.map(a => {
+            const color = a.category_color || '#90A4AE';
+            const initials = (a.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+            return (
+              <div key={a.id}
+                className={`asset-card ${!a.active ? 'archived' : ''} ${!canEdit ? 'asset-card-bottom-pad' : ''}`}
+                style={{ '--ac-color': color }}
+                onClick={() => navigate(`/assets/${a.id}`)}
+              >
+                <div className="asset-card-top">
+                  <div className="asset-card-avatar">{initials || '?'}</div>
+                  <div className="asset-card-info">
+                    <div className="asset-card-name">{a.name}</div>
+                    <div className="asset-card-id">{a.display_id || a.asset_number}</div>
+                  </div>
+                  <div className="asset-card-h">
+                    <div className="asset-type-pill" style={{ background: color }}>
+                      {a.asset_type || '—'}
+                    </div>
+                    {!a.active && <span className="asset-badge-archived">archived</span>}
+                  </div>
+                </div>
+
+                <div className="asset-card-meta">
+                  <span className="asset-card-meta-item"><Icon name="factory" size={12} /> {a.site_name || '—'}</span>
+                  {a.location_description && (
+                    <span className="asset-card-meta-item"><Icon name="location" size={12} /> {a.location_description}</span>
+                  )}
+                  {a.serial_number && (
+                    <span className="asset-card-meta-item"><Icon name="shield" size={12} /> {a.serial_number}</span>
+                  )}
+                </div>
+
+                {/* Hover-expand details */}
+                <div className="asset-card-expand">
+                  <div className="asset-card-expand-inner">
+                    <div className="asset-card-expand-sep" />
+                    {a.description && (
+                      <div className="asset-card-desc">{a.description}</div>
+                    )}
+                    <div className="asset-card-detail-row">
+                      <div className="asset-card-detail">
+                        <Icon name="clock" size={11} /> Created {a.created_at?.slice(0, 10) || '—'}
+                      </div>
+                      {a.updated_at && a.updated_at !== a.created_at && (
+                        <div className="asset-card-detail">
+                          <Icon name="edit" size={11} /> Updated {a.updated_at?.slice(0, 10)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {canEdit && (
+                  <div className="asset-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); openEdit(a); }}>
+                      <Icon name="edit" size={13} /> Edit
+                    </button>
+                    {a.active
+                      ? <button className="btn btn-ghost btn-sm asset-archive" onClick={(e) => handleDelete(a, e)}>Archive</button>
+                      : <button className="btn btn-ghost btn-sm" onClick={(e) => handleRestore(a, e)}>Restore</button>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Table view */}
+      {!loading && filtered.length > 0 && viewMode === 'table' && (
+        <div className="assets-table-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Site</th>
+                <th>Location</th>
+                <th>Status</th>
+                {canEdit && <th style={{ width: 100 }}>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(a => (
+                <tr key={a.id} onClick={() => navigate(`/assets/${a.id}`)} style={{ opacity: a.active ? 1 : 0.6 }}>
+                  <td>
+                    <span className="asset-tbl-name">{a.name}</span>
+                  </td>
+                  <td>
+                    <span className="asset-tbl-id">{a.display_id || a.asset_number}</span>
+                  </td>
+                  <td>
+                    <span className="asset-type-pill" style={{ background: a.category_color || '#90A4AE' }}>
+                      {a.asset_type || '—'}
+                    </span>
+                  </td>
+                  <td>{a.site_name || '—'}</td>
+                  <td>{a.location_description || '—'}</td>
+                  <td>
+                    <span className="asset-tbl-status">
+                      <span className="asset-tbl-dot" style={{ background: a.active ? '#2E7D32' : '#90A4AE' }} />
+                      {a.active ? 'Active' : 'Archived'}
+                    </span>
+                  </td>
+                  {canEdit && (
+                    <td>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); openEdit(a); }}>
+                          <Icon name="edit" size={12} />
+                        </button>
+                        {a.active
+                          ? <button className="btn btn-ghost btn-sm asset-archive" onClick={(e) => handleDelete(a, e)} title="Archive">
+                              <Icon name="close" size={12} />
+                            </button>
+                          : <button className="btn btn-ghost btn-sm" onClick={(e) => handleRestore(a, e)} title="Restore">
+                              <Icon name="check" size={12} />
+                            </button>}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {editing !== null && createPortal(
         <div className="am-backdrop" onClick={close}>
@@ -448,7 +729,7 @@ export default function AssetsList() {
                           <input
                             className="am-input"
                             style={{ marginTop: 8 }}
-                            placeholder="Or type a custom category…"
+                            placeholder="Or type a custom category..."
                             value={form.asset_type}
                             onChange={e => set('asset_type', e.target.value)}
                           />
@@ -466,7 +747,7 @@ export default function AssetsList() {
                         />
                         <div className="am-newcat-actions">
                           <button type="button" className="am-btn-save" disabled={newCatSaving || !newCatName.trim()} onClick={handleNewCategorySave}>
-                            <Icon name="check" size={13} />{newCatSaving ? 'Saving…' : 'Create'}
+                            <Icon name="check" size={13} />{newCatSaving ? 'Saving...' : 'Create'}
                           </button>
                           <button type="button" className="am-btn-cancel" onClick={() => { setNewCatOpen(false); setNewCatName(''); }}>
                             Cancel
@@ -548,7 +829,7 @@ export default function AssetsList() {
                       rows={4}
                       value={form.description}
                       onChange={e => set('description', e.target.value)}
-                      placeholder="Specs, model details, maintenance notes, safety considerations…"
+                      placeholder="Specs, model details, maintenance notes, safety considerations..."
                     />
                   </div>
 
@@ -601,7 +882,7 @@ export default function AssetsList() {
               <button type="button" className="am-btn-secondary" onClick={close}>Cancel</button>
               <button type="submit" className="am-btn-primary" disabled={saving}>
                 {saving ? (
-                  <><span className="am-spinner" /> Saving…</>
+                  <><span className="am-spinner" /> Saving...</>
                 ) : (
                   <><Icon name="check" size={14} /> {editing === 'new' ? 'Create asset' : 'Save changes'}</>
                 )}
@@ -616,8 +897,6 @@ export default function AssetsList() {
         <AssetTypesModal
           onClose={() => {
             setShowAssetTypes(false);
-            // Refresh categories so any newly-added/archived type is reflected
-            // in the asset-create form's dropdown.
             listAssetCategories().then(setCategories).catch(() => {});
           }}
         />,
