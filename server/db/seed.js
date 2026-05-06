@@ -21,6 +21,52 @@
 import db from './connection.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const uploadDir = process.env.UPLOAD_DIR || join(__dirname, '..', 'uploads');
+mkdirSync(uploadDir, { recursive: true });
+
+// Build a valid 1-page PDF with `title` rendered as text. xref offsets are
+// computed from real byte lengths so PDF readers accept it.
+function makeMinimalPdf(title) {
+  const escape = (s) => s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  const stream = `BT /F1 14 Tf 50 720 Td (${escape(title)}) Tj ET\n`;
+  const objs = [
+    null,
+    `<< /Type /Catalog /Pages 2 0 R >>`,
+    `<< /Type /Pages /Kids [3 0 R] /Count 1 >>`,
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>`,
+    `<< /Length ${stream.length} >>\nstream\n${stream}endstream`,
+    `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`,
+  ];
+  const chunks = [Buffer.from('%PDF-1.4\n%\xFF\xFF\xFF\xFF\n', 'binary')];
+  const offsets = [0];
+  let pos = chunks[0].length;
+  for (let i = 1; i < objs.length; i++) {
+    offsets.push(pos);
+    const c = Buffer.from(`${i} 0 obj\n${objs[i]}\nendobj\n`, 'binary');
+    chunks.push(c);
+    pos += c.length;
+  }
+  const xrefStart = pos;
+  let xref = `xref\n0 ${objs.length}\n0000000000 65535 f \n`;
+  for (let i = 1; i < objs.length; i++) {
+    xref += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  }
+  xref += `trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
+  chunks.push(Buffer.from(xref, 'binary'));
+  return Buffer.concat(chunks);
+}
+
+function writeSeedPdf(title) {
+  const filename = `${crypto.randomUUID()}.pdf`;
+  const buf = makeMinimalPdf(title);
+  writeFileSync(join(uploadDir, filename), buf);
+  return { filename, size: buf.length };
+}
 
 const force = process.env.SEED_FORCE === '1';
 const exists = db.prepare('SELECT COUNT(*) as c FROM organizations').get().c;
@@ -41,7 +87,7 @@ if (force && exists > 0) {
     'voice_extractions', 'activity_log', 'notifications',
     'riddor_reports', 'osha_300_log', 'severity_history',
     'capas', 'five_whys', 'investigation_team', 'investigations',
-    'attachments', 'witnesses', 'entity_links', 'documents',
+    'attachments', 'witnesses', 'entity_links', 'documents', 'document_folders',
     'incidents', 'work_hours', 'assets',
     'asset_categories',
     'users', 'sites', 'organizations',
@@ -110,18 +156,45 @@ db.transaction(() => {
   assetIns.run(next(), orgId, clevelandId, 'Compressed-air manifold', 'building', 'Maintenance bay', null);
   assetIns.run(next(), orgId, clevelandId, 'IPA 70% — drum', 'chemical', 'Solvent Storage A', 'IPA-2026-040');
 
+  // ----- Document folders — small tree per major site -----
+  const folderIns = db.prepare(
+    `INSERT INTO document_folders (org_id, site_id, parent_id, name, created_by) VALUES (?, ?, ?, ?, ?)`
+  );
+  const mkFolder = (siteId, parentId, name, createdBy) =>
+    folderIns.run(orgId, siteId, parentId, name, createdBy).lastInsertRowid;
+
+  // Cleveland — SDS / Manuals / Policies as top-level, plus a nested example.
+  const fClvSds = mkFolder(clevelandId, null, 'SDS', elenaId);
+  const fClvManuals = mkFolder(clevelandId, null, 'Equipment Manuals', marcusId);
+  const fClvPolicies = mkFolder(clevelandId, null, 'Policies', elenaId);
+  mkFolder(clevelandId, fClvManuals, 'Press Line', marcusId); // nested example
+
+  // Sheffield — minimal set
+  mkFolder(sheffieldId, null, 'SDS', jamesId);
+  const fShfPolicies = mkFolder(sheffieldId, null, 'Policies', jamesId);
+
+  // Dallas — minimal set
+  mkFolder(dallasId, null, 'Forklift Records', marcusId);
+
   // ----- Documents — minimal set for evidence linking demo -----
+  // Each seed doc gets a real 1-page PDF written to uploadDir so the download/
+  // preview endpoint (which requires stored_filename + a real file on disk)
+  // works out of the box on a fresh seed. Some land in folders, some at root.
   const docIns = db.prepare(
-    `INSERT INTO documents (document_number, org_id, name, document_type, file_url, mime_type, size_bytes, uploaded_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO documents (document_number, org_id, name, document_type, file_url, stored_filename, mime_type, size_bytes, uploaded_by, folder_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   let d = 0;
   const nextDoc = () => `DOC-2026-${String(++d).padStart(5, '0')}`;
-  docIns.run(nextDoc(), orgId, 'SDS — Isopropyl Alcohol 70% (CAS 67-63-0)', 'sds', '/uploads/sample-sds-ipa.pdf', 'application/pdf', 184320, elenaId);
-  docIns.run(nextDoc(), orgId, 'Press 4 — Operator Manual', 'manual', '/uploads/sample-press4-manual.pdf', 'application/pdf', 482011, marcusId);
-  docIns.run(nextDoc(), orgId, 'Lockout/Tagout Policy 2026', 'policy', '/uploads/sample-loto-policy.pdf', 'application/pdf', 92810, elenaId);
-  docIns.run(nextDoc(), orgId, 'Forklift FL-3 — Maintenance Log', 'log', '/uploads/sample-fl3-log.pdf', 'application/pdf', 121944, marcusId);
-  docIns.run(nextDoc(), orgId, 'Annual Safety Training Cert — 2025', 'certificate', '/uploads/sample-cert-2025.pdf', 'application/pdf', 64210, jamesId);
+  const seedDoc = (name, type, uploader, folderId = null) => {
+    const { filename, size } = writeSeedPdf(name);
+    docIns.run(nextDoc(), orgId, name, type, `/uploads/${filename}`, filename, 'application/pdf', size, uploader, folderId);
+  };
+  seedDoc('SDS — Isopropyl Alcohol 70% (CAS 67-63-0)', 'sds', elenaId, fClvSds);
+  seedDoc('Press 4 — Operator Manual', 'manual', marcusId, fClvManuals);
+  seedDoc('Lockout/Tagout Policy 2026', 'policy', elenaId, fClvPolicies);
+  seedDoc('Forklift FL-3 — Maintenance Log', 'log', marcusId);              // root
+  seedDoc('Annual Safety Training Cert — 2025', 'certificate', jamesId, fShfPolicies);
 
   // ----- 24 months of work_hours per site (TRIR/DART denominator) -----
   // Generates a synthetic monthly figure with mild variance.

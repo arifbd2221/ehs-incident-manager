@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { listDocuments, uploadDocument, updateDocument, deleteDocument } from '../../api/documents';
+import { listFolders, createFolder, updateFolder, deleteFolder } from '../../api/folders';
+import { getSites } from '../../api/auth';
 import api from '../../api/client';
 import Icon from '../../components/shared/Icon';
 import '../../styles/documents.css';
@@ -94,19 +96,92 @@ export default function DocumentsList() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  // Folder + site state. currentFolderId = null → root view.
+  const [sites, setSites] = useState([]);
+  const [siteFilter, setSiteFilter] = useState('');
+  const [folders, setFolders] = useState([]);
+  const [currentFolderId, setCurrentFolderId] = useState(null);
+  const [breadcrumb, setBreadcrumb] = useState([]); // [{id, name}, ...] root → here
+  const [folderModal, setFolderModal] = useState(null); // 'create' | 'rename' | 'delete'
+  const [folderModalTarget, setFolderModalTarget] = useState(null);
+  const [folderName, setFolderName] = useState('');
+  const [folderBusy, setFolderBusy] = useState(false);
+  const [folderErr, setFolderErr] = useState('');
+  const [folderMenu, setFolderMenu] = useState(null); // open kebab id
+  const [drag, setDrag] = useState(null); // {kind: 'doc'|'folder', id}
+  const [dropTarget, setDropTarget] = useState(null); // 'folder:N' | 'crumb:N' | 'crumb:root'
+
+  // Load sites once on mount; pre-select the user's primary site.
+  useEffect(() => {
+    getSites().then(s => {
+      const list = s?.sites || s || [];
+      setSites(list);
+      if (user?.site_id && list.some(x => x.id === user.site_id)) {
+        setSiteFilter(String(user.site_id));
+      } else if (list.length === 1) {
+        setSiteFilter(String(list[0].id));
+      }
+    }).catch(() => setSites([]));
+  }, [user?.site_id]);
+
+  // Folders within the active site filter (root list); refreshed alongside docs.
+  const refreshFolders = () => {
+    const params = {};
+    if (siteFilter) params.site_id = siteFilter;
+    listFolders(params).then(setFolders).catch(() => setFolders([]));
+  };
+
+  // Drive-style: searching from the root folder goes global (across the whole
+  // tree). Searching from inside a folder stays scoped to that folder so the
+  // user can drill in to find something specific.
+  const searchingGlobally = !!search.trim() && currentFolderId == null;
+
   const refresh = () => {
     setLoading(true);
     const params = {};
     if (activeTab === 'active') params.active = 1;
     else if (activeTab === 'archived') params.active = 0;
     if (typeFilter) params.document_type = typeFilter;
+    // Folder scope: at root → only docs with folder_id IS NULL, unless the
+    // user is searching, in which case we drop the folder filter to span the
+    // whole tree. Inside a folder we always stay folder-scoped.
+    if (!searchingGlobally) {
+      if (currentFolderId == null) params.folder_id = 'null';
+      else params.folder_id = currentFolderId;
+    }
+    if (siteFilter && currentFolderId == null) params.site_id = siteFilter;
     listDocuments(params)
       .then(d => setDocs(d.documents || []))
       .catch(() => setDocs([]))
       .finally(() => setLoading(false));
+    refreshFolders();
   };
 
-  useEffect(refresh, [activeTab, typeFilter]);
+  useEffect(refresh, [activeTab, typeFilter, currentFolderId, siteFilter, searchingGlobally]);
+
+  // Folders shown at the current location: root-level (parent_id NULL) at root,
+  // otherwise direct children of currentFolderId. When the user searches from
+  // root we span the whole tree (global match by name). The Archived tab hides
+  // folders since folders themselves aren't archivable.
+  const visibleFolders = useMemo(() => {
+    if (activeTab === 'archived') return [];
+    if (searchingGlobally) return folders;
+    return folders.filter(f => (f.parent_id ?? null) === currentFolderId);
+  }, [folders, currentFolderId, activeTab, searchingGlobally]);
+
+  const filteredFolders = useMemo(() => {
+    if (!search.trim()) return visibleFolders;
+    const q = search.toLowerCase();
+    return visibleFolders.filter(f => (f.name || '').toLowerCase().includes(q));
+  }, [visibleFolders, search]);
+
+  // Close kebab menu on any outside click.
+  useEffect(() => {
+    if (folderMenu == null) return;
+    const close = () => setFolderMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [folderMenu]);
 
   const filtered = useMemo(() => {
     let result = docs;
@@ -175,13 +250,157 @@ export default function DocumentsList() {
     setUploading(true);
     setUploadMsg({ type: '', text: '' });
     try {
-      await uploadDocument({ file: uploadFile, name: uploadName.trim(), document_type: uploadType });
+      await uploadDocument({
+        file: uploadFile,
+        name: uploadName.trim(),
+        document_type: uploadType,
+        folder_id: currentFolderId, // upload into the folder you're viewing
+      });
       setSuccess(true);
       setTimeout(() => { refresh(); closeUpload(); }, 600);
     } catch (err) {
       setUploadMsg({ type: 'error', text: err.response?.data?.error || 'Upload failed' });
     } finally {
       setUploading(false);
+    }
+  };
+
+  // --- Folder navigation ---
+  const navigateToFolder = (folder) => {
+    if (!folder) { setCurrentFolderId(null); setBreadcrumb([]); return; }
+    setCurrentFolderId(folder.id);
+    // Build breadcrumb from the loaded folders list (already in caller's org).
+    const crumbs = [];
+    let cur = folder;
+    const byId = new Map(folders.map(f => [f.id, f]));
+    while (cur) {
+      crumbs.unshift({ id: cur.id, name: cur.name });
+      cur = cur.parent_id ? byId.get(cur.parent_id) : null;
+    }
+    setBreadcrumb(crumbs);
+    // Lock site filter to the folder's site so the rail stays consistent.
+    if (folder.site_id) setSiteFilter(String(folder.site_id));
+  };
+  const navigateToCrumb = (idx) => {
+    // idx -1 → root; otherwise breadcrumb[idx] is the new current
+    if (idx < 0) { setCurrentFolderId(null); setBreadcrumb([]); return; }
+    const target = breadcrumb[idx];
+    setBreadcrumb(breadcrumb.slice(0, idx + 1));
+    setCurrentFolderId(target.id);
+  };
+
+  // --- Folder CRUD ---
+  const openCreateFolder = () => {
+    if (!siteFilter) {
+      alert('Pick a site first — folders are site-scoped.');
+      return;
+    }
+    setFolderModal('create');
+    setFolderName('');
+    setFolderErr('');
+    setFolderModalTarget(null);
+  };
+  const openRenameFolder = (folder) => {
+    setFolderModal('rename');
+    setFolderModalTarget(folder);
+    setFolderName(folder.name);
+    setFolderErr('');
+    setFolderMenu(null);
+  };
+  const openDeleteFolder = (folder) => {
+    setFolderModal('delete');
+    setFolderModalTarget(folder);
+    setFolderErr('');
+    setFolderMenu(null);
+  };
+  const closeFolderModal = () => {
+    setFolderModal(null);
+    setFolderModalTarget(null);
+    setFolderName('');
+    setFolderErr('');
+  };
+
+  const submitCreateFolder = async () => {
+    if (!folderName.trim()) { setFolderErr('Name is required'); return; }
+    setFolderBusy(true); setFolderErr('');
+    try {
+      await createFolder({
+        name: folderName.trim(),
+        site_id: Number(siteFilter),
+        parent_id: currentFolderId,
+      });
+      closeFolderModal();
+      refreshFolders();
+    } catch (e) {
+      setFolderErr(e.response?.data?.error || 'Create failed');
+    } finally { setFolderBusy(false); }
+  };
+  const submitRenameFolder = async () => {
+    if (!folderName.trim()) { setFolderErr('Name is required'); return; }
+    setFolderBusy(true); setFolderErr('');
+    try {
+      await updateFolder(folderModalTarget.id, { name: folderName.trim() });
+      closeFolderModal();
+      refreshFolders();
+      // Update breadcrumb name if the renamed folder is in the path.
+      setBreadcrumb(b => b.map(c => c.id === folderModalTarget.id ? { ...c, name: folderName.trim() } : c));
+    } catch (e) {
+      setFolderErr(e.response?.data?.error || 'Rename failed');
+    } finally { setFolderBusy(false); }
+  };
+  const submitDeleteFolder = async () => {
+    setFolderBusy(true); setFolderErr('');
+    try {
+      await deleteFolder(folderModalTarget.id);
+      closeFolderModal();
+      refreshFolders();
+      // If the deleted folder is in the current path, pop back to its parent.
+      if (breadcrumb.some(c => c.id === folderModalTarget.id)) {
+        const idx = breadcrumb.findIndex(c => c.id === folderModalTarget.id);
+        navigateToCrumb(idx - 1);
+      }
+    } catch (e) {
+      setFolderErr(e.response?.data?.error || 'Delete failed');
+    } finally { setFolderBusy(false); }
+  };
+
+  // --- Drag-and-drop (native HTML5, matches the Kanban pattern) ---
+  const onDragStartItem = (kind, id) => (e) => {
+    setDrag({ kind, id });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `${kind}:${id}`); // some browsers require data
+  };
+  const onDragEndItem = () => { setDrag(null); setDropTarget(null); };
+
+  const onDragOverDrop = (target) => (e) => {
+    if (!drag) return;
+    // Disallow self-drop and dropping a folder into its own subtree (UI-side)
+    if (drag.kind === 'folder' && target.startsWith('folder:')) {
+      const targetId = Number(target.split(':')[1]);
+      if (targetId === drag.id) return;
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTarget(target);
+  };
+  const onDragLeaveDrop = () => setDropTarget(null);
+
+  const onDropItem = (target) => async (e) => {
+    e.preventDefault();
+    if (!drag) return;
+    const tParts = target.split(':');
+    const targetIsRoot = target === 'crumb:root';
+    const targetFolderId = targetIsRoot ? null : Number(tParts[1]);
+    setDrag(null); setDropTarget(null);
+    try {
+      if (drag.kind === 'doc') {
+        await updateDocument(drag.id, { folder_id: targetFolderId });
+      } else {
+        await updateFolder(drag.id, { parent_id: targetFolderId });
+      }
+      refresh();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Move failed');
     }
   };
 
@@ -247,10 +466,60 @@ export default function DocumentsList() {
           </div>
         </div>
         {canEdit && (
-          <button className="dp-upload-btn" onClick={openUpload}>
-            <Icon name="upload" size={16} />
-            <span>Upload</span>
+          <div className="dp-header-actions">
+            <button className="dp-newfolder-btn" onClick={openCreateFolder}>
+              <Icon name="plus" size={16} />
+              <span>New folder</span>
+            </button>
+            <button className="dp-upload-btn" onClick={openUpload}>
+              <Icon name="upload" size={16} />
+              <span>Upload</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Breadcrumb + site filter */}
+      <div className="dp-crumbwrap dp-anim" style={{ animationDelay: '20ms' }}>
+        <nav className="dp-crumbs">
+          <button
+            className={`dp-crumb${currentFolderId == null ? ' active' : ''}${dropTarget === 'crumb:root' ? ' drop-on' : ''}`}
+            onClick={() => navigateToCrumb(-1)}
+            onDragOver={onDragOverDrop('crumb:root')}
+            onDragLeave={onDragLeaveDrop}
+            onDrop={onDropItem('crumb:root')}
+          >
+            <Icon name="file" size={13} />
+            <span>All documents</span>
           </button>
+          {breadcrumb.map((c, i) => (
+            <span key={c.id} className="dp-crumb-row">
+              <span className="dp-crumb-sep">/</span>
+              <button
+                className={`dp-crumb${i === breadcrumb.length - 1 ? ' active' : ''}${dropTarget === `crumb:${c.id}` ? ' drop-on' : ''}`}
+                onClick={() => navigateToCrumb(i)}
+                onDragOver={onDragOverDrop(`crumb:${c.id}`)}
+                onDragLeave={onDragLeaveDrop}
+                onDrop={onDropItem(`crumb:${c.id}`)}
+              >
+                {c.name}
+              </button>
+            </span>
+          ))}
+        </nav>
+        {sites.length > 1 && (
+          <div className="dp-site-filter">
+            <Icon name="location" size={14} />
+            <select
+              value={siteFilter}
+              onChange={e => { setSiteFilter(e.target.value); setCurrentFolderId(null); setBreadcrumb([]); }}
+              disabled={currentFolderId != null}
+              title={currentFolderId != null ? 'Site is locked while inside a folder' : 'Filter by site'}
+            >
+              <option value="">All sites</option>
+              {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
         )}
       </div>
 
@@ -385,34 +654,92 @@ export default function DocumentsList() {
         </div>
       )}
 
-      {/* Empty state */}
-      {!loading && filtered.length === 0 && (
+      {/* Empty state — only when there are no folders AND no docs to show */}
+      {!loading && filtered.length === 0 && filteredFolders.length === 0 && (
         <div className="dp-empty">
           <div className="dp-empty-icon">
-            <Icon name={docs.length === 0 ? 'upload' : 'search'} size={32} />
+            <Icon name={docs.length === 0 && folders.length === 0 ? 'upload' : 'search'} size={32} />
           </div>
-          <h3 className="dp-empty-title">{docs.length === 0 ? 'No documents yet' : 'No matches found'}</h3>
-          <p className="dp-empty-text">{docs.length === 0
-            ? (canEdit ? 'Upload your first document to get started' : 'No documents in the library yet')
+          <h3 className="dp-empty-title">{docs.length === 0 && folders.length === 0 ? 'Nothing here yet' : 'No matches found'}</h3>
+          <p className="dp-empty-text">{docs.length === 0 && folders.length === 0
+            ? (canEdit ? 'Create a folder or upload your first document to get started' : 'No documents in the library yet')
             : 'Try adjusting your search or filters'}</p>
-          {docs.length === 0 && canEdit && (
-            <button className="dp-empty-btn" onClick={openUpload}>
-              <Icon name="upload" size={16} /> Upload document
-            </button>
+          {docs.length === 0 && folders.length === 0 && canEdit && (
+            <div className="dp-empty-actions">
+              <button className="dp-empty-btn dp-empty-btn-secondary" onClick={openCreateFolder}>
+                <Icon name="plus" size={16} /> New folder
+              </button>
+              <button className="dp-empty-btn" onClick={openUpload}>
+                <Icon name="upload" size={16} /> Upload document
+              </button>
+            </div>
           )}
         </div>
       )}
 
       {/* === GRID VIEW === */}
-      {!loading && filtered.length > 0 && viewMode === 'grid' && (
+      {!loading && (filtered.length > 0 || filteredFolders.length > 0) && viewMode === 'grid' && (
         <div className="dp-grid">
+          {filteredFolders.map((f, i) => (
+            <div
+              key={`folder-${f.id}`}
+              className={`dp-card dp-folder-card${dropTarget === `folder:${f.id}` ? ' drop-on' : ''}${drag?.kind === 'folder' && drag.id === f.id ? ' dragging' : ''}`}
+              style={{ animationDelay: `${Math.min(i, 15) * 40}ms` }}
+              draggable={canEdit}
+              onDragStart={onDragStartItem('folder', f.id)}
+              onDragEnd={onDragEndItem}
+              onDragOver={onDragOverDrop(`folder:${f.id}`)}
+              onDragLeave={onDragLeaveDrop}
+              onDrop={onDropItem(`folder:${f.id}`)}
+              onClick={() => navigateToFolder(f)}
+            >
+              <div className="dp-folder-thumb">
+                <svg width="46" height="38" viewBox="0 0 46 38" fill="none" aria-hidden="true">
+                  <path d="M2 8a4 4 0 0 1 4-4h11l4 4h19a4 4 0 0 1 4 4v22a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8Z" fill="currentColor" opacity=".18"/>
+                  <path d="M2 12a4 4 0 0 1 4-4h11l4 4h19a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V12Z" fill="currentColor"/>
+                </svg>
+              </div>
+              <div className="dp-card-body">
+                <div className="dp-card-name">{f.name}</div>
+                <div className="dp-card-info">
+                  <span>{f.child_folder_count || 0} folder{f.child_folder_count === 1 ? '' : 's'}</span>
+                  <span className="dp-card-sep">·</span>
+                  <span>{f.document_count || 0} doc{f.document_count === 1 ? '' : 's'}</span>
+                  {sites.length > 1 && f.site_name && (
+                    <>
+                      <span className="dp-card-sep">·</span>
+                      <span>{f.site_name}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              {canEdit && (
+                <button
+                  className="dp-folder-kebab"
+                  onClick={(e) => { e.stopPropagation(); setFolderMenu(folderMenu === f.id ? null : f.id); }}
+                  title="More"
+                >
+                  <Icon name="more" size={16} />
+                </button>
+              )}
+              {folderMenu === f.id && (
+                <div className="dp-folder-menu" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => openRenameFolder(f)}><Icon name="edit" size={13} /> Rename</button>
+                  <button className="danger" onClick={() => openDeleteFolder(f)}><Icon name="close" size={13} /> Delete</button>
+                </div>
+              )}
+            </div>
+          ))}
           {filtered.map((d, i) => {
             const meta = typeMeta(d.document_type);
             return (
               <div
                 key={d.id}
-                className={`dp-card${!d.active ? ' archived' : ''}`}
-                style={{ animationDelay: `${Math.min(i, 15) * 40}ms` }}
+                className={`dp-card${!d.active ? ' archived' : ''}${drag?.kind === 'doc' && drag.id === d.id ? ' dragging' : ''}`}
+                style={{ animationDelay: `${Math.min(i + filteredFolders.length, 15) * 40}ms` }}
+                draggable={canEdit && d.active}
+                onDragStart={onDragStartItem('doc', d.id)}
+                onDragEnd={onDragEndItem}
               >
                 <div
                   className="dp-card-thumb"
@@ -459,7 +786,7 @@ export default function DocumentsList() {
       )}
 
       {/* === LIST VIEW === */}
-      {!loading && filtered.length > 0 && viewMode === 'list' && (
+      {!loading && (filtered.length > 0 || filteredFolders.length > 0) && viewMode === 'list' && (
         <div className="dp-list-wrap">
           <table className="dp-table">
             <thead>
@@ -482,13 +809,57 @@ export default function DocumentsList() {
               </tr>
             </thead>
             <tbody>
+              {filteredFolders.map((f, i) => (
+                <tr
+                  key={`folder-${f.id}`}
+                  className={`dp-row dp-row-folder${dropTarget === `folder:${f.id}` ? ' drop-on' : ''}${drag?.kind === 'folder' && drag.id === f.id ? ' dragging' : ''}`}
+                  style={{ animationDelay: `${Math.min(i, 20) * 30}ms` }}
+                  draggable={canEdit}
+                  onDragStart={onDragStartItem('folder', f.id)}
+                  onDragEnd={onDragEndItem}
+                  onDragOver={onDragOverDrop(`folder:${f.id}`)}
+                  onDragLeave={onDragLeaveDrop}
+                  onDrop={onDropItem(`folder:${f.id}`)}
+                  onClick={() => navigateToFolder(f)}
+                >
+                  <td>
+                    <span className="dp-row-type-icon dp-row-folder-icon">
+                      <svg width="14" height="11" viewBox="0 0 18 14" fill="none">
+                        <path d="M1 3a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3Z" fill="currentColor"/>
+                      </svg>
+                    </span>
+                  </td>
+                  <td>
+                    <div className="dp-row-name">{f.name}</div>
+                  </td>
+                  <td><span className="dp-row-id">folder</span></td>
+                  <td>—</td>
+                  <td className="dp-row-date">—</td>
+                  <td className="dp-row-size">{(f.child_folder_count || 0) + (f.document_count || 0)} item{(f.child_folder_count + f.document_count) === 1 ? '' : 's'}</td>
+                  <td>
+                    {canEdit && (
+                      <div className="dp-row-actions">
+                        <button className="dp-row-btn" onClick={(e) => { e.stopPropagation(); openRenameFolder(f); }} title="Rename">
+                          <Icon name="edit" size={14} />
+                        </button>
+                        <button className="dp-row-btn dp-row-btn-danger" onClick={(e) => { e.stopPropagation(); openDeleteFolder(f); }} title="Delete">
+                          <Icon name="close" size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
               {filtered.map((d, i) => {
                 const meta = typeMeta(d.document_type);
                 return (
                   <tr
                     key={d.id}
-                    className={`dp-row${!d.active ? ' archived' : ''}`}
-                    style={{ animationDelay: `${Math.min(i, 20) * 30}ms` }}
+                    className={`dp-row${!d.active ? ' archived' : ''}${drag?.kind === 'doc' && drag.id === d.id ? ' dragging' : ''}`}
+                    style={{ animationDelay: `${Math.min(i + filteredFolders.length, 20) * 30}ms` }}
+                    draggable={canEdit && d.active}
+                    onDragStart={onDragStartItem('doc', d.id)}
+                    onDragEnd={onDragEndItem}
                   >
                     <td>
                       <span className="dp-row-type-icon" style={{ '--type-color': meta.color }}>
@@ -801,6 +1172,91 @@ export default function DocumentsList() {
               </button>
             </div>
           </form>
+        </div>,
+        document.body
+      )}
+
+      {/* ========== FOLDER MODALS ========== */}
+      {(folderModal === 'create' || folderModal === 'rename') && createPortal(
+        <div className="modal-backdrop" onClick={folderBusy ? undefined : closeFolderModal}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-h">
+              <div>
+                <div className="modal-title">{folderModal === 'create' ? 'New folder' : `Rename "${folderModalTarget?.name}"`}</div>
+                {folderModal === 'create' && (
+                  <div className="modal-sub">
+                    {breadcrumb.length === 0
+                      ? `In ${sites.find(s => String(s.id) === siteFilter)?.name || 'site'} · root`
+                      : `In ${breadcrumb.map(c => c.name).join(' / ')}`}
+                  </div>
+                )}
+              </div>
+              <button className="icon-btn" onClick={closeFolderModal}><Icon name="close" size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="field">
+                <label className="label">Folder name</label>
+                <input
+                  className="input"
+                  value={folderName}
+                  onChange={e => setFolderName(e.target.value)}
+                  placeholder="e.g. Quarterly inspections"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !folderBusy) {
+                      folderModal === 'create' ? submitCreateFolder() : submitRenameFolder();
+                    }
+                  }}
+                />
+                {folderErr && <span className="helper" style={{ color: 'var(--sds-error)' }}>{folderErr}</span>}
+              </div>
+            </div>
+            <div className="modal-f">
+              <button className="btn btn-secondary" onClick={closeFolderModal} disabled={folderBusy}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                onClick={folderModal === 'create' ? submitCreateFolder : submitRenameFolder}
+                disabled={folderBusy || !folderName.trim()}
+              >
+                {folderBusy ? 'Saving…' : (folderModal === 'create' ? 'Create folder' : 'Rename')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {folderModal === 'delete' && folderModalTarget && createPortal(
+        <div className="modal-backdrop" onClick={folderBusy ? undefined : closeFolderModal}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-h">
+              <div>
+                <div className="modal-title">Delete "{folderModalTarget.name}"?</div>
+                <div className="modal-sub">This cannot be undone.</div>
+              </div>
+              <button className="icon-btn" onClick={closeFolderModal}><Icon name="close" size={18} /></button>
+            </div>
+            <div className="modal-body">
+              {(folderModalTarget.child_folder_count > 0 || folderModalTarget.document_count > 0) ? (
+                <p style={{ fontSize: 13, color: 'var(--sds-fg-primary)', margin: 0 }}>
+                  This folder contains
+                  {folderModalTarget.child_folder_count > 0 && <> <b>{folderModalTarget.child_folder_count} sub-folder{folderModalTarget.child_folder_count === 1 ? '' : 's'}</b></>}
+                  {folderModalTarget.child_folder_count > 0 && folderModalTarget.document_count > 0 && ' and '}
+                  {folderModalTarget.document_count > 0 && <> <b>{folderModalTarget.document_count} document{folderModalTarget.document_count === 1 ? '' : 's'}</b></>}
+                  . Sub-folders will be deleted; documents will move back to <b>All documents</b>.
+                </p>
+              ) : (
+                <p style={{ fontSize: 13, color: 'var(--sds-fg-secondary)', margin: 0 }}>This folder is empty.</p>
+              )}
+              {folderErr && <span className="helper" style={{ color: 'var(--sds-error)', marginTop: 8 }}>{folderErr}</span>}
+            </div>
+            <div className="modal-f">
+              <button className="btn btn-secondary" onClick={closeFolderModal} disabled={folderBusy}>Cancel</button>
+              <button className="btn btn-danger" onClick={submitDeleteFolder} disabled={folderBusy}>
+                {folderBusy ? 'Deleting…' : 'Delete folder'}
+              </button>
+            </div>
+          </div>
         </div>,
         document.body
       )}

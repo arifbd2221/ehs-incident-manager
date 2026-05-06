@@ -69,8 +69,8 @@ here ships without explicit go-ahead.
 
 ### Navigation / pages
 - [ ] **P3-N1** **Site details page** — /sites/:id with assets, incidents, work_hours, regulatory subs scoped to that site.
-- [ ] **P3-N2** **Document folder structure** — folders/sub-folders for documents (currently a flat list keyed by `document_type` only).
-- [ ] **P3-N3** **Document preview** — inline PDF/image preview without leaving the page.
+- [x] **P3-N2** **Document folder structure** — folders/sub-folders for documents — commit `12862f8` (BE: migration `010_document_folders` + `/api/folders` CRUD + folder_id filter on docs; FE: breadcrumb, site filter, "+ New folder", folder tiles in grid + list, kebab rename/delete with content-count warning, native HTML5 DnD doc → folder / folder → folder / either → breadcrumb; Drive-style global search at root, scoped inside folders; folder navigation in the link-from-library modal on investigations).
+- [x] **P3-N3** **Document preview** — inline PDF/image/video/audio preview without leaving the page — commit `1873bb2` (Drive-inspired redesign on origin/main, merged in `eeafa48`).
 
 ### Cross-entity linking + history
 - [ ] **P3-L1** **Back-tracking everywhere** — "where is this referenced?" on inspections / CAPAs / incidents / assets / docs. The `entity_links` table already exists; need consistent surfacing.
@@ -89,8 +89,8 @@ here ships without explicit go-ahead.
 
 ### Operational features
 - [ ] **P3-OP1** **Asset maintenance** — schedules, due dates, last-done, escalations to CAPA when overdue.
-- [ ] **P3-OP2** **Inspection module** — full inspection lifecycle (templates → schedule → run → findings → CAPAs).
-- [ ] **P3-OP3** **Templates** — reusable templates for inspections, investigations, CAPAs, and the incident wizard.
+- [x] **P3-OP2** **Inspection module** — full inspection lifecycle (templates → schedule → run → findings → CAPAs) — commit `918279a` (origin/main; merged in `eeafa48`). Pages: `/inspections`, `/inspections/:id` editor + report; routes `/api/inspections`, `/api/answer-sets`; migrations `008_templates_inspections` + `009_template_versioning`.
+- [x] **P3-OP3** **Templates** — reusable templates with versioning + Google-Forms-style builder — commit `918279a` (origin/main; merged in `eeafa48`). Pages: `/templates`, `/templates/:id/edit`; route `/api/templates`.
 - [ ] **P3-OP4** **Scheduling** — recurring inspections, calibrations, training, walkthroughs; calendar view + reminders.
 
 ### Onboarding + data import
@@ -127,7 +127,7 @@ These came out of the post-Wave-4 review. The shared theme is **"the incident re
 
 ## Known issues (investigate later, not blocking)
 
-- [ ] **BUG-001** "Failed to create category" error using the inline `+ Add new category…` flow in the AssetsList modal. Backend `POST /api/asset-categories` works via curl. Suspect (a) Vite proxy / Origin header mismatch on POST, (b) async state race after `refreshCategories()`, or (c) hitting a default-seeded name → 409 not surfacing properly. Note: AssetsList.jsx was redesigned upstream by `b27b352` after this bug was logged — the redesign may have already fixed it.
+- [x] **BUG-001** ~~"Failed to create category" error~~ — fixed by the upstream AssetsList redesign (`b27b352`). Verified 2026-05-06 against the live Vite proxy: new unique name → 201, active duplicate → 409 with friendly message, case-insensitive duplicate → 409, predefined name → 409, soft-deleted reactivation → returns row with active=1. No reproducer left.
 
 ## Pre-Wave-3-design-system-rules violations (carried, do not fix per user direction)
 
@@ -137,15 +137,49 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 
 ## State
 
-- **Local commits ahead of `origin/main`**: see `git log origin/main..backend` — all Wave 3 + Wave 4 + UX-A commits pushed to `origin/backend`.
-- **Branch**: `backend`
-- **Running**: dev servers usually started via `npm run dev` from the project root (BE on `:3001`, FE on `:5173`). Demo accounts in seed.
+- **Branch**: `backend` — synced with `origin/backend`.
+- **Phase 2**: code complete. Only F6.2 (manual demo walkthrough) outstanding.
+- **Wave 7**: E7.1 done.
+- **Productionization backlog** (UX-A through UX-H): A, B, G, H done. C, D, E, F pending.
+- **BUG-001**: closed.
+- **Phase 3** (P3-* items): all open, captured 2026-05-06.
+- **Migrations applied**: 001–007.
+- **Running**: dev servers via `cd server && node index.js` (BE :3001) and `cd client && npm run dev` (FE :5173). Demo accounts in seed.
+
+## Most recent session — 2026-05-06
+
+Session shipped 14 commits to `origin/backend`. Headline UI changes:
+
+| Area | What changed | Commit |
+|---|---|---|
+| Asset types modal | 2-pane redesign + DEFAULT badges + field-count badges | `8096bbb` |
+| Default fields per type | Migration 006 — Vehicle/Machine/Building/Tool/Chemical come pre-loaded | `74f3557` |
+| Drop "Area" + Display ID | Migration 007 + system-fields banner with Display name + Unique identifier | `6ac9d51` `22b921f` |
+| Start-from picker | New asset type → Blank / From existing / From template (8 industry templates) | `dd5ee85` |
+| UX-A post-report attachments | Add + delete + audit on incident detail | `ba14826` |
+| UX-B inline notes | Amber composer + interleaved NOTE rows on activity timeline | `31f8be7` |
+| UX-G CAPA due-date colors | Red / amber / gray pills on kanban + list | `48ca9b2` |
+| UX-H cross-page stop-work | Pulsing red bar above TopBar on every page | `48ca9b2` |
+| BUG-001 | Verified fixed; no code change needed | `b4d4952` |
+| Phase 3 backlog | 16 P3-* items captured into roadmap | `9dc6a35` |
+
+Latest commit on `origin/backend` is the most recent roadmap update; run `git log -10` to see the chain.
 
 ## Quick re-orientation for a fresh session
 
-1. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System/MEMORY.md` (index of memory files).
-2. Read `plan-phase-2.md` (full design + acceptance criteria + waves) and this `roadmap.md` (live status with commit SHAs).
-3. `git fetch origin && git status` — confirm branch state vs `origin/main`.
-4. `cd server && rm -f db/incident_management.db db/*.db-wal db/*.db-shm && node db/seed.js && cd .. && npm run dev` — clean reset + boot.
-5. Login as `elena@sdsmanager.com / password123`. Quick sanity click: Dashboard, Sites, Assets, Documents, Investigations, Wizard.
-6. **Next task**: Phase 2 code is complete — F6.2 is a manual walkthrough. After that, the productionization UX backlog (UX-B inline notes on activity timeline is the highest-value next step) and BUG-001 are the queue.
+1. Read this `roadmap.md` first — full status with commit SHAs.
+2. Read `plan-phase-2.md` if you need design rationale for any Phase-2 wave.
+3. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System-project-ehs-incident-manager/memory/MEMORY.md` for user preferences and project context.
+4. `git fetch origin && git status` — should show `backend` in sync with `origin/backend`.
+5. Boot: `cd server && node index.js` and `cd client && npm run dev`. Login as `elena@sdsmanager.com / password123`.
+6. **What's likely next** (in user-priority order):
+   - **UX-C** editable description / area / dept / body_parts on incident detail (~1.5h) — BE PATCH already supports all of these
+   - **UX-E** severity override UI (~45min) — BE fully wired, just missing the modal
+   - **UX-D** witness add/edit (~1h) — small new route + card
+   - **UX-F** global search jump-to in TopBar (~1.5h)
+   - Then Phase 3 (P3-N1 site details / P3-OP2 inspection module / P3-AI1 investigation auto-fill, etc.) — these are bigger and the user will direct.
+7. **Operating norms** (per user feedback during Phase 2):
+   - Treat as an actual app, not hackathon polish.
+   - Each task = one focused commit + push to `origin/backend`.
+   - Always leave dev servers running at the end so the user can click-test.
+   - Don't claim FE success without actually exercising the UI; "Vite transforms cleanly" alone is not proof.

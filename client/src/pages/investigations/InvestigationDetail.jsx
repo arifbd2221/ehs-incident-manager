@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation } from '../../api/investigations';
 import { listDocuments } from '../../api/documents';
+import { listFolders } from '../../api/folders';
 import api from '../../api/client';
 import { createLink, deleteLink } from '../../api/links';
 import { useAuth } from '../../context/AuthContext';
@@ -12,7 +13,6 @@ import { timeAgo, formatDate } from '../../utils/time';
 import CloseInvestigationModal from './modals/CloseInvestigationModal';
 import AssignCapaModal from './modals/AssignCapaModal';
 import '../../styles/investigations.css';
-import '../../styles/documents.css'; // for the link-document modal
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
@@ -49,12 +49,17 @@ export default function InvestigationDetail() {
   const [newWhy, setNewWhy] = useState({ question: '', answer: '', is_root_cause: false });
   const [findings, setFindings] = useState('');
 
-  // Document linking modal state
+  // Document linking modal state — supports folder navigation. When the user
+  // types a search query we switch to flat global search across the whole
+  // library; otherwise we show folder tiles + docs in the current folder.
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [docLibrary, setDocLibrary] = useState([]);
+  const [allFolders, setAllFolders] = useState([]);
   const [docSearch, setDocSearch] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState('');
   const [docLinking, setDocLinking] = useState(false);
+  const [linkFolderId, setLinkFolderId] = useState(null);
+  const [linkCrumbs, setLinkCrumbs] = useState([]);
 
   const load = () => {
     setLoading(true);
@@ -62,13 +67,58 @@ export default function InvestigationDetail() {
   };
   useEffect(load, [id]);
 
+  // (Re)load the doc library whenever folder context or search changes. Search
+  // overrides folder scope — when typing, we want global hits, not folder-only.
+  const loadDocLibrary = (folderId, query) => {
+    const params = { active: 1, limit: 200 };
+    if (query && query.trim()) {
+      params.q = query.trim();
+    } else {
+      params.folder_id = folderId == null ? 'null' : folderId;
+    }
+    listDocuments(params).then(d => setDocLibrary(d.documents || [])).catch(() => setDocLibrary([]));
+  };
+
   const openDocModal = () => {
     setDocModalOpen(true);
     setDocSearch('');
     setDocTypeFilter('');
-    listDocuments({ active: 1, limit: 200 }).then(d => setDocLibrary(d.documents || [])).catch(() => setDocLibrary([]));
+    setLinkFolderId(null);
+    setLinkCrumbs([]);
+    listFolders().then(setAllFolders).catch(() => setAllFolders([]));
+    loadDocLibrary(null, '');
   };
   const closeDocModal = () => setDocModalOpen(false);
+
+  // Re-fetch the doc library when folder context or search query changes.
+  useEffect(() => {
+    if (!docModalOpen) return;
+    loadDocLibrary(linkFolderId, docSearch);
+  }, [docModalOpen, linkFolderId, docSearch]);
+
+  const navigateLinkFolder = (folder) => {
+    if (!folder) { setLinkFolderId(null); setLinkCrumbs([]); return; }
+    const byId = new Map(allFolders.map(f => [f.id, f]));
+    const crumbs = [];
+    let cur = folder;
+    while (cur) {
+      crumbs.unshift({ id: cur.id, name: cur.name });
+      cur = cur.parent_id ? byId.get(cur.parent_id) : null;
+    }
+    setLinkFolderId(folder.id);
+    setLinkCrumbs(crumbs);
+  };
+  const navigateLinkCrumb = (idx) => {
+    if (idx < 0) { setLinkFolderId(null); setLinkCrumbs([]); return; }
+    setLinkCrumbs(linkCrumbs.slice(0, idx + 1));
+    setLinkFolderId(linkCrumbs[idx].id);
+  };
+
+  // Folder tiles inside the modal — children of current folder. Hidden when a
+  // search is active (search is global, not folder-scoped).
+  const linkVisibleFolders = docSearch.trim()
+    ? []
+    : allFolders.filter(f => (f.parent_id ?? null) === linkFolderId);
 
   const handleLinkDoc = async (doc) => {
     setDocLinking(true);
@@ -487,43 +537,78 @@ export default function InvestigationDetail() {
             <div className="modal-h">
               <div>
                 <div className="modal-title">Link a document from the library</div>
-                <div className="modal-sub">Search and link existing documents as evidence</div>
+                <div className="modal-sub">Attach evidence already uploaded to the document library</div>
               </div>
               <button className="icon-btn" onClick={closeDocModal}><Icon name="close" size={18}/></button>
             </div>
             <div className="modal-body">
-              <div className="field-row">
-                <div className="field" style={{ flex: 1 }}>
-                  <input className="input" placeholder="Search by name or number…" value={docSearch} onChange={e => setDocSearch(e.target.value)} />
-                </div>
-                <div className="field" style={{ width: 160 }}>
-                  <select className="input" value={docTypeFilter} onChange={e => setDocTypeFilter(e.target.value)}>
-                    <option value="">All types</option>
-                    <option value="sds">SDS</option>
-                    <option value="manual">Manual</option>
-                    <option value="policy">Policy</option>
-                    <option value="photo">Photo</option>
-                    <option value="video">Video</option>
-                    <option value="log">Log</option>
-                    <option value="certificate">Certificate</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
+              <div className="invd-doc-filters">
+                <input className="input" placeholder="Search by name or number…" value={docSearch} onChange={e => setDocSearch(e.target.value)} />
+                <select className="select invd-doc-type" value={docTypeFilter} onChange={e => setDocTypeFilter(e.target.value)}>
+                  <option value="">All types</option>
+                  <option value="sds">SDS</option>
+                  <option value="manual">Manual</option>
+                  <option value="policy">Policy</option>
+                  <option value="photo">Photo</option>
+                  <option value="video">Video</option>
+                  <option value="log">Log</option>
+                  <option value="certificate">Certificate</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
+              {!docSearch.trim() && (
+                <nav className="invd-link-crumbs">
+                  <button
+                    className={`invd-link-crumb${linkFolderId == null ? ' active' : ''}`}
+                    onClick={() => navigateLinkCrumb(-1)}
+                  >
+                    <Icon name="file" size={12}/> All documents
+                  </button>
+                  {linkCrumbs.map((c, i) => (
+                    <span key={c.id} className="invd-link-crumb-row">
+                      <span className="invd-link-crumb-sep">/</span>
+                      <button
+                        className={`invd-link-crumb${i === linkCrumbs.length - 1 ? ' active' : ''}`}
+                        onClick={() => navigateLinkCrumb(i)}
+                      >
+                        {c.name}
+                      </button>
+                    </span>
+                  ))}
+                </nav>
+              )}
+              {linkVisibleFolders.length > 0 && (
+                <div className="invd-link-folders">
+                  {linkVisibleFolders.map(f => (
+                    <button
+                      key={f.id}
+                      className="invd-link-folder"
+                      onClick={() => navigateLinkFolder(f)}
+                    >
+                      <svg width="18" height="14" viewBox="0 0 18 14" fill="none" aria-hidden="true">
+                        <path d="M1 3a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3Z" fill="currentColor"/>
+                      </svg>
+                      <span className="invd-link-folder-name">{f.name}</span>
+                      <span className="invd-link-folder-meta">{(f.child_folder_count || 0) + (f.document_count || 0)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {filteredDocs.length === 0 ? (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)', textAlign: 'center', padding: 32 }}>
-                  {docLibrary.length === 0 ? 'No documents in the library yet. Upload some on the Documents page.' : 'No documents match — or all matching docs are already linked.'}
+                <p className="invd-doc-empty">
+                  {docLibrary.length === 0 && linkVisibleFolders.length === 0
+                    ? (docSearch.trim() ? 'No documents match your search.' : 'This folder is empty.')
+                    : (docSearch.trim() ? 'No documents match.' : 'No documents in this folder — or all are already linked.')}
                 </p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
+                <div className="invd-doc-list">
                   {filteredDocs.map(d => (
-                    <div key={d.id}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 10, border: '1px solid var(--sds-border)', borderRadius: 6, cursor: 'pointer' }}
+                    <div key={d.id} className="invd-doc-row"
                       onClick={() => !docLinking && handleLinkDoc(d)}>
-                      <Icon name="file" size={16}/>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{d.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--sds-fg-tertiary)' }}>{d.document_number} · {d.document_type}</div>
+                      <div className="invd-doc-icon"><Icon name="file" size={16}/></div>
+                      <div className="invd-doc-info">
+                        <div className="invd-doc-name">{d.name}</div>
+                        <div className="invd-doc-meta">{d.document_number} · {d.document_type}</div>
                       </div>
                       <button className="btn btn-primary btn-sm" disabled={docLinking}
                         onClick={(e) => { e.stopPropagation(); handleLinkDoc(d); }}>

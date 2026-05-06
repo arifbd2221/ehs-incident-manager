@@ -3,11 +3,12 @@ import api from './client';
 export const listDocuments = (params = {}) =>
   api.get('/documents', { params }).then(r => r.data);
 export const getDocument = (id) => api.get(`/documents/${id}`).then(r => r.data);
-export const uploadDocument = ({ file, name, document_type }) => {
+export const uploadDocument = ({ file, name, document_type, folder_id }) => {
   const fd = new FormData();
   fd.append('file', file);
   if (name) fd.append('name', name);
   fd.append('document_type', document_type);
+  if (folder_id != null) fd.append('folder_id', folder_id);
   return api.post('/documents', fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then(r => r.data);
