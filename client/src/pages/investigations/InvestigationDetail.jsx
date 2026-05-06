@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation } from '../../api/investigations';
 import { listDocuments } from '../../api/documents';
 import { listFolders } from '../../api/folders';
+import { uploadAttachments, deleteAttachment } from '../../api/incidents';
 import api from '../../api/client';
 import { createLink, deleteLink } from '../../api/links';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +22,7 @@ const tlDotClass = (action) => {
   if (action === 'five_why_added') return 'td-why';
   if (action === 'capa_assigned') return 'td-capa';
   if (action === 'closed') return 'td-closed';
+  if (action === 'attached' || action === 'attachment_deleted') return 'td-default';
   return 'td-default';
 };
 const tlIcon = (action) => {
@@ -28,6 +30,8 @@ const tlIcon = (action) => {
   if (action === 'five_why_added') return 'edit';
   if (action === 'capa_assigned') return 'capa';
   if (action === 'closed') return 'check';
+  if (action === 'attached') return 'file';
+  if (action === 'attachment_deleted') return 'close';
   return 'bell';
 };
 
@@ -60,6 +64,10 @@ export default function InvestigationDetail() {
   const [docLinking, setDocLinking] = useState(false);
   const [linkFolderId, setLinkFolderId] = useState(null);
   const [linkCrumbs, setLinkCrumbs] = useState([]);
+
+  // Post-report attachments — mirrors UX-A on incident detail.
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   const load = () => {
     setLoading(true);
@@ -156,6 +164,37 @@ export default function InvestigationDetail() {
       alert(e.response?.data?.error || 'Download failed');
     }
   };
+
+  const handleUploadAttachment = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      await uploadAttachments('investigation', inv.id, files);
+      showToast(files.length === 1 ? 'File attached.' : `${files.length} files attached.`);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to attach files.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteAttachment = async (attachment) => {
+    if (!window.confirm(`Remove "${attachment.filename}"? This is logged in the activity timeline.`)) return;
+    try {
+      await deleteAttachment(attachment.id);
+      showToast('Attachment removed.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to remove attachment.');
+    }
+  };
+
+  // Same rule as UX-A: uploader can remove their own; elevated roles can remove anyone's.
+  const canDeleteAttachment = (attachment) =>
+    ELEVATED.has(user?.role) || attachment.uploaded_by === user?.id;
 
   const filteredDocs = docLibrary.filter(d => {
     if (docTypeFilter && d.document_type !== docTypeFilter) return false;
@@ -334,19 +373,62 @@ export default function InvestigationDetail() {
                   {(inv.attachments || []).length + (inv.linked_documents || []).length} item{(inv.attachments || []).length + (inv.linked_documents || []).length > 1 ? 's' : ''}
                 </span>
               )}
+              {canEdit && (
+                <button
+                  className="invd-attach-add"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  style={(inv.attachments || []).length + (inv.linked_documents || []).length === 0 ? { marginLeft: 'auto' } : undefined}
+                >
+                  {uploading ? (
+                    <><span className="invd-attach-spinner"/>Uploading…</>
+                  ) : (
+                    <><Icon name="plus" size={12}/>Add files</>
+                  )}
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleUploadAttachment}
+              />
             </div>
             <div className="invd-card-body">
               {((inv.attachments || []).length === 0 && (inv.linked_documents || []).length === 0) ? (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No evidence uploaded or linked yet.</p>
+                canEdit ? (
+                  <div className="invd-attach-empty">
+                    <p>No evidence uploaded or linked yet.</p>
+                    <button
+                      className="invd-attach-add-empty"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                    >
+                      {uploading ? 'Uploading…' : '+ Attach a file'}
+                    </button>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No evidence uploaded or linked yet.</p>
+                )
               ) : (
                 <div className="invd-evidence-grid">
                   {(inv.attachments || []).map(a => (
-                    <div key={`att-${a.id}`} className="invd-evidence-item">
+                    <div key={`att-${a.id}`} className="invd-evidence-item invd-attach-item">
                       <div className="invd-evidence-icon"><Icon name="file" size={16}/></div>
                       <div className="invd-evidence-info">
-                        <div className="invd-evidence-name">{a.original_name}</div>
-                        <div className="invd-evidence-size">{(a.size / 1024).toFixed(0)} KB · uploaded</div>
+                        <div className="invd-evidence-name">{a.filename}</div>
+                        <div className="invd-evidence-size">{((a.size_bytes || 0) / 1024).toFixed(0)} KB · uploaded</div>
                       </div>
+                      {canDeleteAttachment(a) && (
+                        <button
+                          className="invd-attach-del"
+                          onClick={() => handleDeleteAttachment(a)}
+                          title="Remove attachment"
+                        >
+                          <Icon name="close" size={14}/>
+                        </button>
+                      )}
                     </div>
                   ))}
                   {(inv.linked_documents || []).map(d => (

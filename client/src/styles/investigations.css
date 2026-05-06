@@ -1278,3 +1278,103 @@
   color: var(--sds-fg-tertiary);
   font-family: 'SF Mono', Menlo, monospace;
 }
+
+/* ---- ATTACHMENTS — post-report add/delete (mirrors UX-A on incident detail) ---- */
+.invd-attach-add {
+  margin-left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--sds-border);
+  background: #fff;
+  color: var(--sds-fg-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms;
+  font-family: inherit;
+}
+.invd-attach-add:hover:not(:disabled) {
+  border-color: var(--sds-brand-primary);
+  color: var(--sds-brand-primary);
+  background: var(--sds-brand-primary-tint);
+}
+.invd-attach-add:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.invd-attach-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(98, 109, 249, 0.25);
+  border-top-color: var(--sds-brand-primary);
+  animation: invdSpin 800ms linear infinite;
+}
+@keyframes invdSpin {
+  to { transform: rotate(360deg); }
+}
+
+.invd-attach-item {
+  position: relative;
+}
+.invd-attach-del {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--sds-fg-tertiary);
+  border: 1px solid var(--sds-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 150ms;
+}
+.invd-attach-del:hover {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #dc2626;
+  transform: translateY(-50%) scale(1.05);
+}
+.invd-attach-item:hover .invd-attach-del {
+  opacity: 1;
+}
+
+.invd-attach-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 0;
+}
+.invd-attach-empty p {
+  font-size: 13px;
+  color: var(--sds-fg-tertiary);
+  margin: 0;
+}
+.invd-attach-add-empty {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px dashed var(--sds-border);
+  background: var(--sds-bg-surface-alt);
+  color: var(--sds-fg-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms;
+  font-family: inherit;
+}
+.invd-attach-add-empty:hover:not(:disabled) {
+  border-style: solid;
+  border-color: var(--sds-brand-primary);
+  color: var(--sds-brand-primary);
+  background: var(--sds-brand-primary-tint);
+}
