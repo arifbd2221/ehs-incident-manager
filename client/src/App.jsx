@@ -19,6 +19,11 @@ import Sites from './pages/admin/Sites';
 import AssetsList from './pages/assets/AssetsList';
 import AssetDetail from './pages/assets/AssetDetail';
 import DocumentsList from './pages/documents/DocumentsList';
+import TemplatesList from './pages/templates/TemplatesList';
+import TemplateEditor from './pages/templates/TemplateEditor';
+import InspectionsList from './pages/inspections/InspectionsList';
+import InspectionEditor from './pages/inspections/InspectionEditor';
+import InspectionReport from './pages/inspections/InspectionReport';
 import ReportWizard from './pages/wizard/ReportWizard';
 
 function ProtectedLayout() {
@@ -64,6 +69,11 @@ export default function App() {
         <Route path="/assets" element={<AssetsList />} />
         <Route path="/assets/:id" element={<AssetDetail />} />
         <Route path="/documents" element={<DocumentsList />} />
+        <Route path="/templates" element={<TemplatesList />} />
+        <Route path="/templates/:id/edit" element={<TemplateEditor />} />
+        <Route path="/inspections" element={<InspectionsList />} />
+        <Route path="/inspections/:id" element={<InspectionEditor />} />
+        <Route path="/inspections/:id/report" element={<InspectionReport />} />
         <Route path="/profile" element={<Settings />} />
       </Route>
     </Routes>

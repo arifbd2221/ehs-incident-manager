@@ -29,6 +29,16 @@ const PAGE_TIPS = {
     { icon: 'warning', text: 'Overdue items show a blinking red indicator — address them first' },
     { icon: 'check', text: 'Set progress percentage and mark actions for verification when complete' },
   ],
+  '/templates': [
+    { icon: 'edit', text: 'Create inspection templates with sections and questions' },
+    { icon: 'check', text: 'Publish a template to make it available for inspections' },
+    { icon: 'settings', text: 'Configure answer sets (Yes/No, Pass/Fail) for question responses' },
+  ],
+  '/inspections': [
+    { icon: 'shield', text: 'Start an inspection from a published template' },
+    { icon: 'eye', text: 'Click any inspection to view or continue filling it out' },
+    { icon: 'reports', text: 'Completed inspections generate scored reports with flagged items' },
+  ],
   '/reports': [
     { icon: 'reports', text: 'Generate compliance reports for OSHA and RIDDOR submissions' },
     { icon: 'download', text: 'Export reports as PDF for regulatory filing' },
