@@ -420,41 +420,22 @@ export default function Dashboard() {
 
           {/* Quick actions */}
           <div className="dash-card">
-            <div className="dash-card-body" style={{ padding: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--sds-fg-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Quick actions</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {[
-                  { label: 'Report new incident', icon: 'plus', action: () => setWizardOpen(true), accent: 'var(--sds-brand-primary)' },
-                  { label: 'View investigations', icon: 'investigation', action: () => navigate('/investigations'), accent: '#f59e0b' },
-                  { label: 'CAPA board', icon: 'capa', action: () => navigate('/capas'), accent: '#22c55e' },
-                  { label: 'OSHA / RIDDOR reports', icon: 'reports', action: () => navigate('/reports'), accent: '#0ea5e9' },
-                ].map((qa, i) => (
-                  <button key={i} onClick={qa.action}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '10px 12px', borderRadius: 10,
-                      border: '1px solid #f1f5f9', background: '#fff',
-                      cursor: 'pointer', transition: 'all 150ms',
-                      fontFamily: 'var(--sds-font-family)', fontSize: 13, fontWeight: 600,
-                      color: 'var(--sds-fg-heading)',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#fafbfd'; e.currentTarget.style.borderColor = 'var(--sds-border)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#f1f5f9'; }}
-                  >
-                    <span style={{
-                      width: 30, height: 30, borderRadius: 8,
-                      background: `${qa.accent}14`, color: qa.accent,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <Icon name={qa.icon} size={15} />
-                    </span>
-                    {qa.label}
-                    <span style={{ marginLeft: 'auto', color: 'var(--sds-fg-tertiary)' }}>
-                      <Icon name="arrow" size={14} />
-                    </span>
-                  </button>
-                ))}
-              </div>
+            <div className="dash-card-h">
+              <div className="title"><span className="dot-accent" />Quick actions</div>
+            </div>
+            <div className="dash-qa-list">
+              {[
+                { label: 'Report new incident', icon: 'plus', action: () => setWizardOpen(true), color: 'var(--sds-brand-primary)' },
+                { label: 'View investigations', icon: 'investigation', action: () => navigate('/investigations'), color: '#f59e0b' },
+                { label: 'CAPA board', icon: 'capa', action: () => navigate('/capas'), color: '#22c55e' },
+                { label: 'OSHA / RIDDOR reports', icon: 'reports', action: () => navigate('/reports'), color: '#0ea5e9' },
+              ].map((qa, i) => (
+                <button key={i} className="dash-qa-btn" style={{ '--qa-color': qa.color }} onClick={qa.action}>
+                  <span className="dash-qa-icon"><Icon name={qa.icon} size={15} /></span>
+                  {qa.label}
+                  <Icon name="arrow" size={14} />
+                </button>
+              ))}
             </div>
           </div>
         </div>
