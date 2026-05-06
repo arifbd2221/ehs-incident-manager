@@ -308,6 +308,18 @@ export default function CAPAPage() {
                           </>
                         ) : null}
                       </div>
+                      {/* Hover-reveal detail rows */}
+                      <div className="capa-kcard-expand">
+                        {c.description && (
+                          <div className="capa-kcard-desc">{c.description}</div>
+                        )}
+                        {c.owner_name && (
+                          <div className="capa-kcard-detail"><Icon name="person" size={11}/><span>Owner: {c.owner_name}</span></div>
+                        )}
+                        {c.verifier_name && (
+                          <div className="capa-kcard-detail"><Icon name="shield" size={11}/><span>Verifier: {c.verifier_name}</span></div>
+                        )}
+                      </div>
                       <div className="capa-kcard-progress">
                         <div className="capa-kcard-progress-head">
                           <span className="pct">{c.progress || 0}%</span>

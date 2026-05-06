@@ -157,9 +157,10 @@
   animation: kCardIn 250ms ease both;
 }
 .inv-kcard:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
   border-color: transparent;
+  z-index: 2;
 }
 @keyframes kCardIn {
   from { opacity: 0; transform: translateY(6px); }
@@ -215,6 +216,33 @@
   margin-bottom: 8px;
 }
 .inv-kcard-meta .meta-sep { color: var(--sds-border); }
+
+/* Hover-expand detail rows */
+.inv-kcard-expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 280ms cubic-bezier(0.34,1.56,0.64,1),
+              opacity 200ms ease, margin 200ms ease;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+.inv-kcard-expand > * { overflow: hidden; }
+.inv-kcard:hover .inv-kcard-expand {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-bottom: 8px;
+}
+.inv-kcard-detail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--sds-fg-secondary);
+  padding: 3px 0;
+}
+.inv-kcard-detail svg { color: var(--sds-fg-tertiary); flex-shrink: 0; }
+.inv-kcard-detail:first-child { padding-top: 6px; border-top: 1px dashed var(--sds-border-default); }
 
 /* Kanban card flags */
 .inv-kcard-flags {
