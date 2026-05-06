@@ -127,7 +127,7 @@ These came out of the post-Wave-4 review. The shared theme is **"the incident re
 
 ## Known issues (investigate later, not blocking)
 
-- [ ] **BUG-001** "Failed to create category" error using the inline `+ Add new category…` flow in the AssetsList modal. Backend `POST /api/asset-categories` works via curl. Suspect (a) Vite proxy / Origin header mismatch on POST, (b) async state race after `refreshCategories()`, or (c) hitting a default-seeded name → 409 not surfacing properly. Note: AssetsList.jsx was redesigned upstream by `b27b352` after this bug was logged — the redesign may have already fixed it.
+- [x] **BUG-001** ~~"Failed to create category" error~~ — fixed by the upstream AssetsList redesign (`b27b352`). Verified 2026-05-06 against the live Vite proxy: new unique name → 201, active duplicate → 409 with friendly message, case-insensitive duplicate → 409, predefined name → 409, soft-deleted reactivation → returns row with active=1. No reproducer left.
 
 ## Pre-Wave-3-design-system-rules violations (carried, do not fix per user direction)
 
