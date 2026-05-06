@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getIncident, assignIncident, escalateIncident, closeIncident, uploadAttachments, deleteAttachment, addIncidentNote } from '../../api/incidents';
+import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
@@ -10,6 +10,7 @@ import { timeAgo, formatDate } from '../../utils/time';
 import AssignModal from './modals/AssignModal';
 import EscalateModal from './modals/EscalateModal';
 import CloseModal from './modals/CloseModal';
+import SeverityOverrideModal from './modals/SeverityOverrideModal';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/incidents.css';
 
@@ -143,6 +144,16 @@ export default function IncidentDetail() {
     } catch { showToast('Failed to close.'); }
   };
 
+  const handleSeverityOverride = async (form) => {
+    try {
+      await updateIncident(r.id, form);
+      showToast(`Severity overridden to ${form.severity === 1 ? 'S1 Critical' : form.severity === 2 ? 'S2 Major' : form.severity === 3 ? 'S3 Moderate' : form.severity === 4 ? 'S4 Minor' : 'S5 Insignificant'}.`);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to override severity.');
+    }
+  };
+
   const handleUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -235,19 +246,28 @@ export default function IncidentDetail() {
           <div className="idet-header-actions">
             {recommendedAction === 'closed' ? (
               <button className="idet-act-btn" disabled>Closed</button>
-            ) : recommendedAction === 'investigating' ? (
-              <button className="idet-act-btn primary" onClick={() => navigate('/investigations')}>
-                <Icon name="investigation" size={15}/>Open investigation
-              </button>
             ) : (
               <>
-                <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no action</button>
-                <button className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`} onClick={() => setModal('assign')}>
-                  <Icon name="person" size={15}/>Assign
-                </button>
-                <button className={`idet-act-btn ${recommendedAction === 'escalate' ? 'primary' : ''}`} onClick={() => setModal('escalate')}>
-                  <Icon name="investigation" size={15}/>Escalate
-                </button>
+                {ELEVATED_ROLES.has(user?.role) && (
+                  <button className="idet-act-btn" onClick={() => setModal('severity')} title="Override auto-classified severity (logged for audit)">
+                    <Icon name="warning" size={15}/>Override severity
+                  </button>
+                )}
+                {recommendedAction === 'investigating' ? (
+                  <button className="idet-act-btn primary" onClick={() => navigate('/investigations')}>
+                    <Icon name="investigation" size={15}/>Open investigation
+                  </button>
+                ) : (
+                  <>
+                    <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no action</button>
+                    <button className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`} onClick={() => setModal('assign')}>
+                      <Icon name="person" size={15}/>Assign
+                    </button>
+                    <button className={`idet-act-btn ${recommendedAction === 'escalate' ? 'primary' : ''}`} onClick={() => setModal('escalate')}>
+                      <Icon name="investigation" size={15}/>Escalate
+                    </button>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -618,6 +638,7 @@ export default function IncidentDetail() {
       {modal === 'assign' && createPortal(<AssignModal incident={r} onCancel={() => setModal(null)} onConfirm={handleAssign}/>, document.body)}
       {modal === 'escalate' && createPortal(<EscalateModal incident={r} onCancel={() => setModal(null)} onConfirm={handleEscalate}/>, document.body)}
       {modal === 'close' && createPortal(<CloseModal incident={r} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
+      {modal === 'severity' && createPortal(<SeverityOverrideModal incident={r} onCancel={() => setModal(null)} onConfirm={handleSeverityOverride}/>, document.body)}
 
       {/* Toast */}
       {toast && createPortal(

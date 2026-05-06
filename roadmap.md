@@ -127,11 +127,11 @@ These came out of the post-Wave-4 review. The shared theme is **"the incident re
 - [x] **UX-B** **Inline notes on activity timeline** — `POST /incidents/:id/note` + composer + distinct amber styling for note rows + Cmd/Ctrl+Enter to post + optimistic prepend. Commit `31f8be7`.
 - [ ] **UX-C** **Editable description / area / department / body parts** on the detail page. PATCH already supports all of these BE-side; UI is what's missing. Use field-level edit affordances rather than a giant edit-mode toggle.
 - [ ] **UX-D** **Add/edit witnesses post-creation** — witnesses surface late. Currently captured at submission only. Small route + a witnesses card with add/edit/remove.
-- [ ] **UX-E** **Severity override UI** — BE already wires `severity_override` / `severity_override_by` / `severity_override_reason` and writes a `severity_overridden` activity_log entry. UI is missing — needs a small modal: new severity, required reason, confirm. Triage often needs to bump severity after seeing photos.
+- [x] **UX-E** **Severity override UI** — `SeverityOverrideModal` (new file, mirrors AssignModal's `idet-modal-*` pattern, zero new CSS), "Override severity" trigger button in IncidentDetail header-actions row (only visible to elevated roles, hidden when status=Closed). Sev `<select>` + required-reason textarea, confirm disabled until severity differs and reason is non-empty. Sends PATCH `/incidents/:id` with `severity` + `severity_override_reason`; BE writes `severity_overridden` activity-log row with old→new + reason in metadata. Worker role gets 403 surfaced as toast.
 
 ### Quick wins (independent, can land any time)
 
-- [ ] **UX-F** **Global search jump-to in TopBar** — wire to `/api/search`, keyboard-driven dropdown ("INC-…" / "INV-…" / "CAPA-…" → enter → navigate).
+- [x] **UX-F** **Global search jump-to in TopBar** — `globalSearch` API hits `/api/incidents|investigations|capas` with `search=` param; categorized dropdown in `SearchResults`; debounced 300ms; keyboard `/` focus, ↑/↓ navigate, Enter open, Esc close; click-to-navigate; loading + empty states; status chips; auto-closes on route change. Page-scoped `.sr-*` styles in `styles.css`. (Implemented earlier; roadmap entry was stale.)
 - [x] **UX-G** **CAPA due-date color coding** — pills on kanban + list (red ≤2d & overdue, amber ≤6d, muted else). Commit `48ca9b2`.
 - [x] **UX-H** **Cross-page stop-work banner** — slim pulsing red bar above TopBar in ProtectedLayout, polls every 30s, click → first active stop-work. Commit `48ca9b2`.
 
