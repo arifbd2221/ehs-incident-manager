@@ -68,13 +68,13 @@ actual app, not a hackathon. Order shifts based on user direction; nothing
 here ships without explicit go-ahead.
 
 ### Navigation / pages
-- [ ] **P3-N1** **Site details page** — /sites/:id with assets, incidents, work_hours, regulatory subs scoped to that site.
+- [x] **P3-N1** **Site details page + hierarchy** — `/admin/sites/:id` with breadcrumb, sub-sites, recent incidents/assets, compliance, workforce. Migration 012 adds `parent_id` to sites (numbered 012 to leave 011 to `origin/main`'s `dashboard_layout`). BE: cycle/self/depth-cap (5 levels) validation on POST/PATCH, child-blocks-delete on DELETE, enriched `GET /api/sites/:id` returns parent + ancestors + children + counts + recents + work_hours total. FE: stacked-cards detail page with `sd-*` page-scoped styles in `sites.css`, clickable list cards with "Sub-site of …" parent chip, "Parent site" select in the General section of the site modal that excludes self + descendants to prevent cycles from the UI. Login demo grid gains a Worker (Wendy) row so role gates are click-testable.
 - [x] **P3-N2** **Document folder structure** — folders/sub-folders for documents — commit `12862f8` (BE: migration `010_document_folders` + `/api/folders` CRUD + folder_id filter on docs; FE: breadcrumb, site filter, "+ New folder", folder tiles in grid + list, kebab rename/delete with content-count warning, native HTML5 DnD doc → folder / folder → folder / either → breadcrumb; Drive-style global search at root, scoped inside folders; folder navigation in the link-from-library modal on investigations).
 - [x] **P3-N3** **Document preview** — inline PDF/image/video/audio preview without leaving the page — commit `1873bb2` (Drive-inspired redesign on origin/main, merged in `eeafa48`).
 
 ### Cross-entity linking + history
 - [ ] **P3-L1** **Back-tracking everywhere** — "where is this referenced?" on inspections / CAPAs / incidents / assets / docs. The `entity_links` table already exists; need consistent surfacing.
-- [ ] **P3-L2** **Media on investigations** — attachments card on investigation detail (parallel to the incident one).
+- [x] **P3-L2** **Media on investigations** — attachments card on investigation detail (parallel to UX-A on incidents) — commit `e75e8ce` (FE-only; BE polymorphic route already supported `entity_type='investigation'`). Follow-up `77a2eab` aligned upload to UX-A's worker-can-upload behavior. Page-scoped `.invd-attach-*` styles mirror UX-A's `.idet-attach-*` design (hover-reveal red ×, dashed CTA empty state). Bug-fix folded in: rendering read `a.original_name` / `a.size` but schema columns are `filename` / `size_bytes` — never exercised before because nothing seeded investigation attachments.
 
 ### Audit
 - [ ] **P3-A1** **Proper activity logging** — wider coverage (every mutation writes a row), consistent shape, filterable by entity / actor / action / timestamp window.
@@ -137,49 +137,49 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 
 ## State
 
-- **Branch**: `backend` — synced with `origin/backend`.
+- **Branch**: `backend` — synced with `origin/backend`. PR #6 (`backend → main`) was open at end of last session with the L2 + worker-upload follow-up + search-input fix.
 - **Phase 2**: code complete. Only F6.2 (manual demo walkthrough) outstanding.
 - **Wave 7**: E7.1 done.
 - **Productionization backlog** (UX-A through UX-H): A, B, G, H done. C, D, E, F pending.
 - **BUG-001**: closed.
-- **Phase 3** (P3-* items): all open, captured 2026-05-06.
-- **Migrations applied**: 001–007.
-- **Running**: dev servers via `cd server && node index.js` (BE :3001) and `cd client && npm run dev` (FE :5173). Demo accounts in seed.
+- **Phase 3** (P3-* items): **N2 (folders), N3 (preview), L2 (media on investigations), OP2 (inspections), OP3 (templates) done.** Open: N1, L1, A1, O1, O2, AI1, AI2, OP1, OP4, OB1, OB2, OB3.
+- **Migrations applied**: 001–010 (008 templates+inspections from main, 009 template_versioning from main, 010 document_folders from this project).
+- **Running**: dev servers via `cd server && node --watch index.js` (BE :3001) and `cd client && npm run dev` (FE :5173). Demo accounts in seed.
 
-## Most recent session — 2026-05-06
+## Most recent session — 2026-05-06 (afternoon → evening)
 
-Session shipped 14 commits to `origin/backend`. Headline UI changes:
+Session shipped the document folder system, fixed the demo seed's missing PDFs, repaired the broken investigation link-modal, then delivered P3-L2 (media on investigations) end-to-end. Multiple pulls from `origin/main` folded in the templates + inspections feature, the Drive-style documents redesign + preview, and the premium UI overhaul (auth/profile rewrites, animated nav icons, kanban hover-expand) — all without disturbing local work. Two PRs merged (#5, #6).
 
-| Area | What changed | Commit |
+| Area | What changed | Commit / PR |
 |---|---|---|
-| Asset types modal | 2-pane redesign + DEFAULT badges + field-count badges | `8096bbb` |
-| Default fields per type | Migration 006 — Vehicle/Machine/Building/Tool/Chemical come pre-loaded | `74f3557` |
-| Drop "Area" + Display ID | Migration 007 + system-fields banner with Display name + Unique identifier | `6ac9d51` `22b921f` |
-| Start-from picker | New asset type → Blank / From existing / From template (8 industry templates) | `dd5ee85` |
-| UX-A post-report attachments | Add + delete + audit on incident detail | `ba14826` |
-| UX-B inline notes | Amber composer + interleaved NOTE rows on activity timeline | `31f8be7` |
-| UX-G CAPA due-date colors | Red / amber / gray pills on kanban + list | `48ca9b2` |
-| UX-H cross-page stop-work | Pulsing red bar above TopBar on every page | `48ca9b2` |
-| BUG-001 | Verified fixed; no code change needed | `b4d4952` |
-| Phase 3 backlog | 16 P3-* items captured into roadmap | `9dc6a35` |
+| Document folder system (P3-N2) | Migration 010 + `/api/folders` CRUD + folder_id filter on docs; FE breadcrumb, site filter, "+ New folder", folder tiles in grid + list, kebab rename/delete with content-count warning, native HTML5 DnD doc → folder / folder → folder / either → breadcrumb; Drive-style global search at root, scoped inside folders; folder navigation in the link-from-library modal on investigations | `12862f8` (PR #5) |
+| Demo seed: real PDFs on disk | Seeded sample docs now write valid 1-page PDFs to `server/uploads/` and persist `stored_filename` so download/preview work on a fresh `SEED_FORCE=1` reseed (previously returned 404 because `stored_filename` was NULL) | bundled in `12862f8` |
+| Investigation link-modal repair | Switched the broken `docs-modal-*` classes (deleted upstream by `b27b352`) to the standard shared `.modal-*` shell so the modal actually renders | bundled in `12862f8` |
+| Folder system from main | Documents page Drive-inspired UI + inline preview (`1873bb2`), templates + inspections module (`918279a`), inspection redesign + template conditional logic (`9e34bfb`) | merged in `eeafa48` and `ee91f6b` |
+| Premium UI overhaul (from main) | Split-screen auth, tabbed profile, global polish (566-line `styles.css` rework), animated nav icons (`86c305f`), kanban hover-expand (`ac92b88`) | merged in `0b75795` |
+| Roadmap ticks | P3-N2, P3-N3, P3-OP2, P3-OP3 ticked | `189f942` |
+| P3-L2 media on investigations | Mirror of UX-A: "+ Add files" header button, hover-reveal red × delete, dashed CTA empty state, activity-log entries, role-gated delete (uploader OR elevated). Page-scoped `.invd-attach-*` CSS mirrors UX-A's `.idet-attach-*` design — explicitly authorized by user. Field-name bug fix (`a.original_name` → `a.filename`, `a.size` → `a.size_bytes`) folded in. | `e75e8ce` (PR #6) |
+| Search-input collapse fix | Search field in link-from-library modal was shrinking to intrinsic width; added `flex: 1; min-width: 0` so it spans the row left of the 160px type dropdown | `ab2313f` (PR #6) |
+| L2 worker-upload alignment | Removed the `canEdit &&` gates so workers can upload investigation attachments (matches UX-A behavior); per-row delete still gated on `canDeleteAttachment` (uploader OR elevated) | `77a2eab` (PR #6) |
 
-Latest commit on `origin/backend` is the most recent roadmap update; run `git log -10` to see the chain.
+Two PRs merged into `main`: **#5** (folder system + seed fix + investigation link-modal repair, merged at `18940c7`) and **#6** (L2 media + search fix + worker-upload alignment, status open at end of session — merge if not already). After PR #6 lands, main = backend.
 
 ## Quick re-orientation for a fresh session
 
 1. Read this `roadmap.md` first — full status with commit SHAs.
 2. Read `plan-phase-2.md` if you need design rationale for any Phase-2 wave.
 3. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System-project-ehs-incident-manager/memory/MEMORY.md` for user preferences and project context.
-4. `git fetch origin && git status` — should show `backend` in sync with `origin/backend`.
-5. Boot: `cd server && node index.js` and `cd client && npm run dev`. Login as `elena@sdsmanager.com / password123`.
-6. **What's likely next** (in user-priority order):
-   - **UX-C** editable description / area / dept / body_parts on incident detail (~1.5h) — BE PATCH already supports all of these
-   - **UX-E** severity override UI (~45min) — BE fully wired, just missing the modal
-   - **UX-D** witness add/edit (~1h) — small new route + card
-   - **UX-F** global search jump-to in TopBar (~1.5h)
-   - Then Phase 3 (P3-N1 site details / P3-OP2 inspection module / P3-AI1 investigation auto-fill, etc.) — these are bigger and the user will direct.
-7. **Operating norms** (per user feedback during Phase 2):
+4. `git fetch origin && git status` — should show `backend` in sync with `origin/backend`. If PR #6 has been merged on GitHub, `git pull origin main` to fold it back; merge should be a fast-forward.
+5. Boot: `cd server && node --watch index.js` and `cd client && npm run dev`. Login as `elena@sdsmanager.com / password123`.
+6. **What's likely next** (last user-stated priority order from session 2026-05-06):
+   - **P3-N1** site details page (`/sites/:id` with assets, incidents, work_hours, regulatory subs) — medium scope, ~1.5–2h. Stacked cards (no tabs).
+   - **P3-L1** back-tracking ("Referenced by" cards on detail pages of incidents/investigations/CAPAs/assets/documents — surface `entity_links`). User direction was: do **one detail page first**, get OK, then propagate.
+   - **P3-A1** activity logging audit — enumerate every POST/PATCH/DELETE route, find gaps, normalize shape. User direction: stop at enumeration + per-route sign-off; no mass refactor without explicit go-ahead. UI surface deferred to a separate task.
+   - Then UX-C/D/E/F (productionization backlog) and the remaining P3 themes (org, AI, ops, onboarding).
+7. **Operating norms** (per user feedback during Phase 2 + Phase 3):
    - Treat as an actual app, not hackathon polish.
    - Each task = one focused commit + push to `origin/backend`.
    - Always leave dev servers running at the end so the user can click-test.
    - Don't claim FE success without actually exercising the UI; "Vite transforms cleanly" alone is not proof.
+   - **Never override or overdo UI/UX** — reuse existing classes/tokens; no new CSS or inline styles unless the feature genuinely needs new visual treatment, in which case **ask first**. If you do add page-scoped CSS, follow the prefix convention (`idet-` incident detail, `invd-` investigation detail, `dp-` documents page, `tp-` templates list, `ie-` inspection editor, etc.).
+   - **After every multi-step Edit on JSX/JS**, verify the file actually parses — run `cd client && npx vite build` or grep the Vite log for "SyntaxError"/"Failed to" lines, not just timestamp markers. Babel parse errors don't always abort HMR; the trailing log entry can be a stale "hmr update" while the file is silently broken.

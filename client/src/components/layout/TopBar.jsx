@@ -48,6 +48,11 @@ const PAGE_TIPS = {
     { icon: 'gear', text: 'Change your password in the collapsible section on the right' },
     { icon: 'export', text: 'Sign out from the button in your profile header' },
   ],
+  '/admin/sites': [
+    { icon: 'factory', text: 'Click any site card to open its detail page with assets, incidents, and people' },
+    { icon: 'plus', text: 'Use "New site" to add a location; pick a parent to nest it under another site' },
+    { icon: 'shield', text: 'NAICS, OSHA, and HSE establishment IDs feed regulatory reports' },
+  ],
 };
 
 const SHORTCUTS = [

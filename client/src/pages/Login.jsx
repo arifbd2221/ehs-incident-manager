@@ -7,6 +7,7 @@ const DEMO = [
   { email: 'elena@sdsmanager.com', label: 'Elena (EHS Lead)', icon: 'shield' },
   { email: 'marcus@sdsmanager.com', label: 'Marcus (Supervisor)', icon: 'person' },
   { email: 'james@sdsmanager.com', label: 'James (EHS Manager)', icon: 'settings' },
+  { email: 'wendy@sdsmanager.com', label: 'Wendy (Worker)', icon: 'pulse' },
 ];
 
 export default function Login() {

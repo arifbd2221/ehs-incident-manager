@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { listSites, createSite, updateSite, deleteSite } from '../../api/sites';
 import Icon from '../../components/shared/Icon';
@@ -17,6 +18,7 @@ const EMPTY = {
   annual_avg_employees: 0,
   total_hours_worked: 0,
   timezone: 'America/New_York',
+  parent_id: '',
 };
 
 const COUNTRIES = [
@@ -49,6 +51,7 @@ const SECTIONS = [
 
 export default function Sites() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const canEdit = ELEVATED.has(user?.role);
 
   const [sites, setSites] = useState([]);
@@ -89,6 +92,7 @@ export default function Sites() {
       annual_avg_employees: site.annual_avg_employees ?? 0,
       total_hours_worked: site.total_hours_worked ?? 0,
       timezone: site.timezone || 'America/New_York',
+      parent_id: site.parent_id || '',
     });
     setMsg({ type: '', text: '' });
     setActiveSection('general');
@@ -118,6 +122,7 @@ export default function Sites() {
         ...form,
         annual_avg_employees: Number(form.annual_avg_employees) || 0,
         total_hours_worked: Number(form.total_hours_worked) || 0,
+        parent_id: form.parent_id ? Number(form.parent_id) : null,
       };
       if (editing === 'new') {
         await createSite(payload);
@@ -156,6 +161,30 @@ export default function Sites() {
   const completeness = [form.name, form.address, form.country, form.timezone, form.naics_code || form.establishment_id || form.hse_establishment_id].filter(Boolean).length;
   const pct = Math.round((completeness / 5) * 100);
 
+  // Parent options: exclude self + all descendants of self when editing.
+  const editingId = editing && editing !== 'new' ? editing.id : null;
+  const blockedParents = (() => {
+    const blocked = new Set();
+    if (!editingId) return blocked;
+    blocked.add(editingId);
+    let frontier = [editingId];
+    while (frontier.length) {
+      const next = [];
+      for (const id of frontier) {
+        for (const s of sites) {
+          if (s.parent_id === id && !blocked.has(s.id)) {
+            blocked.add(s.id);
+            next.push(s.id);
+          }
+        }
+      }
+      frontier = next;
+    }
+    return blocked;
+  })();
+  const parentOptions = sites.filter(s => !blockedParents.has(s.id));
+  const sitesById = new Map(sites.map(s => [s.id, s]));
+
   return (
     <div className="page sites-page">
       <div className="sites-header">
@@ -179,12 +208,24 @@ export default function Sites() {
 
       <div className="sites-grid">
         {sites.map(s => (
-          <div key={s.id} className="site-card">
+          <div
+            key={s.id}
+            className="site-card"
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate(`/admin/sites/${s.id}`)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/admin/sites/${s.id}`); } }}
+          >
             <div className="site-card-h">
               <div className="site-flag">{s.country || '—'}</div>
               <div className="site-name">{s.name}</div>
             </div>
             <div className="site-meta">
+              {s.parent_id && sitesById.get(s.parent_id) && (
+                <div className="site-meta-row site-parent-row">
+                  <Icon name="factory" size={12} /> Sub-site of <strong>{sitesById.get(s.parent_id).name}</strong>
+                </div>
+              )}
               {s.address && <div className="site-meta-row"><Icon name="location" size={14} /> {s.address}</div>}
               {s.naics_code && <div className="site-meta-row">NAICS {s.naics_code}</div>}
               {s.establishment_id && <div className="site-meta-row">OSHA est. {s.establishment_id}</div>}
@@ -196,7 +237,7 @@ export default function Sites() {
               <div><span>{s.timezone || '—'}</span></div>
             </div>
             {canEdit && (
-              <div className="site-actions">
+              <div className="site-actions" onClick={e => e.stopPropagation()}>
                 <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}>
                   <Icon name="edit" size={14} /> Edit
                 </button>
@@ -283,6 +324,22 @@ export default function Sites() {
                     <select className="sm-input" value={form.timezone} onChange={e => set('timezone', e.target.value)}>
                       {TIMEZONES.map(tz => (
                         <option key={tz.value} value={tz.value}>{tz.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm-field" style={{ animationDelay: '150ms' }}>
+                    <label className="sm-label">
+                      Parent site
+                      <span className="sm-label-hint">optional · for hierarchical sites</span>
+                    </label>
+                    <select
+                      className="sm-input"
+                      value={form.parent_id}
+                      onChange={e => set('parent_id', e.target.value)}
+                    >
+                      <option value="">(none — top-level site)</option>
+                      {parentOptions.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
                   </div>
