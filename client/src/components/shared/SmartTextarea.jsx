@@ -84,7 +84,7 @@ export default function SmartTextarea({
           className={`st-input ${multiline ? 'textarea' : 'input'}`}
           value={value}
           onChange={e => onChange(e.target.value)}
-          placeholder={!examples?.length ? placeholder : undefined}
+          placeholder={placeholder}
           autoFocus={autoFocus}
           disabled={disabled}
           {...extraProps}

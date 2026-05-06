@@ -502,6 +502,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     value={title}
                     onChange={(v) => { setTitle(v); clearAiBadge('title'); }}
                     examples={EXAMPLE_TITLES}
+                    placeholder="e.g. Chemical splash during transfer in Lab 2"
                     multiline={false}
                     className="wiz-title-wrap"
                     autoFocus
