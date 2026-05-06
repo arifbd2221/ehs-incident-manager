@@ -250,41 +250,50 @@ export default function InvestigationDetail() {
 
   const statusLabel = inv.status === 'closed' ? 'Closed' : inv.status === 'capa' ? 'Awaiting CAPA' : inv.status === 'progress' ? 'In progress' : 'Pending';
   const statusClass = `ln-${inv.status}`;
+  const statusColors = { pending: '#7E7E8C', progress: '#626DF9', capa: '#ED6C02', closed: '#2E7D32' };
+  const heroColor = statusColors[inv.status] || '#8b5cf6';
 
   return (
     <div className="page invd">
-      {/* Back */}
-      <button className="invd-back" onClick={() => navigate('/investigations')}>
-        <Icon name="arrowL" size={14}/> Back to investigations
-      </button>
+      {/* Breadcrumb */}
+      <div className="invd-breadcrumb">
+        <button onClick={() => navigate('/investigations')}>
+          <Icon name="arrowL" size={13} /> Investigations
+        </button>
+        <span className="invd-bc-sep">/</span>
+        <span className="invd-bc-current">{inv.investigation_number}</span>
+      </div>
 
-      {/* Header */}
-      <div className="invd-header">
-        <div className="invd-header-left">
-          <div className="invd-meta-row">
-            <span className="invd-number">{inv.investigation_number}</span>
-            <span style={{ color: 'var(--sds-border)' }}>·</span>
-            <span className="invd-number">{inv.incident_number}</span>
+      {/* Hero header card */}
+      <div className="invd-hero" style={{ '--invd-color': heroColor }}>
+        <div className="invd-hero-strip" />
+        <div className="invd-hero-body">
+          <div className="invd-hero-left">
+            <div className="invd-meta-row">
+              <span className="invd-number">{inv.investigation_number}</span>
+              <span className="invd-meta-sep">·</span>
+              <span className="invd-number">{inv.incident_number}</span>
+            </div>
+            <h1 className="invd-title">{inv.incident_title}</h1>
+            <div className="invd-badges">
+              <SevBadge s={inv.severity}/>
+              <TrackBadge t={inv.track || inv.incident_track}/>
+              <span className={`inv-list-lane ${statusClass}`}>
+                <span className="ln-dot"/>{statusLabel}
+              </span>
+              <span className="invd-lead">Lead: <b>{inv.lead_name || 'Unassigned'}</b></span>
+            </div>
           </div>
-          <h1 className="invd-title">{inv.incident_title}</h1>
-          <div className="invd-badges">
-            <SevBadge s={inv.severity}/>
-            <TrackBadge t={inv.track || inv.incident_track}/>
-            <span className={`inv-list-lane ${statusClass}`}>
-              <span className="ln-dot"/>{statusLabel}
-            </span>
-            <span className="invd-lead">Lead: <b>{inv.lead_name || 'Unassigned'}</b></span>
+          <div className="invd-header-actions">
+            {inv.status !== 'closed' && (
+              <>
+                <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no CAPA</button>
+                <button className="idet-act-btn primary" onClick={() => setModal('capa')}>
+                  <Icon name="plus" size={14}/>Assign CAPA
+                </button>
+              </>
+            )}
           </div>
-        </div>
-        <div className="invd-header-actions">
-          {inv.status !== 'closed' && (
-            <>
-              <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no CAPA</button>
-              <button className="idet-act-btn primary" onClick={() => setModal('capa')}>
-                <Icon name="plus" size={14}/>Assign CAPA
-              </button>
-            </>
-          )}
         </div>
       </div>
 
