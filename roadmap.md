@@ -115,8 +115,8 @@ These came out of the post-Wave-4 review. The shared theme is **"the incident re
 ### Quick wins (independent, can land any time)
 
 - [ ] **UX-F** **Global search jump-to in TopBar** — wire to `/api/search`, keyboard-driven dropdown ("INC-…" / "INV-…" / "CAPA-…" → enter → navigate).
-- [ ] **UX-G** **CAPA due-date color coding** on kanban cards — red <3d, amber <7d, gray else. Five-minute change, instant readability win.
-- [ ] **UX-H** **Cross-page stop-work banner** — if any incident has `stop_work_status='active'`, render a thin red bar on every protected page, not just Dashboard.
+- [x] **UX-G** **CAPA due-date color coding** — pills on kanban + list (red ≤2d & overdue, amber ≤6d, muted else). Commit `48ca9b2`.
+- [x] **UX-H** **Cross-page stop-work banner** — slim pulsing red bar above TopBar in ProtectedLayout, polls every 30s, click → first active stop-work. Commit `48ca9b2`.
 
 ### Deferred (cool but expensive — revisit only if other beats are solid)
 
