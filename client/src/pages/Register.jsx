@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { getSites } from '../api/auth';
 import Icon from '../components/shared/Icon';
+import ComboBox from '../components/shared/ComboBox';
 
 const STRENGTH_LEVELS = [
   { label: 'Too short', color: '#94a3b8', pct: 0 },
@@ -41,6 +42,8 @@ export default function Register() {
   useEffect(() => { getSites().then(d => setSites(d.sites || [])).catch(() => {}); }, []);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const roleOpts = [{ value: 'worker', label: 'Worker' }, { value: 'supervisor', label: 'Supervisor' }, { value: 'ehs_lead', label: 'EHS Lead' }, { value: 'manager', label: 'Manager' }];
+  const siteOpts = useMemo(() => [{ value: '', label: 'Select site…' }, ...sites.map(s => ({ value: String(s.id), label: s.name }))], [sites]);
   const strength = getStrength(form.password);
   const sl = STRENGTH_LEVELS[strength];
 
@@ -199,19 +202,11 @@ export default function Register() {
               <div className="reg-row">
                 <div className="auth-field">
                   <label>Role</label>
-                  <select className="input" value={form.role} onChange={e => set('role', e.target.value)}>
-                    <option value="worker">Worker</option>
-                    <option value="supervisor">Supervisor</option>
-                    <option value="ehs_lead">EHS Lead</option>
-                    <option value="manager">Manager</option>
-                  </select>
+                  <ComboBox options={roleOpts} value={form.role} onChange={v => set('role', v)} searchable={false} />
                 </div>
                 <div className="auth-field">
                   <label>Site</label>
-                  <select className="input" value={form.site_id} onChange={e => set('site_id', e.target.value)}>
-                    <option value="">Select site...</option>
-                    {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <ComboBox options={siteOpts} value={form.site_id} onChange={v => set('site_id', v)} placeholder="Search sites…" />
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>

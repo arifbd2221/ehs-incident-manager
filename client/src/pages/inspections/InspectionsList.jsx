@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getInspections, getInspectionSummary, createInspection } from '../../api/inspections';
@@ -6,6 +6,7 @@ import { getTemplates } from '../../api/templates';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import ComboBox from '../../components/shared/ComboBox';
 import '../../styles/inspections.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -225,10 +226,10 @@ export default function InspectionsList() {
       {/* Start Inspection Modal */}
       {showStart && createPortal(
         <div className="modal-backdrop" onClick={() => setShowStart(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="start-inspection-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Start Inspection</div>
+                <div className="modal-title" id="start-inspection-modal-title">Start Inspection</div>
                 <div className="modal-sub">Choose a template and begin your inspection</div>
               </div>
               <button className="icon-btn" onClick={() => setShowStart(false)}>
@@ -238,12 +239,12 @@ export default function InspectionsList() {
             <div className="modal-body">
               <div className="field">
                 <label className="label">Template <span className="req">*</span></label>
-                <select className="select" value={selectedTemplate} onChange={e => setSelectedTemplate(e.target.value)}>
-                  <option value="">Select a template...</option>
-                  {templates.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
+                <ComboBox
+                  options={[{ value: '', label: 'Select a template…' }, ...templates.map(t => ({ value: String(t.id), label: t.name }))]}
+                  value={selectedTemplate}
+                  onChange={setSelectedTemplate}
+                  placeholder="Search templates…"
+                />
                 {templates.length === 0 && (
                   <span className="helper" style={{ color: 'var(--sds-warning)' }}>No published templates available. Create and publish a template first.</span>
                 )}
@@ -268,7 +269,7 @@ export default function InspectionsList() {
         document.body
       )}
 
-      {toast && <div className="toast"><Icon name="check" size={16} /> {toast}</div>}
+      {toast && <div className="toast" role="status" aria-live="polite"><Icon name="check" size={16} /> {toast}</div>}
     </div>
   );
 }

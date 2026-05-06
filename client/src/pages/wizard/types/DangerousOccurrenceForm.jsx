@@ -1,4 +1,18 @@
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+
+const OCCURRENCE_TYPES = [
+  { value: '', label: 'Select...' },
+  { value: 'Collapse of load-bearing equipment', label: 'Collapse of load-bearing equipment' },
+  { value: 'Explosion of closed vessel', label: 'Explosion of closed vessel' },
+  { value: 'Electrical short circuit causing fire', label: 'Electrical short circuit causing fire' },
+  { value: 'Unintended collapse of building / structure', label: 'Unintended collapse of building / structure' },
+  { value: 'Scaffold collapse over 5m', label: 'Scaffold collapse over 5m' },
+  { value: 'Unintentional explosion or fire', label: 'Unintentional explosion or fire' },
+  { value: 'Accidental release of substance', label: 'Accidental release of substance' },
+  { value: 'Malfunction of breathing apparatus', label: 'Malfunction of breathing apparatus' },
+  { value: 'Release of flammable substances', label: 'Release of flammable substances' },
+];
 
 export default function DangerousOccurrenceForm({ data, onChange }) {
   return (
@@ -14,18 +28,7 @@ export default function DangerousOccurrenceForm({ data, onChange }) {
       <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
         <div className="card-h"><Icon name="warning" size={18} color="var(--sds-brand-primary)"/>Type of dangerous occurrence (RIDDOR Schedule 2)</div>
         <div className="field">
-          <select className="select" value={data.occurrence_type || ''} onChange={e => onChange({ ...data, occurrence_type: e.target.value })}>
-            <option value="">Select...</option>
-            <option>Collapse of load-bearing equipment</option>
-            <option>Explosion of closed vessel</option>
-            <option>Electrical short circuit causing fire</option>
-            <option>Unintended collapse of building / structure</option>
-            <option>Scaffold collapse over 5m</option>
-            <option>Unintentional explosion or fire</option>
-            <option>Accidental release of substance</option>
-            <option>Malfunction of breathing apparatus</option>
-            <option>Release of flammable substances</option>
-          </select>
+          <ComboBox options={OCCURRENCE_TYPES} value={data.occurrence_type || ''} onChange={v => onChange({ ...data, occurrence_type: v })} placeholder="Search occurrence types…" />
         </div>
       </div>
 

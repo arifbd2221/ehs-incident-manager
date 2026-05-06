@@ -44,10 +44,10 @@ export default function CertifyOsha300AModal({ siteId, year, siteName, affirmati
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+      <div className="modal modal-lg" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="certify-osha-modal-title">
         <div className="modal-h">
           <div>
-            <div className="modal-title">Certify OSHA 300A</div>
+            <div className="modal-title" id="certify-osha-modal-title">Certify OSHA 300A</div>
             <div className="modal-sub">{siteName} · Calendar year {year}</div>
           </div>
           <button className="icon-btn" onClick={onCancel} disabled={submitting}><Icon name="close" size={18}/></button>

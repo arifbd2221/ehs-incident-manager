@@ -85,10 +85,10 @@ export default function VoiceIntakeModal({ onCancel, onExtracted }) {
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal modal-lg vimo-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal modal-lg vimo-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="voice-intake-modal-title">
         <div className="modal-h">
           <div>
-            <div className="modal-title">
+            <div className="modal-title" id="voice-intake-modal-title">
               <span className="vimo-sparkle">✨</span> Voice intake
             </div>
             <div className="modal-sub">Speak the incident — Claude extracts structured fields you can review and edit</div>

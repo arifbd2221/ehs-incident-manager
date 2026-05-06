@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 import { getUsers } from '../../../api/users';
 
 export default function AssignModal({ incident, onCancel, onConfirm }) {
@@ -15,12 +17,14 @@ export default function AssignModal({ incident, onCancel, onConfirm }) {
     });
   }, []);
 
+  const userOpts = useMemo(() => users.map(u => ({ value: String(u.id), label: `${u.name} (${u.role})` })), [users]);
+
   return (
     <div className="idet-modal-backdrop" onClick={onCancel}>
-      <div className="idet-modal" onClick={e => e.stopPropagation()} role="dialog">
+      <div className="idet-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="assign-modal-title">
         <div className="idet-modal-header">
           <div>
-            <div className="idet-modal-title">Assign incident</div>
+            <div className="idet-modal-title" id="assign-modal-title">Assign incident</div>
             <div className="idet-modal-sub">{incident.incident_number} · holds it under triage without escalating</div>
           </div>
           <button className="idet-modal-close" onClick={onCancel}><Icon name="close" size={16}/></button>
@@ -31,9 +35,7 @@ export default function AssignModal({ incident, onCancel, onConfirm }) {
           </div>
           <div className="form-group">
             <label className="form-label">Owner</label>
-            <select className="form-select" value={owner} onChange={e => setOwner(e.target.value)}>
-              {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-            </select>
+            <ComboBox options={userOpts} value={owner} onChange={setOwner} placeholder="Search users…" />
           </div>
           <div className="form-group">
             <label className="form-label">Triage by</label>
@@ -41,7 +43,13 @@ export default function AssignModal({ incident, onCancel, onConfirm }) {
           </div>
           <div className="form-group">
             <label className="form-label">Notes <span className="optional">(optional)</span></label>
-            <textarea className="form-textarea" rows={2} placeholder="What you want the owner to look into." value={notes} onChange={e => setNotes(e.target.value)}/>
+            <SmartTextarea
+              value={notes}
+              onChange={setNotes}
+              rows={2}
+              examples={['Verify affected worker has been seen by medical.', 'Check if the area has been made safe before shift change.', 'Collect witness names and initial statements.']}
+              chips={['Verify medical status', 'Check area safety', 'Collect witness info']}
+            />
           </div>
         </div>
         <div className="idet-modal-footer">

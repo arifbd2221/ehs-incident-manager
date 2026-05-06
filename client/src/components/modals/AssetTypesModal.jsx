@@ -245,10 +245,10 @@ export default function AssetTypesModal({ onClose }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="atm-modal" onClick={e => e.stopPropagation()}>
+      <div className="atm-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="asset-types-modal-title">
         <div className="atm-header">
           <div>
-            <div className="atm-title">Asset types</div>
+            <div className="atm-title" id="asset-types-modal-title">Asset types</div>
             <div className="atm-sub">Define the categories your team registers and the fields each one captures</div>
           </div>
           <button className="icon-btn" onClick={onClose}><Icon name="close" size={18}/></button>
@@ -456,7 +456,7 @@ export default function AssetTypesModal({ onClose }) {
           <button className="btn btn-primary" onClick={onClose}>Done</button>
         </div>
 
-        {toast && <div className="atm-toast"><Icon name="check" size={13}/>{toast}</div>}
+        {toast && <div className="atm-toast" role="status" aria-live="polite"><Icon name="check" size={13}/>{toast}</div>}
       </div>
     </div>
   );

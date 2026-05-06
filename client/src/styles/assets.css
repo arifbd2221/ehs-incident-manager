@@ -963,7 +963,7 @@ select.am-input {
   transition: all 200ms;
 }
 .am-btn-save:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(98, 109, 249, 0.3); }
-.am-btn-save:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+.am-btn-save:disabled { opacity: 0.38; cursor: not-allowed; transform: none; box-shadow: none; }
 .am-btn-cancel {
   padding: 7px 14px;
   border-radius: 8px;
@@ -1168,7 +1168,7 @@ select.am-input {
   box-shadow: 0 6px 20px rgba(98, 109, 249, 0.35);
 }
 .am-btn-primary:disabled {
-  opacity: 0.5;
+  opacity: 0.38;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
@@ -1594,7 +1594,7 @@ select.am-input {
   border-radius: 50px;
   background: rgba(98, 109, 249, 0.12);
   color: var(--sds-brand-primary);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.05em;
 }

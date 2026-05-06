@@ -581,10 +581,10 @@ export default function TemplateEditor() {
       {/* Delete confirmation modal */}
       {deleteConfirm && createPortal(
         <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-item-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Delete Item</div>
+                <div className="modal-title" id="delete-item-modal-title">Delete Item</div>
                 <div className="modal-sub">
                   {items.find(i => i.item_key === deleteConfirm)?.type === 'section'
                     ? `This will also delete ${getChildren(deleteConfirm).length} question(s) inside this section.`
@@ -605,10 +605,10 @@ export default function TemplateEditor() {
       {/* Publish modal */}
       {showPublish && createPortal(
         <div className="modal-backdrop" onClick={() => setShowPublish(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="publish-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Publish {latestVersion > 0 ? `v${nextVersion}` : 'Template'}</div>
+                <div className="modal-title" id="publish-modal-title">Publish {latestVersion > 0 ? `v${nextVersion}` : 'Template'}</div>
                 <div className="modal-sub">{latestVersion > 0 ? `Create version ${nextVersion} from current changes` : 'Make this template available for inspections'}</div>
               </div>
               <button className="icon-btn" onClick={() => setShowPublish(false)}><Icon name="close" size={18} /></button>
@@ -636,10 +636,10 @@ export default function TemplateEditor() {
       {/* Version history modal */}
       {showVersions && createPortal(
         <div className="modal-backdrop" onClick={() => setShowVersions(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="version-history-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Version History</div>
+                <div className="modal-title" id="version-history-modal-title">Version History</div>
                 <div className="modal-sub">{versions.length} version{versions.length !== 1 ? 's' : ''} published</div>
               </div>
               <button className="icon-btn" onClick={() => setShowVersions(false)}><Icon name="close" size={18} /></button>
@@ -676,10 +676,10 @@ export default function TemplateEditor() {
       {/* Answer set manager modal */}
       {showAnswerSets && createPortal(
         <div className="modal-backdrop" onClick={() => setShowAnswerSets(false)}>
-          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+          <div className="modal modal-lg" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="answer-sets-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Answer Sets</div>
+                <div className="modal-title" id="answer-sets-modal-title">Answer Sets</div>
                 <div className="modal-sub">Manage reusable response options for questions</div>
               </div>
               <button className="icon-btn" onClick={() => setShowAnswerSets(false)}><Icon name="close" size={18} /></button>
@@ -737,7 +737,7 @@ export default function TemplateEditor() {
         document.body
       )}
 
-      {toast && <div className="toast"><Icon name="check" size={16} /> {toast}</div>}
+      {toast && <div className="toast" role="status" aria-live="polite"><Icon name="check" size={16} /> {toast}</div>}
     </div>
   );
 }

@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { submitStopWork } from '../../api/stop_work';
 import { listSites } from '../../api/sites';
 import { listAssets } from '../../api/assets';
 import Icon from '../shared/Icon';
+import ComboBox from '../shared/ComboBox';
+import SmartTextarea from '../shared/SmartTextarea';
 
 // STOP WORK modal — single-step submission per locked decision #11.
 //
@@ -50,6 +52,12 @@ export default function StopWorkModal({ open, onClose, onSubmitted }) {
     }
   }, [open]);
 
+  const siteOpts = useMemo(() => sites.map(s => ({ value: String(s.id), label: s.name })), [sites]);
+  const assetOpts = useMemo(() => [
+    { value: '', label: 'No specific asset' },
+    ...assets.map(a => ({ value: String(a.id), label: `${a.name} · ${a.asset_type}${a.location_description ? ` · ${a.location_description}` : ''}` }))
+  ], [assets]);
+
   // Esc to close
   useEffect(() => {
     if (!open) return;
@@ -87,10 +95,10 @@ export default function StopWorkModal({ open, onClose, onSubmitted }) {
 
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="stopwork-modal-title">
         <div className="modal-h">
           <div>
-            <div className="modal-title" style={{ color: 'var(--sds-error)' }}>
+            <div className="modal-title" id="stopwork-modal-title" style={{ color: 'var(--sds-error)' }}>
               <Icon name="warning" size={18} color="var(--sds-error)" /> &nbsp;STOP WORK
             </div>
             <div className="modal-sub">Imminent danger — work halts until the area is made safe</div>
@@ -118,9 +126,7 @@ export default function StopWorkModal({ open, onClose, onSubmitted }) {
             <div className="field-row">
               <div className="field">
                 <label className="label">Site <span className="req">*</span></label>
-                <select className="select" value={siteId} onChange={(e) => setSiteId(e.target.value)} autoFocus>
-                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <ComboBox options={siteOpts} value={siteId} onChange={setSiteId} placeholder="Search sites…" />
               </div>
               <div className="field">
                 <label className="label">Area / location <span className="req">*</span></label>
@@ -135,24 +141,17 @@ export default function StopWorkModal({ open, onClose, onSubmitted }) {
 
             <div className="field">
               <label className="label">Asset (optional)</label>
-              <select className="select" value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={assets.length === 0}>
-                <option value="">— No specific asset —</option>
-                {assets.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} · {a.asset_type}{a.location_description ? ` · ${a.location_description}` : ''}
-                  </option>
-                ))}
-              </select>
+              <ComboBox options={assetOpts} value={assetId} onChange={setAssetId} placeholder="Search assets…" disabled={assets.length === 0} />
             </div>
 
             <div className="field">
               <label className="label">Brief description</label>
-              <textarea
-                className="textarea"
-                rows={3}
+              <SmartTextarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="What's the immediate danger? (optional — investigation will fill in the rest)"
+                onChange={setDescription}
+                rows={3}
+                examples={['Gas leak detected near valve station B — H₂S alarm triggered.', 'Scaffolding partially collapsed on level 2 during high winds.', 'Forklift hydraulic line burst — hot fluid spray in aisle 4.']}
+                chips={['Gas leak', 'Structural collapse', 'Equipment failure', 'Chemical spill']}
               />
             </div>
 

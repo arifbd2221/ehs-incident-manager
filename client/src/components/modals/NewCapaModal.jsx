@@ -10,6 +10,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Icon from '../shared/Icon';
+import ComboBox from '../shared/ComboBox';
+import SmartTextarea from '../shared/SmartTextarea';
 import { getUsers } from '../../api/users';
 import { getIncidents } from '../../api/incidents';
 import { createCapa, createCapaFromIncident } from '../../api/capas';
@@ -67,6 +69,14 @@ export default function NewCapaModal({ onCancel, onCreated }) {
     [incidents, incidentId],
   );
 
+  const incidentOpts = useMemo(() => filteredIncidents.map(i => ({
+    value: String(i.id), label: `${i.incident_number} · ${i.title} · Sev ${i.severity}`
+  })), [filteredIncidents]);
+  const userOpts = useMemo(() => users.map(u => ({ value: String(u.id), label: `${u.name} (${u.role})` })), [users]);
+  const verifierOpts = useMemo(() => userOpts.filter(o => o.value !== ownerId), [userOpts, ownerId]);
+  const typeOpts = [{ value: 'corrective', label: 'Corrective' }, { value: 'preventive', label: 'Preventive' }];
+  const priorityOpts = [{ value: 'critical', label: 'Critical' }, { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }];
+
   // Auto-fill from the selected incident. Replaces title/description/priority
   // each time the user picks a different incident (predictable for demos —
   // no hidden "did you edit this?" tracking). Also reflects the selection
@@ -114,10 +124,10 @@ export default function NewCapaModal({ onCancel, onCreated }) {
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+      <div className="modal modal-lg" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="new-capa-modal-title">
         <div className="modal-h">
           <div>
-            <div className="modal-title">New CAPA</div>
+            <div className="modal-title" id="new-capa-modal-title">New CAPA</div>
             <div className="modal-sub">Corrective or preventive action — owner cannot self-verify</div>
           </div>
           <button className="icon-btn" onClick={onCancel}><Icon name="close" size={18}/></button>
@@ -176,27 +186,7 @@ export default function NewCapaModal({ onCancel, onCreated }) {
                   </button>
                 </div>
               ) : (
-                <>
-                  <input
-                    className="input"
-                    placeholder="Search by number or title"
-                    value={incidentSearch}
-                    onChange={e => setIncidentSearch(e.target.value)}
-                  />
-                  <select
-                    className="select"
-                    style={{ marginTop: 8 }}
-                    value={incidentId}
-                    onChange={e => setIncidentId(e.target.value)}
-                  >
-                    <option value="">— select an incident —</option>
-                    {filteredIncidents.map(i => (
-                      <option key={i.id} value={i.id}>
-                        {i.incident_number} · {i.title} · Sev {i.severity}
-                      </option>
-                    ))}
-                  </select>
-                </>
+                <ComboBox options={incidentOpts} value={incidentId} onChange={setIncidentId} placeholder="Search by number or title…" />
               )}
             </div>
           )}
@@ -208,44 +198,33 @@ export default function NewCapaModal({ onCancel, onCreated }) {
 
           <div className="field">
             <label className="label">Description</label>
-            <textarea className="textarea" placeholder="Why this action, and what done looks like" value={description} onChange={e => setDescription(e.target.value)}/>
+            <SmartTextarea
+              value={description}
+              onChange={setDescription}
+              examples={['Revise SOP to require dual sign-off on chemical transfers above 20L.', 'Install motion-activated lighting in warehouse aisle 6 to prevent trip hazards.', 'Schedule ergonomic assessment for all packing stations by end of month.']}
+              chips={['Update SOP', 'Install engineering control', 'Schedule assessment', 'Retrain staff']}
+            />
           </div>
 
           <div className="field-row">
             <div className="field">
               <label className="label">Type</label>
-              <select className="select" value={type} onChange={e => setType(e.target.value)}>
-                <option value="corrective">Corrective</option>
-                <option value="preventive">Preventive</option>
-              </select>
+              <ComboBox options={typeOpts} value={type} onChange={setType} searchable={false} />
             </div>
             <div className="field">
               <label className="label">Priority</label>
-              <select className="select" value={priority} onChange={e => setPriority(e.target.value)}>
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
+              <ComboBox options={priorityOpts} value={priority} onChange={setPriority} searchable={false} />
             </div>
           </div>
 
           <div className="field-row">
             <div className="field">
               <label className="label">Owner <span className="req">*</span></label>
-              <select className="select" value={ownerId} onChange={e => setOwnerId(e.target.value)}>
-                <option value="">— select —</option>
-                {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-              </select>
+              <ComboBox options={userOpts} value={ownerId} onChange={setOwnerId} placeholder="Search users…" />
             </div>
             <div className="field">
               <label className="label">Independent verifier <span className="req">*</span></label>
-              <select className="select" value={verifierId} onChange={e => setVerifierId(e.target.value)}>
-                <option value="">— select —</option>
-                {users
-                  .filter(u => String(u.id) !== ownerId)
-                  .map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-              </select>
+              <ComboBox options={verifierOpts} value={verifierId} onChange={setVerifierId} placeholder="Search users…" />
             </div>
           </div>
 

@@ -696,3 +696,11 @@
 .cust-count {
   font-size: 11px; color: var(--sds-fg-tertiary); font-weight: 600;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-live-dot { animation: none; }
+  .dash-kpi { animation: none; }
+  .dash-card { animation: none; }
+  .dash-mobile { animation: none; }
+  .cust-panel { animation: none; }
+}

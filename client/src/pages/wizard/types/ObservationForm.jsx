@@ -1,4 +1,18 @@
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
+
+const CATEGORIES = [
+  { value: '', label: 'Select...' },
+  { value: 'PPE — Proper use / compliance', label: 'PPE — Proper use / compliance' },
+  { value: 'Housekeeping', label: 'Housekeeping' },
+  { value: 'Procedures — Following SOP', label: 'Procedures — Following SOP' },
+  { value: 'Ergonomics', label: 'Ergonomics' },
+  { value: 'Communication', label: 'Communication' },
+  { value: 'Tools / Equipment', label: 'Tools / Equipment' },
+  { value: 'Chemical handling', label: 'Chemical handling' },
+  { value: 'Lockout/Tagout', label: 'Lockout/Tagout' },
+];
 
 export default function ObservationForm({ data, onChange }) {
   return (
@@ -17,13 +31,7 @@ export default function ObservationForm({ data, onChange }) {
         <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
           <div className="card-h">Category</div>
           <div className="field">
-            <select className="select" value={data.category || ''} onChange={e => onChange({ ...data, category: e.target.value })}>
-              <option value="">Select...</option>
-              <option>PPE — Proper use / compliance</option><option>Housekeeping</option>
-              <option>Procedures — Following SOP</option><option>Ergonomics</option>
-              <option>Communication</option><option>Tools / Equipment</option>
-              <option>Chemical handling</option><option>Lockout/Tagout</option>
-            </select>
+            <ComboBox options={CATEGORIES} value={data.category || ''} onChange={v => onChange({ ...data, category: v })} placeholder="Search categories…" />
           </div>
           <div className="field" style={{ marginTop: 16 }}>
             <label className="label">Person(s) observed (optional)</label>
@@ -33,7 +41,12 @@ export default function ObservationForm({ data, onChange }) {
       </div>
       <div className="field">
         <label className="label">Suggested improvement / recognition</label>
-        <textarea className="textarea" value={data.suggestion || ''} onChange={e => onChange({ ...data, suggestion: e.target.value })} placeholder="Describe suggestions or recognition."/>
+        <SmartTextarea
+          value={data.suggestion || ''}
+          onChange={v => onChange({ ...data, suggestion: v })}
+          examples={['Worker consistently uses correct PPE in chemical handling area — recommend recognition.', 'Walkway obstruction near Bay 3 exit — suggest relocating pallet staging area.', 'Team follows LOTO procedure correctly every shift — consider as training example.']}
+          chips={['Positive recognition', 'Relocate hazard', 'Update training material']}
+        />
       </div>
     </>
   );

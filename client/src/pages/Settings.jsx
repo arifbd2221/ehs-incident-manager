@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { changePassword, getSites } from '../api/auth';
 import Icon from '../components/shared/Icon';
+import ComboBox from '../components/shared/ComboBox';
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: 'person' },
@@ -30,6 +31,7 @@ export default function Profile() {
   }, [user]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const siteOpts = useMemo(() => [{ value: '', label: 'No site' }, ...sites.map(s => ({ value: String(s.id), label: s.name }))], [sites]);
 
   const handleSave = async () => {
     if (!form.name.trim()) return setMsg({ type: 'error', text: 'Name is required' });
@@ -179,10 +181,7 @@ export default function Profile() {
                 </div>
                 <div className="prof-field">
                   <label>Site</label>
-                  <select className="input" value={form.site_id} onChange={e => set('site_id', e.target.value)}>
-                    <option value="">No site</option>
-                    {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <ComboBox options={siteOpts} value={String(form.site_id || '')} onChange={v => set('site_id', v)} placeholder="Search sites…" />
                 </div>
                 <div className="prof-actions">
                   <button className="btn btn-secondary btn-sm" onClick={handleCancel}>Cancel</button>

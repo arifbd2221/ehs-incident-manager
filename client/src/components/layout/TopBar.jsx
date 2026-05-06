@@ -310,10 +310,10 @@ export default function TopBar() {
           {notifOpen && (
             <>
               <div className="notif-backdrop" onClick={() => setNotifOpen(false)} />
-              <div className="notif-panel" role="dialog">
+              <div className="notif-panel" role="dialog" aria-modal="true" aria-labelledby="notif-panel-title">
                 <div className="notif-h">
                   <div>
-                    <div className="notif-h-title">Notifications</div>
+                    <div className="notif-h-title" id="notif-panel-title">Notifications</div>
                     <div className="notif-h-sub">{unreadCount} unread</div>
                   </div>
                   <button className="btn btn-tertiary btn-sm" onClick={handleMarkAllRead}>Mark all read</button>
@@ -341,10 +341,10 @@ export default function TopBar() {
       {helpOpen && (
         <>
           <div className="help-backdrop" onClick={() => setHelpOpen(false)} />
-          <div className="help-panel" role="dialog">
+          <div className="help-panel" role="dialog" aria-modal="true" aria-labelledby="help-panel-title">
             <div className="help-header">
               <div>
-                <div className="help-h-title">Help & Tips</div>
+                <div className="help-h-title" id="help-panel-title">Help & Tips</div>
                 <div className="help-h-sub">{crumb()} — quick guide</div>
               </div>
               <button className="icon-btn" onClick={() => setHelpOpen(false)}><Icon name="close" size={18} /></button>

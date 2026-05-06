@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation } from '../../api/investigations';
@@ -9,6 +9,8 @@ import api from '../../api/client';
 import { createLink, deleteLink } from '../../api/links';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import ComboBox from '../../components/shared/ComboBox';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import { TypePill, SevBadge, TrackBadge } from '../../components/shared/Badges';
 import { timeAgo, formatDate } from '../../utils/time';
 import CloseInvestigationModal from './modals/CloseInvestigationModal';
@@ -251,41 +253,50 @@ export default function InvestigationDetail() {
 
   const statusLabel = inv.status === 'closed' ? 'Closed' : inv.status === 'capa' ? 'Awaiting CAPA' : inv.status === 'progress' ? 'In progress' : 'Pending';
   const statusClass = `ln-${inv.status}`;
+  const statusColors = { pending: '#7E7E8C', progress: '#626DF9', capa: '#ED6C02', closed: '#2E7D32' };
+  const heroColor = statusColors[inv.status] || '#8b5cf6';
 
   return (
     <div className="page invd">
-      {/* Back */}
-      <button className="invd-back" onClick={() => navigate('/investigations')}>
-        <Icon name="arrowL" size={14}/> Back to investigations
-      </button>
+      {/* Breadcrumb */}
+      <div className="invd-breadcrumb">
+        <button onClick={() => navigate('/investigations')}>
+          <Icon name="arrowL" size={13} /> Investigations
+        </button>
+        <span className="invd-bc-sep">/</span>
+        <span className="invd-bc-current">{inv.investigation_number}</span>
+      </div>
 
-      {/* Header */}
-      <div className="invd-header">
-        <div className="invd-header-left">
-          <div className="invd-meta-row">
-            <span className="invd-number">{inv.investigation_number}</span>
-            <span style={{ color: 'var(--sds-border)' }}>·</span>
-            <span className="invd-number">{inv.incident_number}</span>
+      {/* Hero header card */}
+      <div className="invd-hero" style={{ '--invd-color': heroColor }}>
+        <div className="invd-hero-strip" />
+        <div className="invd-hero-body">
+          <div className="invd-hero-left">
+            <div className="invd-meta-row">
+              <span className="invd-number">{inv.investigation_number}</span>
+              <span className="invd-meta-sep">·</span>
+              <span className="invd-number">{inv.incident_number}</span>
+            </div>
+            <h1 className="invd-title">{inv.incident_title}</h1>
+            <div className="invd-badges">
+              <SevBadge s={inv.severity}/>
+              <TrackBadge t={inv.track || inv.incident_track}/>
+              <span className={`inv-list-lane ${statusClass}`}>
+                <span className="ln-dot"/>{statusLabel}
+              </span>
+              <span className="invd-lead">Lead: <b>{inv.lead_name || 'Unassigned'}</b></span>
+            </div>
           </div>
-          <h1 className="invd-title">{inv.incident_title}</h1>
-          <div className="invd-badges">
-            <SevBadge s={inv.severity}/>
-            <TrackBadge t={inv.track || inv.incident_track}/>
-            <span className={`inv-list-lane ${statusClass}`}>
-              <span className="ln-dot"/>{statusLabel}
-            </span>
-            <span className="invd-lead">Lead: <b>{inv.lead_name || 'Unassigned'}</b></span>
+          <div className="invd-header-actions">
+            {inv.status !== 'closed' && (
+              <>
+                <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no CAPA</button>
+                <button className="idet-act-btn primary" onClick={() => setModal('capa')}>
+                  <Icon name="plus" size={14}/>Assign CAPA
+                </button>
+              </>
+            )}
           </div>
-        </div>
-        <div className="invd-header-actions">
-          {inv.status !== 'closed' && (
-            <>
-              <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no CAPA</button>
-              <button className="idet-act-btn primary" onClick={() => setModal('capa')}>
-                <Icon name="plus" size={14}/>Assign CAPA
-              </button>
-            </>
-          )}
         </div>
       </div>
 
@@ -335,7 +346,12 @@ export default function InvestigationDetail() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Answer</label>
-                    <textarea className="form-textarea" rows={2} value={newWhy.answer} onChange={e => setNewWhy(w => ({ ...w, answer: e.target.value }))} placeholder="Because..."/>
+                    <SmartTextarea
+                      value={newWhy.answer}
+                      onChange={v => setNewWhy(w => ({ ...w, answer: v }))}
+                      rows={2}
+                      examples={['Because the machine guard was removed during maintenance and not replaced.', 'Because the SOP did not include a step for verifying guard replacement.', 'Because the training programme did not cover post-maintenance safety checks.']}
+                    />
                   </div>
                   <div className="invd-add-why-foot">
                     <label>
@@ -357,7 +373,14 @@ export default function InvestigationDetail() {
               Investigation findings
             </div>
             <div className="invd-card-body">
-              <textarea className="invd-findings-area" value={findings} onChange={e => setFindings(e.target.value)} placeholder="Summarize what happened, the immediate and root causes, and any contributing factors."/>
+              <SmartTextarea
+                value={findings}
+                onChange={setFindings}
+                rows={5}
+                className="invd-findings-st"
+                examples={['Worker contacted chemical during transfer. Root cause: SOP did not require secondary containment for volumes over 10L. Contributing factor: glove type inadequate for sulfuric acid concentration.', 'Forklift struck racking due to obscured sightline at aisle intersection. Root cause: no convex mirrors or traffic management. Contributing factor: shift handover did not communicate changed layout.']}
+                chips={['Root cause identified', 'Contributing factors noted', 'Existing controls insufficient', 'Training gap identified']}
+              />
               <button className="invd-save-btn" onClick={handleSaveFindings}>
                 <Icon name="check" size={13}/>Save findings
               </button>
@@ -610,10 +633,10 @@ export default function InvestigationDetail() {
 
       {docModalOpen && createPortal(
         <div className="modal-backdrop" onClick={closeDocModal}>
-          <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+          <div className="modal modal-lg" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="link-doc-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Link a document from the library</div>
+                <div className="modal-title" id="link-doc-modal-title">Link a document from the library</div>
                 <div className="modal-sub">Attach evidence already uploaded to the document library</div>
               </div>
               <button className="icon-btn" onClick={closeDocModal}><Icon name="close" size={18}/></button>
@@ -621,17 +644,19 @@ export default function InvestigationDetail() {
             <div className="modal-body">
               <div className="invd-doc-filters">
                 <input className="input" placeholder="Search by name or number…" value={docSearch} onChange={e => setDocSearch(e.target.value)} />
-                <select className="select invd-doc-type" value={docTypeFilter} onChange={e => setDocTypeFilter(e.target.value)}>
-                  <option value="">All types</option>
-                  <option value="sds">SDS</option>
-                  <option value="manual">Manual</option>
-                  <option value="policy">Policy</option>
-                  <option value="photo">Photo</option>
-                  <option value="video">Video</option>
-                  <option value="log">Log</option>
-                  <option value="certificate">Certificate</option>
-                  <option value="other">Other</option>
-                </select>
+                <ComboBox
+                  className="invd-doc-type"
+                  options={[
+                    { value: '', label: 'All types' },
+                    { value: 'sds', label: 'SDS' }, { value: 'manual', label: 'Manual' },
+                    { value: 'policy', label: 'Policy' }, { value: 'photo', label: 'Photo' },
+                    { value: 'video', label: 'Video' }, { value: 'log', label: 'Log' },
+                    { value: 'certificate', label: 'Certificate' }, { value: 'other', label: 'Other' },
+                  ]}
+                  value={docTypeFilter}
+                  onChange={setDocTypeFilter}
+                  searchable={false}
+                />
               </div>
               {!docSearch.trim() && (
                 <nav className="invd-link-crumbs">
@@ -708,7 +733,7 @@ export default function InvestigationDetail() {
 
       {/* Toast */}
       {toast && createPortal(
-        <div className="invd-toast">
+        <div className="invd-toast" role="status" aria-live="polite">
           <span className="toast-check"><Icon name="check" size={12}/></span>
           {toast}
         </div>,

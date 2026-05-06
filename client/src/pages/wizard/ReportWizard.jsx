@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { createIncident, uploadAttachments } from '../../api/incidents';
 import VoiceIntakeModal from '../../components/wizard/VoiceIntakeModal';
@@ -6,6 +6,8 @@ import { getSites } from '../../api/users';
 import { listAssets } from '../../api/assets';
 import api from '../../api/client';
 import Icon from '../../components/shared/Icon';
+import ComboBox from '../../components/shared/ComboBox';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import InjuryForm from './types/InjuryForm';
 import IllnessForm from './types/IllnessForm';
@@ -146,94 +148,6 @@ const EXAMPLE_DESCRIPTIONS = [
   "Scaffolding plank dislodged on level 3 of construction site during high winds. Plank fell to ground level, landing in a barricaded exclusion zone.",
 ];
 
-const SpeechRecognition = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
-
-function SmartInput({ value, onChange, examples, multiline, className, autoFocus, rows }) {
-  const [phIdx, setPhIdx] = useState(() => Math.floor(Math.random() * examples.length));
-  const [phVisible, setPhVisible] = useState(true);
-  const [listening, setListening] = useState(false);
-  const recognitionRef = useRef(null);
-  const inputRef = useRef(null);
-  const baseTextRef = useRef('');
-
-  useEffect(() => {
-    if (value) return;
-    const interval = setInterval(() => {
-      setPhVisible(false);
-      setTimeout(() => {
-        setPhIdx(i => (i + 1) % examples.length);
-        setPhVisible(true);
-      }, 400);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [value, examples.length]);
-
-  const toggleMic = useCallback(() => {
-    if (!SpeechRecognition) return;
-    if (listening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      return;
-    }
-    baseTextRef.current = value;
-    const rec = new SpeechRecognition();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = 'en-US';
-    let finalTranscript = '';
-    rec.onresult = (e) => {
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
-        else interim = e.results[i][0].transcript;
-      }
-      const base = baseTextRef.current;
-      const separator = base && !base.endsWith(' ') ? ' ' : '';
-      onChange(base + separator + finalTranscript + interim);
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recognitionRef.current = rec;
-    rec.start();
-    setListening(true);
-    inputRef.current?.focus();
-  }, [listening, value, onChange]);
-
-  useEffect(() => {
-    return () => { if (recognitionRef.current) recognitionRef.current.stop(); };
-  }, []);
-
-  const Tag = multiline ? 'textarea' : 'input';
-  const extraProps = multiline ? { rows: rows || 4 } : { type: 'text' };
-
-  return (
-    <div className={`desc-input-wrap ${multiline ? '' : 'desc-input-single'}`}>
-      <Tag
-        ref={inputRef}
-        className={className || (multiline ? 'textarea' : 'input')}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        autoFocus={autoFocus}
-        {...extraProps}
-      />
-      {!value && (
-        <div className={`desc-placeholder ${phVisible ? 'visible' : ''}`}>
-          {examples[phIdx]}
-        </div>
-      )}
-      {SpeechRecognition && (
-        <button
-          type="button"
-          className={`desc-mic ${listening ? 'recording' : ''}`}
-          onClick={toggleMic}
-          title={listening ? 'Stop recording' : 'Voice input'}
-        >
-          <Icon name="mic" size={16} />
-          {listening && <span className="desc-mic-pulse" />}
-        </button>
-      )}
-    </div>
-  );
-}
 
 const fileTypeInfo = (file) => {
   const name = file.name || file.filename || '';
@@ -271,6 +185,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
   // are blocked at the backend.
   const [isAnonymous, setIsAnonymous] = useState(false);
   const anonymousAllowed = type !== 'injury' && type !== 'illness';
+
+  const siteOpts = useMemo(() => sites.map(s => ({ value: String(s.id), label: s.name })), [sites]);
+  const assetOpts = useMemo(() => [
+    { value: '', label: 'No specific asset' },
+    ...assets.map(a => ({ value: String(a.id), label: `${a.name} · ${a.asset_type}${a.location_description ? ` · ${a.location_description}` : ''}` }))
+  ], [assets]);
 
   // Auto-classification preview (locked #14) + trending banner data (#16).
   // Fetched whenever the cascade fields settle. Lets Step 2 pre-fill the
@@ -578,11 +498,13 @@ export default function ReportWizard({ onClose, onSubmit }) {
 
                 <div className="wiz-field-with-badge">
                   {aiSuggestedFields.has('title') && <span className="wiz-ai-pill">✨ AI</span>}
-                  <SmartInput
+                  <SmartTextarea
                     value={title}
                     onChange={(v) => { setTitle(v); clearAiBadge('title'); }}
                     examples={EXAMPLE_TITLES}
-                    className="wiz-title-input"
+                    placeholder="e.g. Chemical splash during transfer in Lab 2"
+                    multiline={false}
+                    className="wiz-title-wrap"
                     autoFocus
                   />
                 </div>
@@ -625,9 +547,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                         Site <span className="req">*</span>
                         {aiSuggestedFields.has('site') && <span className="wiz-ai-pill" style={{ marginLeft: 6 }}>✨ AI</span>}
                       </label>
-                      <select className="select" value={siteId} onChange={e => { setSiteId(e.target.value); clearAiBadge('site'); }}>
-                        {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
+                      <ComboBox options={siteOpts} value={siteId} onChange={v => { setSiteId(v); clearAiBadge('site'); }} placeholder="Search sites…" />
                     </div>
                     <div className="field">
                       <label className="label">
@@ -644,14 +564,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                       {aiSuggestedFields.has('asset') && <span className="wiz-ai-pill" style={{ marginLeft: 6 }}>✨ AI</span>}
                       {assets.length === 0 && siteId && <span className="helper" style={{ marginLeft: 8, fontSize: 11 }}>No assets registered for this site yet</span>}
                     </label>
-                    <select className="select" value={assetId} onChange={e => { setAssetId(e.target.value); clearAiBadge('asset'); }} disabled={assets.length === 0}>
-                      <option value="">— No specific asset —</option>
-                      {assets.map(a => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} · {a.asset_type}{a.location_description ? ` · ${a.location_description}` : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <ComboBox options={assetOpts} value={assetId} onChange={v => { setAssetId(v); clearAiBadge('asset'); }} placeholder="Search assets…" disabled={assets.length === 0} />
                   </div>
                 </div>
 
@@ -661,7 +574,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     Description
                     {aiSuggestedFields.has('description') && <span className="wiz-ai-pill" style={{ marginLeft: 8 }}>✨ AI</span>}
                   </div>
-                  <SmartInput value={description} onChange={(v) => { setDescription(v); clearAiBadge('description'); }} examples={EXAMPLE_DESCRIPTIONS} multiline rows={4} />
+                  <SmartTextarea value={description} onChange={(v) => { setDescription(v); clearAiBadge('description'); }} examples={EXAMPLE_DESCRIPTIONS} rows={4} />
                 </div>
 
                 {/* Anonymous reporting toggle — disabled for injury / illness

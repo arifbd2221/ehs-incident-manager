@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { listSites, createSite, updateSite, deleteSite } from '../../api/sites';
 import Icon from '../../components/shared/Icon';
+import ComboBox from '../../components/shared/ComboBox';
 import '../../styles/sites.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -252,14 +253,14 @@ export default function Sites() {
 
       {editing !== null && createPortal(
         <div className="modal-backdrop" onClick={close}>
-          <form className={`sm-modal${success ? ' sm-success' : ''}`} onClick={e => e.stopPropagation()} onSubmit={handleSave}>
+          <form className={`sm-modal${success ? ' sm-success' : ''}`} onClick={e => e.stopPropagation()} onSubmit={handleSave} role="dialog" aria-modal="true" aria-labelledby="site-modal-title">
             {/* Header */}
             <div className="sm-header">
               <div className="sm-header-icon">
                 <Icon name="factory" size={20} />
               </div>
               <div className="sm-header-text">
-                <h2>{editing === 'new' ? 'New site' : `Edit ${editing.name}`}</h2>
+                <h2 id="site-modal-title">{editing === 'new' ? 'New site' : `Edit ${editing.name}`}</h2>
                 <p>{editing === 'new' ? 'Add a new site to your organization' : 'Update site details'}</p>
               </div>
               <button type="button" className="sm-close" onClick={close}>
@@ -321,11 +322,12 @@ export default function Sites() {
                   </div>
                   <div className="sm-field" style={{ animationDelay: '100ms' }}>
                     <label className="sm-label">Time zone</label>
-                    <select className="sm-input" value={form.timezone} onChange={e => set('timezone', e.target.value)}>
-                      {TIMEZONES.map(tz => (
-                        <option key={tz.value} value={tz.value}>{tz.label}</option>
-                      ))}
-                    </select>
+                    <ComboBox
+                      options={TIMEZONES}
+                      value={form.timezone}
+                      onChange={v => set('timezone', v)}
+                      placeholder="Search timezones…"
+                    />
                   </div>
                   <div className="sm-field" style={{ animationDelay: '150ms' }}>
                     <label className="sm-label">

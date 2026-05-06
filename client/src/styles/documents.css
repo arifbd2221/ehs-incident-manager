@@ -355,7 +355,7 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -525,7 +525,7 @@
 }
 .dp-row-name:hover { color: var(--sds-brand-primary); }
 .dp-row-arch-tag {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   color: #546E7A;
@@ -1312,7 +1312,7 @@
   flex-shrink: 0;
 }
 .dm-dz-ext {
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1559,7 +1559,7 @@
   box-shadow: 0 6px 20px rgba(98, 109, 249, 0.35);
 }
 .dm-btn-primary:disabled {
-  opacity: 0.5;
+  opacity: 0.38;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
@@ -1676,7 +1676,7 @@
   outline: none;
   padding: 2px 4px;
 }
-.dp-site-filter select:disabled { opacity: 0.6; cursor: not-allowed; }
+.dp-site-filter select:disabled { opacity: 0.38; cursor: not-allowed; }
 
 .dp-folder-card { position: relative; cursor: pointer; }
 .dp-folder-card.dragging { opacity: 0.4; }

@@ -1134,7 +1134,7 @@
   box-shadow: 0 0 0 2px var(--sds-brand-primary-light);
 }
 .te-condition-row select:disabled {
-  opacity: 0.5;
+  opacity: 0.38;
   cursor: not-allowed;
 }
 .te-condition-eq {

@@ -724,7 +724,7 @@
   color: var(--sds-brand-primary);
 }
 .inc-page-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.38;
   cursor: not-allowed;
 }
 
@@ -907,7 +907,7 @@
   box-shadow: 0 6px 20px rgba(98, 109, 249, 0.35);
 }
 .idet-act-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.38;
   cursor: not-allowed;
   transform: none !important;
   box-shadow: none !important;
@@ -1190,7 +1190,7 @@
   color: var(--sds-fg-tertiary);
 }
 .idet-attach-file-type {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1394,7 +1394,7 @@
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
 }
-.idet-note-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.idet-note-btn:disabled { opacity: 0.38; cursor: not-allowed; }
 
 /* Note row in the timeline — distinct styling so observations stand
    apart from system events */
@@ -1412,7 +1412,7 @@
   border-radius: 50px;
   background: rgba(245, 158, 11, 0.15);
   color: #b45309;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.06em;
   vertical-align: middle;
@@ -1657,7 +1657,7 @@
   box-shadow: 0 6px 20px rgba(98, 109, 249, 0.35);
 }
 .idet-modal-footer .modal-confirm:disabled {
-  opacity: 0.5;
+  opacity: 0.38;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
@@ -1679,7 +1679,7 @@
   align-items: center;
   gap: 10px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-  z-index: 950;
+  z-index: var(--sds-z-toast);
   animation: toastIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes toastIn {
@@ -1883,7 +1883,7 @@
   background: var(--sds-brand-primary-tint);
 }
 .idet-attach-add:disabled {
-  opacity: 0.6;
+  opacity: 0.38;
   cursor: not-allowed;
 }
 .idet-attach-spinner {
@@ -2210,7 +2210,30 @@
   box-shadow: 0 6px 20px rgba(98, 109, 249, 0.35);
 }
 .rv-submit:disabled {
-  opacity: 0.5;
+  opacity: 0.38;
   cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .incidents-page { animation: none; }
+  .inc-drop { animation: none; }
+  .inc-chip { animation: none; }
+  .inc-card { animation: none; }
+  .idet-cascade, .idet-alert,
+  .idet-main .idet-card, .idet-side .idet-card { animation: none; }
+  .idet-skel-line { animation: none; }
+  .idet-attach-thumb-skel { animation: none; }
+  .idet-attach-thumb-wrap { animation: none; }
+  .idet-attach-file { animation: none; }
+  .idet-tl-item { animation: none; }
+  .idet-modal-bd { animation: none; }
+  .idet-modal { animation: none; }
+  .idet-toast { animation: none; }
+  .lb-overlay { animation: none; }
+  .lb-img { animation: none; }
+  .lb-nav:active { animation: none; }
+  .lb-info { animation: none; }
+  .idet-spin { animation: none; }
+  .shimmer-line { animation: none; }
 }
 

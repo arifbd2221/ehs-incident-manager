@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { getOsha300, getOsha300A, getRiddor, getMetrics, getAuditLog, getAuditActions } from '../../api/reports';
 import { getSites, getUsers } from '../../api/users';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import ComboBox from '../../components/shared/ComboBox';
 import CertifyOsha300AModal from '../../components/modals/CertifyOsha300AModal';
 import { formatDateShort, formatDate } from '../../utils/time';
 import '../../styles/reports.css';
@@ -45,11 +46,7 @@ export default function ReportsPage() {
     getSites().then(data => { setSites(data); if (data.length > 0) setSiteId(String(data[0].id)); });
   }, []);
 
-  // Defensive: if a user without audit access deep-links into audit somehow,
-  // bounce them to the first visible report.
-  useEffect(() => {
-    if (tab === 'audit' && !canSeeAudit) setTab('osha300');
-  }, [tab, canSeeAudit]);
+  const siteOpts = useMemo(() => sites.map(s => ({ value: String(s.id), label: s.name })), [sites]);
 
   return (
     <div className="page">
@@ -59,9 +56,7 @@ export default function ReportsPage() {
           <h1 className="rpt-heading">Reports</h1>
           <p className="rpt-subtitle">Continuous regulatory output, auto-generated from incident data.</p>
         </div>
-        <select className="rpt-site-select" value={siteId} onChange={e => setSiteId(e.target.value)}>
-          {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+        <ComboBox className="rpt-site-select" options={siteOpts} value={siteId} onChange={setSiteId} placeholder="Search sites…" />
       </div>
 
       {/* Report type selector */}
@@ -628,7 +623,7 @@ function Osha300AReport({ siteId }) {
         document.body
       )}
       {toast && createPortal(
-        <div className="rpt-300a-toast"><Icon name="check" size={14}/>{toast}</div>,
+        <div className="rpt-300a-toast" role="status" aria-live="polite"><Icon name="check" size={14}/>{toast}</div>,
         document.body
       )}
       <div className="rpt-panel-body">

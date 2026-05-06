@@ -1,4 +1,19 @@
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
+
+const HAZARDS = [
+  { value: '', label: 'Select...' },
+  { value: 'Mechanical — Moving parts', label: 'Mechanical — Moving parts' },
+  { value: 'Electrical — Exposed wiring', label: 'Electrical — Exposed wiring' },
+  { value: 'Chemical — Corrosive substance', label: 'Chemical — Corrosive substance' },
+  { value: 'Chemical — Flammable material', label: 'Chemical — Flammable material' },
+  { value: 'Fall hazard — Unguarded edge', label: 'Fall hazard — Unguarded edge' },
+  { value: 'Fall hazard — Wet surface', label: 'Fall hazard — Wet surface' },
+  { value: 'Fire / Explosion', label: 'Fire / Explosion' },
+  { value: 'Confined space', label: 'Confined space' },
+  { value: 'Vehicle / Traffic', label: 'Vehicle / Traffic' },
+];
 
 export default function NearMissForm({ data, onChange }) {
   return (
@@ -17,18 +32,17 @@ export default function NearMissForm({ data, onChange }) {
         <div className="card-h">Hazard category</div>
         <div className="field">
           <label className="label">Primary hazard <span className="req">*</span></label>
-          <select className="select" value={data.primary_hazard || ''} onChange={e => onChange({ ...data, primary_hazard: e.target.value })}>
-            <option value="">Select...</option>
-            <option>Mechanical — Moving parts</option><option>Electrical — Exposed wiring</option>
-            <option>Chemical — Corrosive substance</option><option>Chemical — Flammable material</option>
-            <option>Fall hazard — Unguarded edge</option><option>Fall hazard — Wet surface</option>
-            <option>Fire / Explosion</option><option>Confined space</option><option>Vehicle / Traffic</option>
-          </select>
+          <ComboBox options={HAZARDS} value={data.primary_hazard || ''} onChange={v => onChange({ ...data, primary_hazard: v })} placeholder="Search hazards…" />
         </div>
       </div>
       <div className="field">
         <label className="label">Suggested prevention measures</label>
-        <textarea className="textarea" value={data.prevention_measures || ''} onChange={e => onChange({ ...data, prevention_measures: e.target.value })} placeholder="Describe suggested actions to prevent recurrence."/>
+        <SmartTextarea
+          value={data.prevention_measures || ''}
+          onChange={v => onChange({ ...data, prevention_measures: v })}
+          examples={['Install machine guard on exposed moving parts and schedule weekly inspection.', 'Add anti-slip strips to wet-prone walkway and improve drainage.', 'Implement mandatory spotter protocol for all reversing vehicle operations.']}
+          chips={['Install guard/barrier', 'Improve signage', 'Add spotter protocol', 'Schedule inspection']}
+        />
       </div>
     </>
   );

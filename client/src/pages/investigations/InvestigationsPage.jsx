@@ -1,18 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getInvestigations, updateInvestigation, closeInvestigation } from '../../api/investigations';
 import { useApp } from '../../context/AppContext';
 import Icon from '../../components/shared/Icon';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import { SevBadge } from '../../components/shared/Badges';
 import { timeAgo } from '../../utils/time';
 import '../../styles/investigations.css';
 
 const KANBAN_COLS = [
-  { id: 'pending', title: 'Pending', color: '#7E7E8C' },
-  { id: 'progress', title: 'In progress', color: '#626DF9' },
-  { id: 'capa', title: 'Awaiting CAPA', color: '#ED6C02' },
-  { id: 'closed', title: 'Closed', color: '#2E7D32' },
+  { id: 'pending', title: 'Pending', color: '#7E7E8C', icon: 'clock' },
+  { id: 'progress', title: 'In progress', color: '#626DF9', icon: 'investigation' },
+  { id: 'capa', title: 'Awaiting CAPA', color: '#ED6C02', icon: 'capa' },
+  { id: 'closed', title: 'Closed', color: '#2E7D32', icon: 'check' },
 ];
 
 const LANE_LABELS = { pending: 'Pending', progress: 'In progress', capa: 'Awaiting CAPA', closed: 'Closed' };
@@ -30,6 +31,7 @@ export default function InvestigationsPage() {
   const [investigations, setInvestigations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('kanban');
+  const [search, setSearch] = useState('');
 
   const [dragId, setDragId] = useState(null);
   const [overCol, setOverCol] = useState(null);
@@ -51,7 +53,25 @@ export default function InvestigationsPage() {
 
   useEffect(load, [refreshKey]);
 
-  const byLane = (laneId) => investigations.filter(inv => inv.status === laneId);
+  const stats = useMemo(() => ({
+    pending: investigations.filter(i => i.status === 'pending').length,
+    progress: investigations.filter(i => i.status === 'progress').length,
+    capa: investigations.filter(i => i.status === 'capa').length,
+    closed: investigations.filter(i => i.status === 'closed').length,
+  }), [investigations]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return investigations;
+    const q = search.toLowerCase();
+    return investigations.filter(i =>
+      (i.incident_title || '').toLowerCase().includes(q) ||
+      (i.investigation_number || '').toLowerCase().includes(q) ||
+      (i.site_name || '').toLowerCase().includes(q) ||
+      (i.lead_name || '').toLowerCase().includes(q)
+    );
+  }, [investigations, search]);
+
+  const byLane = (laneId) => filtered.filter(inv => inv.status === laneId);
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
   const handleDragStart = (e, inv) => {
@@ -134,26 +154,45 @@ export default function InvestigationsPage() {
   };
 
   return (
-    <div className="page">
-      {/* Hero */}
+    <div className="page inv-page">
+      {/* Hero card */}
       <div className="inv-hero">
-        <div>
-          <h1 className="inv-heading">Investigations</h1>
-          <p className="inv-subtitle">
-            Track A & B incidents under root-cause analysis
-            <span className="inv-count">{investigations.length} active</span>
-          </p>
-        </div>
-        <div className="inv-hero-right">
-          <div className="inv-view-toggle" role="tablist">
-            <button className={`inv-view-btn ${view === 'kanban' ? 'active' : ''}`} onClick={() => setView('kanban')}>
-              <Icon name="dashboard" size={13}/>Board
-            </button>
-            <button className={`inv-view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
-              <Icon name="sort" size={13}/>List
-            </button>
+        <div className="inv-hero-row">
+          <div className="inv-hero-icon">
+            <Icon name="investigation" size={24} />
           </div>
-          <button className="inv-export-btn"><Icon name="export" size={14}/>Export</button>
+          <div className="inv-hero-text">
+            <h1 className="inv-heading">Investigations</h1>
+            <p className="inv-subtitle">Track A & B incidents under root-cause analysis</p>
+          </div>
+          <div className="inv-hero-actions">
+            <div className="inv-view-toggle" role="tablist">
+              <button className={`inv-view-btn ${view === 'kanban' ? 'active' : ''}`} onClick={() => setView('kanban')}>
+                <Icon name="dashboard" size={13}/>Board
+              </button>
+              <button className={`inv-view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
+                <Icon name="sort" size={13}/>List
+              </button>
+            </div>
+            <button className="inv-export-btn"><Icon name="export" size={14}/>Export</button>
+          </div>
+        </div>
+        <div className="inv-stats">
+          {KANBAN_COLS.map(col => (
+            <div key={col.id} className="inv-stat" style={{ '--is-color': col.color }}>
+              <div className="inv-stat-icon"><Icon name={col.icon} size={16} /></div>
+              <div>
+                <div className="inv-stat-val">{stats[col.id]}</div>
+                <div className="inv-stat-lbl">{col.title}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="inv-search-row">
+          <div className="inv-search">
+            <span className="inv-search-icon"><Icon name="search" size={15}/></span>
+            <input placeholder="Search investigations..." value={search} onChange={e => setSearch(e.target.value)}/>
+          </div>
         </div>
       </div>
 
@@ -215,18 +254,20 @@ export default function InvestigationsPage() {
                       </div>
                       {/* Hover-reveal detail rows */}
                       <div className="inv-kcard-expand">
-                        {inv.location && (
-                          <div className="inv-kcard-detail"><Icon name="location" size={11}/><span>Area: {inv.location}</span></div>
-                        )}
-                        {inv.lead_name && (
-                          <div className="inv-kcard-detail"><Icon name="person" size={11}/><span>Lead: {inv.lead_name}</span></div>
-                        )}
-                        {inv.reporter_name && (
-                          <div className="inv-kcard-detail"><Icon name="edit" size={11}/><span>Reporter: {inv.reporter_name}</span></div>
-                        )}
-                        {inv.incident_type && (
-                          <div className="inv-kcard-detail"><Icon name="incidents" size={11}/><span style={{ textTransform: 'capitalize' }}>{inv.incident_type.replace('_', ' ')}</span></div>
-                        )}
+                        <div className="inv-kcard-expand-inner">
+                          {inv.location && (
+                            <div className="inv-kcard-detail"><Icon name="location" size={11}/><span>Area: {inv.location}</span></div>
+                          )}
+                          {inv.lead_name && (
+                            <div className="inv-kcard-detail"><Icon name="person" size={11}/><span>Lead: {inv.lead_name}</span></div>
+                          )}
+                          {inv.reporter_name && (
+                            <div className="inv-kcard-detail"><Icon name="edit" size={11}/><span>Reporter: {inv.reporter_name}</span></div>
+                          )}
+                          {inv.incident_type && (
+                            <div className="inv-kcard-detail"><Icon name="incidents" size={11}/><span style={{ textTransform: 'capitalize' }}>{inv.incident_type.replace('_', ' ')}</span></div>
+                          )}
+                        </div>
                       </div>
                       {(inv.riddor_reportable === 1 || inv.capa_count > 0) && (
                         <div className="inv-kcard-flags">
@@ -321,12 +362,12 @@ export default function InvestigationsPage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Closure reason</label>
-                <textarea
-                  className="form-textarea"
-                  rows={3}
-                  placeholder="Investigation findings, resolution summary..."
+                <SmartTextarea
                   value={closeReason}
-                  onChange={e => setCloseReason(e.target.value)}
+                  onChange={setCloseReason}
+                  rows={3}
+                  examples={['Root cause addressed by existing control; no further action required.', 'CAPA completed and verified — corrective measures in place.', 'Findings show incident was non-work-related per OSHA criteria.']}
+                  chips={['Existing controls sufficient', 'CAPA verified', 'Non-work-related']}
                 />
               </div>
             </div>
@@ -343,7 +384,7 @@ export default function InvestigationsPage() {
 
       {/* Toast */}
       {toast && createPortal(
-        <div className="invd-toast">
+        <div className="invd-toast" role="status" aria-live="polite">
           <span className="toast-check"><Icon name="check" size={12}/></span>
           {toast}
         </div>,

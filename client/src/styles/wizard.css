@@ -315,29 +315,6 @@
   position: relative;
   margin-bottom: 20px;
 }
-.wiz-title-input {
-  width: 100%;
-  font-family: var(--sds-font-family);
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--sds-fg-heading);
-  padding: 16px 18px;
-  border: 2px solid #e2e8f0;
-  border-radius: 14px;
-  background: #fff;
-  outline: none;
-  transition: all 200ms;
-  letter-spacing: -0.01em;
-}
-.wiz-title-input::placeholder {
-  color: #cbd5e1;
-  font-weight: 500;
-}
-.wiz-title-input:focus {
-  border-color: var(--sds-brand-primary);
-  box-shadow: 0 0 0 3px rgba(98, 109, 249, 0.1);
-}
-
 /* Type grid v2 */
 .wiz-type-grid {
   display: grid;
@@ -970,14 +947,14 @@
   padding: 4px 8px 4px 0;
 }
 .rm-axis-title {
-  font-size: 9px; font-weight: 700;
+  font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--sds-fg-tertiary);
 }
 .rm-x-title {
   grid-column: 2 / -1;
   text-align: center;
-  font-size: 9px; font-weight: 700;
+  font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--sds-fg-tertiary);
   padding-top: 4px;
@@ -1158,78 +1135,32 @@
 }
 
 /* ================================================================
- * DESCRIPTION INPUT — rotating placeholder + voice-to-text
+ * SMART TEXTAREA — wizard overrides for the shared component
  * ================================================================ */
-.desc-input-wrap {
-  position: relative;
+.wiz-title-wrap .st-input {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--sds-fg-heading);
+  padding: 16px 52px 16px 18px;
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  letter-spacing: -0.01em;
 }
-.desc-input-wrap .textarea,
-.desc-input-wrap .wiz-title-input {
-  position: relative;
-  z-index: 1;
-  background: transparent;
+.wiz-title-wrap .st-input:focus {
+  border-color: var(--sds-brand-primary);
+  box-shadow: 0 0 0 3px rgba(98, 109, 249, 0.1);
 }
-.desc-placeholder {
-  position: absolute;
-  top: 11px; left: 15px; right: 48px;
-  font-size: 14px; line-height: 1.55;
-  color: var(--sds-fg-tertiary);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 400ms ease;
-  z-index: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.desc-input-wrap:not(.desc-input-single) .desc-placeholder {
-  white-space: normal;
-}
-.desc-input-single .desc-placeholder {
-  top: 50%; transform: translateY(-50%);
-  font-size: 20px; font-weight: 500; letter-spacing: -0.01em;
+.wiz-title-wrap .st-ph {
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   left: 19px;
 }
-.desc-input-single .desc-mic {
-  top: 50%; transform: translateY(-50%);
+.wiz-title-wrap .st-mic {
+  width: 32px;
+  height: 32px;
   right: 12px;
-}
-.desc-placeholder.visible { opacity: 0.6; }
-
-/* Mic button */
-.desc-mic {
-  position: absolute;
-  top: 8px; right: 8px; z-index: 2;
-  width: 32px; height: 32px;
-  border-radius: 8px; border: none;
-  background: var(--sds-bg-surface-alt);
-  color: var(--sds-fg-tertiary);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 200ms ease;
-}
-.desc-mic:hover {
-  background: var(--sds-brand-primary-tint);
-  color: var(--sds-brand-primary);
-}
-.desc-mic.recording {
-  background: #fef2f2;
-  color: #dc2626;
-  animation: descMicPop 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-@keyframes descMicPop {
-  from { transform: scale(0.8); }
-  to { transform: scale(1); }
-}
-.desc-mic-pulse {
-  position: absolute;
-  inset: -3px;
-  border-radius: 10px;
-  border: 2px solid #dc2626;
-  animation: descMicRing 1.5s ease-out infinite;
-  pointer-events: none;
-}
-@keyframes descMicRing {
-  0% { opacity: 0.7; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.3); }
 }
 
 /* Trending banner — locked #16 — surfaces "N prior incidents at this asset/area"
@@ -1470,4 +1401,31 @@
   color: #b91c1c;
   font-size: 12px;
   line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wiz-backdrop { animation: none; }
+  .wiz-sheet { animation: none; }
+  .wiz-dropzone { animation: none; }
+  .wiz-dropzone.dragging { animation: none; }
+  .wiz-dropzone.dragging svg { animation: none; }
+  .wiz-file-count { animation: none; }
+  .wiz-file-item { animation: none; }
+  .wiz-file-item.removing { animation: none; }
+  .wiz-file-item.error { animation: none; }
+  .wiz-file-thumb { animation: none; }
+  .wiz-rt-entry { animation: none; }
+  .wiz-rf-item { animation: none; }
+  .wiz-step-form { animation: none; }
+  .rm-cell { animation: none; }
+  .rm-cell.rm-selected { animation: none; }
+  .gauge-fill { animation: none; }
+  .gauge-val { animation: none; }
+  .rr2-card { animation: none; }
+  .rr2-title, .rr2-details, .rr2-actions { animation: none; }
+  .wiz-review-section { animation: none; }
+  .wiz-review-body { animation: none; }
+  .wiz-ai-pill { animation: none; }
+  .vimo-pulse { animation: none; }
+  .vimo-dot { animation: none; }
 }
