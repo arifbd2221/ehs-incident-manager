@@ -45,12 +45,20 @@ export default function InspectionReport() {
   }
 
   const { inspection, stats, sections } = report;
-  const circumference = 2 * Math.PI * 34;
+  const circumference = 2 * Math.PI * 42;
   const offset = stats.score_percent !== null
     ? circumference - (circumference * stats.score_percent / 100)
     : circumference;
 
-  const scoreColor = stats.score_percent >= 80 ? '#2E7D32' : stats.score_percent >= 50 ? '#ED6C02' : '#D32F2F';
+  const scoreColor = stats.score_percent >= 80 ? 'var(--sds-success)' : stats.score_percent >= 50 ? 'var(--sds-warning)' : 'var(--sds-error)';
+
+  const statCards = [
+    { label: 'Answered', value: stats.answered_items, total: stats.total_items, icon: 'check', color: 'var(--sds-brand-primary)', bg: 'var(--sds-brand-primary-tint)' },
+    { label: 'Flagged', value: stats.flagged_count, icon: 'warning', color: 'var(--sds-warning)', bg: 'rgba(237,108,2,0.08)' },
+    { label: 'Failed', value: stats.failed_count, icon: 'close', color: 'var(--sds-error)', bg: 'rgba(211,47,47,0.08)' },
+  ];
+
+  let itemNum = 0;
 
   return (
     <div className="page ir-page">
@@ -58,7 +66,7 @@ export default function InspectionReport() {
       <div className="ir-header">
         <div className="ir-header-top">
           <div>
-            <button className="ie-back" onClick={() => navigate('/inspections')} style={{ marginBottom: 12 }}>
+            <button className="ir-back" onClick={() => navigate('/inspections')} style={{ marginBottom: 12 }}>
               <Icon name="arrowL" size={18} />
             </button>
             <div className="ir-title">{inspection.title}</div>
@@ -90,97 +98,117 @@ export default function InspectionReport() {
       {/* Score Card */}
       <div className="ir-score-card">
         <div className="ir-score-ring">
-          <svg viewBox="0 0 80 80">
-            <circle className="bg" cx="40" cy="40" r="34" fill="none" strokeWidth="6" />
+          <svg viewBox="0 0 100 100">
+            <circle className="bg" cx="50" cy="50" r="42" fill="none" strokeWidth="8" />
             <circle
               className="fg"
-              cx="40" cy="40" r="34"
+              cx="50" cy="50" r="42"
               fill="none"
-              strokeWidth="6"
+              strokeWidth="8"
               strokeDasharray={circumference}
               strokeDashoffset={offset}
               style={{ stroke: scoreColor }}
             />
           </svg>
           <div className="ir-score-pct">
-            {stats.score_percent !== null ? `${stats.score_percent}%` : '—'}
+            {stats.score_percent !== null ? (
+              <>{stats.score_percent}<span className="pct-symbol">%</span></>
+            ) : '—'}
           </div>
         </div>
-        <div className="ir-score-stats">
-          <div>
-            <div className="ir-score-stat-label">Answered</div>
-            <div className="ir-score-stat-val">{stats.answered_items}<span style={{ fontSize: 14, color: 'var(--sds-fg-tertiary)', fontWeight: 500 }}>/{stats.total_items}</span></div>
-          </div>
-          <div>
-            <div className="ir-score-stat-label">Flagged</div>
-            <div className="ir-score-stat-val" style={{ color: stats.flagged_count > 0 ? '#ED6C02' : undefined }}>{stats.flagged_count}</div>
-          </div>
-          <div>
-            <div className="ir-score-stat-label">Failed</div>
-            <div className="ir-score-stat-val" style={{ color: stats.failed_count > 0 ? '#D32F2F' : undefined }}>{stats.failed_count}</div>
-          </div>
+        <div className="ir-stat-cards">
+          {statCards.map(s => (
+            <div key={s.label} className="ir-stat-card" style={{ '--ir-stat-color': s.color, '--ir-stat-bg': s.bg }}>
+              <div className="ir-stat-card-icon"><Icon name={s.icon} size={16} /></div>
+              <div>
+                <div className="ir-stat-card-label">{s.label}</div>
+                <div className="ir-stat-card-val">
+                  {s.value}
+                  {s.total !== undefined && (
+                    <span style={{ fontSize: 14, color: 'var(--sds-fg-tertiary)', fontWeight: 500 }}>/{s.total}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Sections */}
       <div className="ir-sections">
-        {sections.map((sec, sIdx) => (
-          <div key={sec.item_key || sIdx} className="ir-section" style={{ animationDelay: `${(sIdx + 1) * 60}ms` }}>
-            <div className="ir-section-head">
-              <span>{sec.label || 'General'}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--sds-fg-tertiary)' }}>
-                {sec.items.length} item{sec.items.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-            <div className="ir-section-body">
-              {sec.items.map(item => {
-                const isFlagged = item.is_flagged === 1;
-                const isFailed = item.is_failed === 1;
-                return (
-                  <div key={item.item_key} className={`ir-item ${isFlagged ? 'flagged' : ''} ${isFailed ? 'failed' : ''}`}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="ir-item-label">{item.label || item.item_key}</div>
-                      {item.response_text && (
-                        <div className="ir-item-notes">{item.response_text}</div>
-                      )}
-                      {item.notes && (
-                        <div className="ir-item-notes">Note: {item.notes}</div>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      {item.selected_option_label && (
-                        <span className="ir-item-answer" style={{
-                          background: `${item.selected_option_color || '#90A4AE'}18`,
-                          color: item.selected_option_color || '#90A4AE',
-                        }}>
-                          {item.selected_option_label}
-                        </span>
-                      )}
-                      {isFlagged && (
-                        <span className="ir-item-flag"><Icon name="warning" size={12} /></span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              {sec.items.length === 0 && (
-                <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--sds-fg-tertiary)', fontStyle: 'italic' }}>
-                  No items in this section
+        {sections.map((sec, sIdx) => {
+          const answeredInSection = sec.items.filter(i => i.selected_option_label || (i.response_text && i.response_text.trim())).length;
+          const secPct = sec.items.length > 0 ? Math.round((answeredInSection / sec.items.length) * 100) : 0;
+          return (
+            <div key={sec.item_key || sIdx} className="ir-section" style={{ animationDelay: `${(sIdx + 1) * 60}ms` }}>
+              <div className="ir-section-head">
+                <span>{sec.label || 'General'}</span>
+                <span className="ir-section-score">
+                  {sec.items.length} item{sec.items.length !== 1 ? 's' : ''}
+                </span>
+                <div className="ir-section-progress">
+                  <div className="ir-section-progress-fill" style={{ width: `${secPct}%` }} />
                 </div>
-              )}
+              </div>
+              <div className="ir-section-body">
+                {sec.items.map(item => {
+                  itemNum++;
+                  const isFlagged = item.is_flagged === 1;
+                  const isFailed = item.is_failed === 1;
+                  return (
+                    <div key={item.item_key} className={`ir-item ${isFlagged ? 'flagged' : ''} ${isFailed ? 'failed' : ''}`}>
+                      <span className="ir-item-num">{itemNum}</span>
+                      <div className="ir-item-content">
+                        <div className="ir-item-label">{item.label || item.item_key}</div>
+                        {item.response_text && (
+                          <div className="ir-item-notes">{item.response_text}</div>
+                        )}
+                        {item.notes && (
+                          <div className="ir-item-notes">Note: {item.notes}</div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        {item.selected_option_label && (
+                          <span className="ir-item-answer" style={{
+                            background: `${item.selected_option_color || '#90A4AE'}18`,
+                            color: item.selected_option_color || '#90A4AE',
+                          }}>
+                            {item.selected_option_label}
+                          </span>
+                        )}
+                        {isFlagged && (
+                          <span className="ir-item-flag"><Icon name="warning" size={12} /> Flag</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {sec.items.length === 0 && (
+                  <div style={{ padding: '16px 20px', fontSize: 13, color: 'var(--sds-fg-tertiary)', fontStyle: 'italic' }}>
+                    No items in this section
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Footer */}
-      <div className="ie-footer">
-        <button className="btn btn-secondary" onClick={() => navigate('/inspections')}>
-          <Icon name="arrowL" size={14} /> Back to Inspections
-        </button>
-        <button className="btn btn-secondary" onClick={() => navigate(`/inspections/${id}`)}>
-          <Icon name="eye" size={14} /> View Responses
-        </button>
+      <div className="ir-footer">
+        <div className="ir-footer-left">
+          <button className="btn btn-secondary" onClick={() => navigate('/inspections')}>
+            <Icon name="arrowL" size={14} /> Back to Inspections
+          </button>
+          <button className="btn btn-secondary" onClick={() => navigate(`/inspections/${id}`)}>
+            <Icon name="eye" size={14} /> View Responses
+          </button>
+        </div>
+        <div className="ir-footer-right">
+          <button className="ir-btn-print" onClick={() => window.print()}>
+            <Icon name="download" size={14} /> Print Report
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -17,6 +17,31 @@ import db from '../db/connection.js';
 const router = Router();
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+
+function evaluateVisibility(templateItems, inspectionItems) {
+  const answerMap = new Map();
+  for (const item of inspectionItems) {
+    if (item.selected_option_id !== null) {
+      answerMap.set(item.item_key, item.selected_option_id);
+    }
+  }
+  const visible = new Set();
+  for (const ti of templateItems) {
+    if (ti.type === 'section') { visible.add(ti.item_key); continue; }
+    const meta = (typeof ti.meta === 'object' && ti.meta) || {};
+    const conditions = meta.conditions;
+    if (!conditions || conditions.length === 0) { visible.add(ti.item_key); continue; }
+    const logic = meta.condition_logic || 'all';
+    const results = conditions.map(c => {
+      if (!c.source_key || !c.option_id) return true;
+      if (!visible.has(c.source_key)) return false;
+      return answerMap.get(c.source_key) === c.option_id;
+    });
+    const pass = logic === 'all' ? results.every(Boolean) : results.some(Boolean);
+    if (pass) visible.add(ti.item_key);
+  }
+  return visible;
+}
 const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
 
 /**
@@ -471,16 +496,20 @@ router.get('/:id/report', (req, res) => {
     tiMap.set(ti.item_key, ti);
   }
 
-  // Calculate stats
-  const totalItems = items.length;
-  const answeredItems = items.filter(
+  // Filter items by condition visibility
+  const visibleKeys = evaluateVisibility(templateItems, items);
+  const visibleItems = items.filter(i => visibleKeys.has(i.item_key));
+
+  // Calculate stats (only visible items)
+  const totalItems = visibleItems.length;
+  const answeredItems = visibleItems.filter(
     i => i.selected_option_id !== null || (i.response_text !== null && i.response_text !== '')
   ).length;
-  const flaggedCount = items.filter(i => i.is_flagged === 1).length;
-  const failedCount = items.filter(i => i.is_failed === 1).length;
+  const flaggedCount = visibleItems.filter(i => i.is_flagged === 1).length;
+  const failedCount = visibleItems.filter(i => i.is_failed === 1).length;
 
   // Calculate score from selected answer_set_options
-  const scorableItems = items.filter(i => i.selected_option_id !== null);
+  const scorableItems = visibleItems.filter(i => i.selected_option_id !== null);
   const totalScore = scorableItems.reduce((sum, i) => sum + (i.selected_option_score || 0), 0);
   const maxPossibleScore = scorableItems.length; // each scored item max = 1 (Pass/Yes)
   const scorePercent = maxPossibleScore > 0
@@ -507,8 +536,8 @@ router.get('/:id/report', (req, res) => {
   // Add an "Ungrouped" section for items without a parent
   const ungrouped = { item_key: null, label: 'Ungrouped', items: [] };
 
-  // Place each item into its section
-  for (const item of items) {
+  // Place each visible item into its section
+  for (const item of visibleItems) {
     const ti = tiMap.get(item.item_key);
     const parentKey = ti?.parent_key || null;
 

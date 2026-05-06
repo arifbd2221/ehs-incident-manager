@@ -211,6 +211,18 @@ export default function TemplateEditor() {
     } else {
       newItems = items.filter(i => i.item_key !== itemKey);
     }
+    // Clean up orphaned conditions referencing the deleted item(s)
+    const removedKeys = new Set(items.filter(i => !newItems.find(n => n.item_key === i.item_key)).map(i => i.item_key));
+    newItems = newItems.map(i => {
+      const m = parseMeta(i);
+      if (!m.conditions?.length) return i;
+      const cleaned = m.conditions.filter(c => !removedKeys.has(c.source_key));
+      if (cleaned.length === m.conditions.length) return i;
+      const newMeta = { ...m };
+      if (cleaned.length === 0) { delete newMeta.conditions; delete newMeta.condition_logic; }
+      else newMeta.conditions = cleaned;
+      return { ...i, meta: Object.keys(newMeta).length ? newMeta : null };
+    });
     updateItems(newItems);
     if (focusedItem === itemKey) setFocusedItem(null);
     setDeleteConfirm(null);
@@ -424,6 +436,9 @@ export default function TemplateEditor() {
                     isDraft={isDraft}
                     answerSets={answerSets}
                     answerSet={getAnswerSetForItem(item)}
+                    allItems={items}
+                    questionNumbers={questionNumbers}
+                    parseMeta={parseMeta}
                     onFocus={() => setFocusedItem(item.item_key)}
                     onUpdate={updateItem}
                     onRemove={() => setDeleteConfirm(item.item_key)}
@@ -503,6 +518,9 @@ export default function TemplateEditor() {
                       isDraft={isDraft}
                       answerSets={answerSets}
                       answerSet={getAnswerSetForItem(item)}
+                      allItems={items}
+                      questionNumbers={questionNumbers}
+                      parseMeta={parseMeta}
                       onFocus={() => setFocusedItem(item.item_key)}
                       onUpdate={updateItem}
                       onRemove={() => setDeleteConfirm(item.item_key)}
@@ -727,6 +745,7 @@ export default function TemplateEditor() {
 // ---- Question Card Component ----
 function QuestionCard({
   item, qNum, isFocused, isDraft, answerSets, answerSet,
+  allItems, questionNumbers, parseMeta: parseMetaParent,
   onFocus, onUpdate, onRemove, onDuplicate,
   isDragging, dropPos, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
 }) {
@@ -762,11 +781,58 @@ function QuestionCard({
     onUpdate(item.item_key, { required: item.required ? 0 : 1 });
   };
 
+  // --- Condition helpers ---
+  const priorQuestions = (allItems || []).filter((it, idx) => {
+    if (it.item_key === item.item_key) return false;
+    const targetIdx = allItems.findIndex(i => i.item_key === item.item_key);
+    if (idx >= targetIdx) return false;
+    if (it.type === 'section') return false;
+    const m = parseMetaParent ? parseMetaParent(it) : {};
+    return !!m.answer_set_id;
+  });
+
+  const getSourceAnswerSet = (sourceKey) => {
+    const src = allItems?.find(i => i.item_key === sourceKey);
+    if (!src) return null;
+    const m = parseMetaParent ? parseMetaParent(src) : {};
+    if (!m.answer_set_id) return null;
+    return answerSets.find(a => a.id === m.answer_set_id) || null;
+  };
+
+  const addCondition = () => {
+    const newMeta = { ...meta };
+    newMeta.conditions = [...(meta.conditions || []), { source_key: '', option_id: null }];
+    if (!newMeta.condition_logic) newMeta.condition_logic = 'all';
+    onUpdate(item.item_key, { meta: newMeta });
+  };
+
+  const removeCondition = (idx) => {
+    const newMeta = { ...meta };
+    newMeta.conditions = (meta.conditions || []).filter((_, i) => i !== idx);
+    if (newMeta.conditions.length === 0) { delete newMeta.conditions; delete newMeta.condition_logic; }
+    onUpdate(item.item_key, { meta: Object.keys(newMeta).length ? newMeta : null });
+  };
+
+  const updateCondition = (idx, field, value) => {
+    const newMeta = { ...meta };
+    const conditions = [...(meta.conditions || [])];
+    conditions[idx] = { ...conditions[idx], [field]: value };
+    if (field === 'source_key') conditions[idx].option_id = null;
+    newMeta.conditions = conditions;
+    onUpdate(item.item_key, { meta: newMeta });
+  };
+
+  const handleConditionLogicChange = (logic) => {
+    onUpdate(item.item_key, { meta: { ...meta, condition_logic: logic } });
+  };
+
   // Determine drop position from mouse Y relative to card center
   const getDropPos = (e) => {
     const rect = cardRef.current.getBoundingClientRect();
     return e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
   };
+
+  const hasConditions = meta.conditions?.length > 0;
 
   const className = [
     'te-card',
@@ -816,6 +882,7 @@ function QuestionCard({
             <span className="te-card-type-badge">{typeInfo.label}</span>
             {answerSet && <span className="te-card-as-badge">{answerSet.name}</span>}
             {item.required ? <span className="te-card-req-dot" title="Required" /> : null}
+            {hasConditions && <span className="te-card-cond-badge" title={`${meta.conditions.length} condition(s)`}><Icon name="branch" size={12} /></span>}
           </div>
         )}
       </div>
@@ -857,6 +924,56 @@ function QuestionCard({
             </div>
           )}
 
+          {/* Condition configuration */}
+          <div className="te-card-conditions">
+            <div className="te-card-conditions-header">
+              <Icon name="branch" size={14} />
+              <span>Conditional logic</span>
+              {meta.conditions?.length > 1 && (
+                <select value={meta.condition_logic || 'all'} onChange={e => handleConditionLogicChange(e.target.value)}>
+                  <option value="all">ALL conditions met</option>
+                  <option value="any">ANY condition met</option>
+                </select>
+              )}
+            </div>
+
+            {(meta.conditions || []).map((cond, idx) => {
+              const sourceAs = getSourceAnswerSet(cond.source_key);
+              return (
+                <div key={idx} className="te-condition-row">
+                  <select value={cond.source_key || ''} onChange={e => updateCondition(idx, 'source_key', e.target.value)}>
+                    <option value="">Select question...</option>
+                    {priorQuestions.map(pq => (
+                      <option key={pq.item_key} value={pq.item_key}>
+                        Q{questionNumbers[pq.item_key]}: {pq.label || 'Untitled'}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="te-condition-eq">is</span>
+                  <select value={cond.option_id || ''} onChange={e => updateCondition(idx, 'option_id', Number(e.target.value))} disabled={!cond.source_key}>
+                    <option value="">Select answer...</option>
+                    {sourceAs?.options?.map(opt => (
+                      <option key={opt.id} value={opt.id}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <button className="icon-btn" onClick={() => removeCondition(idx)} title="Remove condition">
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+              );
+            })}
+
+            {priorQuestions.length > 0 ? (
+              <button className="te-condition-add" onClick={addCondition}>
+                <Icon name="plus" size={14} /> Add condition
+              </button>
+            ) : (
+              !hasConditions && (
+                <div className="te-condition-empty">No prior questions with answer sets available</div>
+              )
+            )}
+          </div>
+
           {/* Footer: required toggle + actions */}
           <div className="te-card-footer">
             <div className="te-card-footer-left">
@@ -896,6 +1013,19 @@ function QuestionCard({
                   {opt.label}
                 </span>
               ))}
+            </div>
+          )}
+          {hasConditions && (
+            <div className="te-card-conditions" style={{ opacity: 0.7 }}>
+              <div className="te-card-conditions-header">
+                <Icon name="branch" size={14} />
+                <span>Shown when {meta.conditions.map((c, i) => {
+                  const src = allItems?.find(it => it.item_key === c.source_key);
+                  const srcAs = getSourceAnswerSet(c.source_key);
+                  const opt = srcAs?.options?.find(o => o.id === c.option_id);
+                  return <span key={i}>{i > 0 ? (meta.condition_logic === 'any' ? ' or ' : ' and ') : ''}Q{questionNumbers[c.source_key]} = "{opt?.label || '?'}"</span>;
+                })}</span>
+              </div>
             </div>
           )}
           {item.required ? (
