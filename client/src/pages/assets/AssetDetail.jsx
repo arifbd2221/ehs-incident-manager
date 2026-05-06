@@ -79,7 +79,6 @@ export default function AssetDetail() {
   };
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  // Reload field defs when the user changes category in the edit modal.
   useEffect(() => {
     if (!editOpen || !form.asset_category_id) { setEditFieldDefs([]); return; }
     listCategoryFields(form.asset_category_id).then(setEditFieldDefs).catch(() => setEditFieldDefs([]));
@@ -159,82 +158,128 @@ export default function AssetDetail() {
   const siteName = sites.find(s => String(s.id) === String(form.site_id))?.name;
   const catName = categories.find(c => String(c.id) === String(form.asset_category_id))?.name || form.asset_type;
 
-  if (loading) return <div className="page assets-page"><div className="assets-loading">Loading…</div></div>;
+  if (loading) return <div className="page assets-page"><div className="assets-skel-grid"><div className="assets-skel-card"><div className="skel skel-pill" /><div className="skel skel-title" /><div className="skel skel-row" /></div></div></div>;
   if (err || !asset) return (
     <div className="page assets-page">
-      <button className="btn btn-ghost btn-sm" onClick={() => navigate('/assets')}>
-        <Icon name="arrowL" size={14} /> Back to assets
-      </button>
-      <div className="assets-empty">{err || 'Asset not found'}</div>
+      <div className="asset-detail-breadcrumb">
+        <button onClick={() => navigate('/assets')}><Icon name="arrowL" size={13} /> Assets</button>
+      </div>
+      <div className="card card-pad empty-state">
+        <div className="empty-state-icon"><Icon name="warning" size={24} /></div>
+        <div className="empty-state-title">{err || 'Asset not found'}</div>
+        <div className="empty-state-desc">This asset may have been removed or you don't have access.</div>
+        <button className="btn btn-secondary" onClick={() => navigate('/assets')}>
+          <Icon name="arrowL" size={14} /> Back to assets
+        </button>
+      </div>
     </div>
   );
 
+  const heroColor = asset.category_color || '#626DF9';
+  const initials = (asset.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const incidentCount = asset.linked_incidents?.length || 0;
+
+  const TABS = [
+    { id: 'overview', label: 'Overview', icon: 'info' },
+    { id: 'incidents', label: 'Incidents', icon: 'incidents', count: incidentCount },
+    { id: 'documents', label: 'Documents', icon: 'file', count: 0 },
+    { id: 'activity', label: 'Activity', icon: 'pulse', count: 0 },
+  ];
+
   return (
     <div className="page asset-detail-page">
-      <button className="btn btn-ghost btn-sm asset-detail-back" onClick={() => navigate('/assets')}>
-        <Icon name="arrowL" size={14} /> Back to assets
-      </button>
-
-      <div className="asset-detail-h">
-        <div className="asset-detail-h-left">
-          <div className="asset-detail-num">
-            {asset.display_id || asset.asset_number}
-            {asset.display_id && asset.display_id !== asset.asset_number && (
-              <span className="asset-detail-num-sys"> · {asset.asset_number}</span>
-            )}
-          </div>
-          <h1 className="asset-detail-name">
-            {asset.name}
-            {!asset.active && <span className="asset-badge-archived">archived</span>}
-          </h1>
-          <div className="asset-detail-meta">
-            <span className="asset-type-pill" style={{ background: asset.category_color || '#90A4AE' }}>
-              {asset.asset_type || '—'}
-            </span>
-            <span><Icon name="factory" size={13} /> {asset.site_name || '—'}{asset.site_country ? ` · ${asset.site_country}` : ''}</span>
-            {asset.location_description && <span><Icon name="location" size={13} /> {asset.location_description}</span>}
-          </div>
-        </div>
-        {canEdit && (
-          <div className="asset-detail-actions">
-            <button className="btn btn-secondary btn-sm" onClick={openEdit}>
-              <Icon name="edit" size={14} /> Edit
-            </button>
-            {asset.active
-              ? <button className="btn btn-ghost btn-sm asset-archive" onClick={handleArchive}>Archive</button>
-              : <button className="btn btn-ghost btn-sm" onClick={handleRestore}>Restore</button>}
-          </div>
-        )}
+      {/* Breadcrumb */}
+      <div className="asset-detail-breadcrumb">
+        <button onClick={() => navigate('/assets')}>
+          <Icon name="arrowL" size={13} /> Assets
+        </button>
+        <span className="bc-sep">/</span>
+        <span className="bc-current">{asset.name}</span>
       </div>
 
+      {/* Hero card */}
+      <div className="asset-detail-hero" style={{ '--ad-color': heroColor }}>
+        <div className="asset-detail-hero-strip" />
+        <div className="asset-detail-hero-body">
+          <div className="asset-detail-avatar">{initials}</div>
+          <div className="asset-detail-hero-info">
+            <div className="asset-detail-num">
+              {asset.display_id || asset.asset_number}
+              {asset.display_id && asset.display_id !== asset.asset_number && (
+                <span className="asset-detail-num-sys">{asset.asset_number}</span>
+              )}
+            </div>
+            <h1 className="asset-detail-name">
+              {asset.name}
+              {!asset.active && <span className="asset-badge-archived">archived</span>}
+            </h1>
+            <div className="asset-detail-meta">
+              <span className="asset-type-pill" style={{ background: heroColor }}>
+                {asset.asset_type || '—'}
+              </span>
+              <span>
+                <span className="asset-detail-status-dot" style={{ background: asset.active ? '#2E7D32' : '#90A4AE' }} />
+                {asset.active ? 'Active' : 'Archived'}
+              </span>
+              <span><Icon name="factory" size={13} /> {asset.site_name || '—'}{asset.site_country ? ` · ${asset.site_country}` : ''}</span>
+              {asset.location_description && <span><Icon name="location" size={13} /> {asset.location_description}</span>}
+            </div>
+          </div>
+          {canEdit && (
+            <div className="asset-detail-actions">
+              <button className="btn btn-secondary btn-sm" onClick={openEdit}>
+                <Icon name="edit" size={14} /> Edit
+              </button>
+              {asset.active
+                ? <button className="btn btn-ghost btn-sm asset-archive" onClick={handleArchive}>Archive</button>
+                : <button className="btn btn-ghost btn-sm" onClick={handleRestore}>Restore</button>}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs with badges */}
       <div className="asset-detail-tabs">
-        {[
-          { id: 'overview', label: 'Overview' },
-          { id: 'incidents', label: 'Linked incidents' },
-          { id: 'documents', label: 'Documents' },
-          { id: 'activity', label: 'Activity' },
-        ].map(t => (
+        {TABS.map(t => (
           <div key={t.id} className={`asset-detail-tab ${tab === t.id ? 'active' : ''}`}
             onClick={() => setTab(t.id)}>
             {t.label}
+            {t.count !== undefined && (
+              <span className="tab-badge">{t.count}</span>
+            )}
           </div>
         ))}
       </div>
 
+      {/* Overview tab */}
       {tab === 'overview' && (
         <div className="asset-detail-grid">
           <div className="card card-pad">
-            <div className="card-h"><Icon name="info" size={16} /> Identification</div>
-            <div className="kv"><div className="kv-k">Unique identifier</div><div className="kv-v">{asset.display_id || '—'}</div></div>
-            <div className="kv"><div className="kv-k">System number</div><div className="kv-v" style={{ fontFamily: 'SF Mono, Menlo, monospace', fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>{asset.asset_number}</div></div>
+            <div className="card-h">
+              <div className="adet-card-icon" style={{ '--ci-color': '#626DF9' }}><Icon name="info" size={14} /></div>
+              Identification
+            </div>
+            <div className="kv"><div className="kv-k">Unique ID</div><div className="kv-v mono">{asset.display_id || '—'}</div></div>
+            <div className="kv"><div className="kv-k">System #</div><div className="kv-v mono">{asset.asset_number}</div></div>
             <div className="kv"><div className="kv-k">Name</div><div className="kv-v">{asset.name}</div></div>
-            <div className="kv"><div className="kv-k">Type</div><div className="kv-v">{asset.asset_type || '—'}{asset.category_name ? '' : ' (custom)'}</div></div>
+            <div className="kv"><div className="kv-k">Type</div><div className="kv-v">{asset.asset_type || '—'}{!asset.category_name && asset.asset_type ? ' (custom)' : ''}</div></div>
             <div className="kv"><div className="kv-k">Serial</div><div className="kv-v">{asset.serial_number || '—'}</div></div>
-            <div className="kv"><div className="kv-k">Status</div><div className="kv-v">{asset.active ? 'Active' : 'Archived'}</div></div>
+            <div className="kv">
+              <div className="kv-k">Status</div>
+              <div className="kv-v">
+                <span className="kv-status">
+                  <span className="kv-status-dot" style={{ background: asset.active ? '#2E7D32' : '#90A4AE' }} />
+                  {asset.active ? 'Active' : 'Archived'}
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="card card-pad">
-            <div className="card-h"><Icon name="location" size={16} /> Location</div>
+            <div className="card-h">
+              <div className="adet-card-icon" style={{ '--ci-color': '#2E7D32' }}><Icon name="location" size={14} /></div>
+              Location
+            </div>
             <div className="kv"><div className="kv-k">Site</div><div className="kv-v">{asset.site_name || '—'}</div></div>
             <div className="kv"><div className="kv-k">Country</div><div className="kv-v">{asset.site_country || '—'}</div></div>
             <div className="kv"><div className="kv-k">Description</div><div className="kv-v">{asset.location_description || '—'}</div></div>
@@ -242,7 +287,10 @@ export default function AssetDetail() {
 
           {asset.description && (
             <div className="card card-pad asset-detail-fullrow">
-              <div className="card-h"><Icon name="file" size={16} /> Notes</div>
+              <div className="card-h">
+                <div className="adet-card-icon" style={{ '--ci-color': '#ED6C02' }}><Icon name="file" size={14} /></div>
+                Notes
+              </div>
               <div className="asset-detail-notes">{asset.description}</div>
             </div>
           )}
@@ -257,18 +305,23 @@ export default function AssetDetail() {
           )}
 
           <div className="card card-pad">
-            <div className="card-h"><Icon name="clock" size={16} /> Lifecycle</div>
+            <div className="card-h">
+              <div className="adet-card-icon" style={{ '--ci-color': '#8b5cf6' }}><Icon name="clock" size={14} /></div>
+              Lifecycle
+            </div>
             <div className="kv"><div className="kv-k">Created</div><div className="kv-v">{asset.created_at?.slice(0, 10) || '—'}</div></div>
             <div className="kv"><div className="kv-k">Updated</div><div className="kv-v">{asset.updated_at?.slice(0, 10) || '—'}</div></div>
           </div>
         </div>
       )}
 
+      {/* Incidents tab */}
       {tab === 'incidents' && (
-        (asset.linked_incidents && asset.linked_incidents.length > 0) ? (
+        incidentCount > 0 ? (
           <div className="card card-pad">
             <div className="card-h">
-              <Icon name="incidents" size={16} /> {asset.linked_incidents.length} incident{asset.linked_incidents.length !== 1 ? 's' : ''} linked
+              <div className="adet-card-icon" style={{ '--ci-color': '#D32F2F' }}><Icon name="incidents" size={14} /></div>
+              {incidentCount} incident{incidentCount !== 1 ? 's' : ''} linked
             </div>
             <div className="asset-linked-list">
               {asset.linked_incidents.map(i => (
@@ -299,6 +352,7 @@ export default function AssetDetail() {
         )
       )}
 
+      {/* Documents tab */}
       {tab === 'documents' && (
         <div className="card card-pad asset-tab-empty">
           <Icon name="file" size={28} />
@@ -307,6 +361,7 @@ export default function AssetDetail() {
         </div>
       )}
 
+      {/* Activity tab */}
       {tab === 'activity' && (
         <div className="card card-pad asset-tab-empty">
           <Icon name="pulse" size={28} />
@@ -315,6 +370,7 @@ export default function AssetDetail() {
         </div>
       )}
 
+      {/* Edit modal */}
       {editOpen && createPortal(
         <div className="am-backdrop" onClick={closeEdit}>
           <form className={`am-modal${success ? ' am-success' : ''}`} onClick={e => e.stopPropagation()} onSubmit={handleSave}>
@@ -374,7 +430,7 @@ export default function AssetDetail() {
                       <div className="am-newcat">
                         <input className="am-input" placeholder="New category" autoFocus value={newCatName} onChange={e => setNewCatName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleNewCategorySave(); } }} />
                         <div className="am-newcat-actions">
-                          <button type="button" className="am-btn-save" disabled={newCatSaving || !newCatName.trim()} onClick={handleNewCategorySave}><Icon name="check" size={13} />{newCatSaving ? '…' : 'Create'}</button>
+                          <button type="button" className="am-btn-save" disabled={newCatSaving || !newCatName.trim()} onClick={handleNewCategorySave}><Icon name="check" size={13} />{newCatSaving ? '...' : 'Create'}</button>
                           <button type="button" className="am-btn-cancel" onClick={() => { setNewCatOpen(false); setNewCatName(''); }}>Cancel</button>
                         </div>
                       </div>
@@ -426,7 +482,7 @@ export default function AssetDetail() {
                   )}
                   <div className="am-field" style={{ animationDelay: '0ms' }}>
                     <label className="am-label">Description / notes</label>
-                    <textarea className="am-input am-textarea" rows={4} value={form.description || ''} onChange={e => set('description', e.target.value)} placeholder="Specs, model details, maintenance notes…" />
+                    <textarea className="am-input am-textarea" rows={4} value={form.description || ''} onChange={e => set('description', e.target.value)} placeholder="Specs, model details, maintenance notes..." />
                   </div>
                   <div className="am-summary" style={{ animationDelay: '60ms' }}>
                     <div className="am-summary-title"><Icon name="check" size={14} /> Asset summary</div>
@@ -451,7 +507,7 @@ export default function AssetDetail() {
             <div className="am-footer">
               <button type="button" className="am-btn-secondary" onClick={closeEdit}>Cancel</button>
               <button type="submit" className="am-btn-primary" disabled={saving}>
-                {saving ? <><span className="am-spinner" /> Saving…</> : <><Icon name="check" size={14} /> Save changes</>}
+                {saving ? <><span className="am-spinner" /> Saving...</> : <><Icon name="check" size={14} /> Save changes</>}
               </button>
             </div>
           </form>
