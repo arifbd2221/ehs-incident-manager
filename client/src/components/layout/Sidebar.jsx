@@ -8,6 +8,8 @@ const NAV = [
   { id: 'capas', path: '/capas', icon: 'capa', label: 'CAPA' },
   { id: 'assets', path: '/assets', icon: 'gear', label: 'Assets' },
   { id: 'documents', path: '/documents', icon: 'file', label: 'Documents' },
+  { id: 'templates', path: '/templates', icon: 'edit', label: 'Templates' },
+  { id: 'inspections', path: '/inspections', icon: 'shield', label: 'Inspections' },
   { id: 'reports', path: '/reports', icon: 'reports', label: 'Reports' },
   { id: 'sites', path: '/admin/sites', icon: 'factory', label: 'Sites' },
 ];
