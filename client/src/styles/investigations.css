@@ -1171,6 +1171,7 @@
   display: flex;
   gap: var(--sds-space-sm);
 }
+.invd-doc-filters .input { flex: 1; min-width: 0; }
 .invd-doc-type { width: 160px; flex-shrink: 0; }
 .invd-doc-empty {
   font-size: 13px;
