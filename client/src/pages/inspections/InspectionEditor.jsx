@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInspection, saveInspectionItem, completeInspection, abandonInspection } from '../../api/inspections';
@@ -16,6 +16,7 @@ export default function InspectionEditor() {
   const [answerSets, setAnswerSets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(null);
+  const [saved, setSaved] = useState(null);
   const [toast, setToast] = useState(null);
   const [showComplete, setShowComplete] = useState(false);
   const [showAbandon, setShowAbandon] = useState(false);
@@ -44,13 +45,37 @@ export default function InspectionEditor() {
   const tiMap = new Map();
   templateItems.forEach(ti => tiMap.set(ti.item_key, ti));
 
+  // Evaluate conditional visibility based on current answers
+  const visibleKeys = useMemo(() => {
+    const answerMap = new Map();
+    for (const item of items) {
+      if (item.selected_option_id) answerMap.set(item.item_key, item.selected_option_id);
+    }
+    const visible = new Set();
+    for (const ti of templateItems) {
+      if (ti.type === 'section') { visible.add(ti.item_key); continue; }
+      const meta = (typeof ti.meta === 'object' && ti.meta) || {};
+      const conditions = meta.conditions;
+      if (!conditions || conditions.length === 0) { visible.add(ti.item_key); continue; }
+      const logic = meta.condition_logic || 'all';
+      const results = conditions.map(c => {
+        if (!c.source_key || !c.option_id) return true;
+        if (!visible.has(c.source_key)) return false;
+        return answerMap.get(c.source_key) === c.option_id;
+      });
+      const pass = logic === 'all' ? results.every(Boolean) : results.some(Boolean);
+      if (pass) visible.add(ti.item_key);
+    }
+    return visible;
+  }, [items, templateItems]);
+
   const sections = templateItems.filter(ti => ti.type === 'section');
   const getQuestions = (sectionKey) => {
     const childKeys = templateItems.filter(ti => ti.parent_key === sectionKey && ti.type !== 'section').map(ti => ti.item_key);
-    return items.filter(i => childKeys.includes(i.item_key));
+    return items.filter(i => childKeys.includes(i.item_key) && visibleKeys.has(i.item_key));
   };
   const ungroupedKeys = templateItems.filter(ti => !ti.parent_key && ti.type !== 'section').map(ti => ti.item_key);
-  const ungrouped = items.filter(i => ungroupedKeys.includes(i.item_key));
+  const ungrouped = items.filter(i => ungroupedKeys.includes(i.item_key) && visibleKeys.has(i.item_key));
 
   const getAnswerSetForItem = (itemKey) => {
     const ti = tiMap.get(itemKey);
@@ -60,9 +85,23 @@ export default function InspectionEditor() {
     return answerSets.find(a => a.id === meta.answer_set_id) || null;
   };
 
-  const answeredCount = items.filter(i => i.selected_option_id || (i.response_text && i.response_text.trim())).length;
-  const totalQuestions = items.filter(i => i.type !== 'section').length;
+  const isAnswered = (item) => !!(item.selected_option_id || (item.response_text && item.response_text.trim()));
+  const visibleItems = items.filter(i => i.type !== 'section' && visibleKeys.has(i.item_key));
+  const answeredCount = visibleItems.filter(isAnswered).length;
+  const totalQuestions = visibleItems.length;
   const progressPct = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
+  const isComplete = progressPct === 100;
+
+  const getSectionProgress = (sectionItems) => {
+    if (sectionItems.length === 0) return 0;
+    const answered = sectionItems.filter(isAnswered).length;
+    return Math.round((answered / sectionItems.length) * 100);
+  };
+
+  const flashSaved = (itemKey) => {
+    setSaved(itemKey);
+    setTimeout(() => setSaved(null), 1500);
+  };
 
   const handleAnswer = async (itemKey, optionId, option) => {
     setSaving(itemKey);
@@ -76,6 +115,7 @@ export default function InspectionEditor() {
         notes: existing?.notes || null,
       });
       setItems(prev => prev.map(i => i.item_key === itemKey ? { ...i, ...updated } : i));
+      flashSaved(itemKey);
     } catch {
       showToast('Failed to save answer');
     } finally {
@@ -195,9 +235,17 @@ export default function InspectionEditor() {
     const as = getAnswerSetForItem(item.item_key);
     const isFlagged = item.is_flagged === 1;
     const isFailed = item.is_failed === 1;
+    const answered = isAnswered(item);
+    const notesOpen = expandedNotes.has(item.item_key) || !!item.notes;
+    const meta = (typeof ti?.meta === 'object' && ti?.meta) || {};
+    const isConditional = meta.conditions?.length > 0;
 
     return (
-      <div key={item.item_key} className={`ie-question ${isFlagged ? 'flagged' : ''} ${isFailed ? 'failed' : ''}`}>
+      <div key={item.item_key} className={`ie-question ${answered ? 'answered' : ''} ${isFlagged ? 'flagged' : ''} ${isFailed ? 'failed' : ''} ${isConditional ? 'ie-question--conditional' : ''}`}>
+        <div className={`ie-save-indicator ${saved === item.item_key ? 'visible' : ''}`}>
+          <Icon name="check" size={12} /> Saved
+        </div>
+
         <div className="ie-question-label">
           <span className="ie-question-num">{qNum}.</span>
           <span>{ti?.label || 'Question'}</span>
@@ -209,7 +257,7 @@ export default function InspectionEditor() {
             {as.options.map(opt => (
               <button
                 key={opt.id}
-                className={`ie-opt ${item.selected_option_id === opt.id ? 'selected' : ''}`}
+                className={`ie-opt ${item.selected_option_id === opt.id ? 'selected' : ''} ${saving === item.item_key ? 'ie-opt-saving' : ''}`}
                 style={{ '--opt-color': opt.color }}
                 onClick={() => isEditable && handleAnswer(item.item_key, opt.id, opt)}
                 disabled={!isEditable || saving === item.item_key}
@@ -231,21 +279,22 @@ export default function InspectionEditor() {
         )}
 
         {ti?.type === 'checkbox' && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+          <label className="ie-checkbox">
             <input
               type="checkbox"
               checked={!!item.response_text}
               onChange={e => handleTextResponse(item.item_key, e.target.checked ? 'checked' : '')}
               disabled={!isEditable}
             />
+            <span className="ie-checkbox-track" />
             {ti.label || 'Check'}
           </label>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div className="ie-question-actions">
           {isEditable && (
             <>
-              <button className="ie-notes-toggle" onClick={() => toggleNotes(item.item_key)}>
+              <button className={`ie-notes-toggle ${notesOpen ? 'active' : ''}`} onClick={() => toggleNotes(item.item_key)}>
                 <Icon name="edit" size={12} /> {expandedNotes.has(item.item_key) ? 'Hide notes' : 'Add notes'}
               </button>
               <button className={`ie-flag-btn ${isFlagged ? 'active' : ''}`} onClick={() => handleFlag(item.item_key)}>
@@ -254,22 +303,39 @@ export default function InspectionEditor() {
             </>
           )}
           {!isEditable && isFlagged && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--sds-warning)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--sds-warning)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <Icon name="warning" size={12} /> Flagged
             </span>
           )}
         </div>
 
-        {(expandedNotes.has(item.item_key) || item.notes) && (
-          <div className="ie-notes-area">
-            <textarea
-              value={item.notes || ''}
-              onChange={e => handleNotes(item.item_key, e.target.value)}
-              placeholder="Add notes or observations..."
-              disabled={!isEditable}
-            />
+        <div className={`ie-notes-area ${notesOpen ? 'open' : ''}`}>
+          <textarea
+            value={item.notes || ''}
+            onChange={e => handleNotes(item.item_key, e.target.value)}
+            placeholder="Add notes or observations..."
+            disabled={!isEditable}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const renderSection = (key, sectionLabel, sectionItems, icon, sIdx) => {
+    const secProgress = getSectionProgress(sectionItems);
+    const secComplete = secProgress === 100;
+    return (
+      <div key={key} className="ie-section" style={sIdx > 0 ? { animationDelay: `${sIdx * 60}ms` } : undefined}>
+        <div className="ie-section-head">
+          <Icon name={icon} size={16} /> {sectionLabel}
+          <span className="ie-section-count">{sectionItems.length}</span>
+          <div className="ie-section-progress">
+            <div className={`ie-section-progress-fill ${secComplete ? 'complete' : ''}`} style={{ width: `${secProgress}%` }} />
           </div>
-        )}
+        </div>
+        <div className="ie-section-body">
+          {sectionItems.map(item => renderQuestion(item, ++questionNum))}
+        </div>
       </div>
     );
   };
@@ -282,10 +348,10 @@ export default function InspectionEditor() {
       <div className="ie-progress-wrap">
         <div className="ie-progress-info">
           <span className="ie-progress-label">{answeredCount} of {totalQuestions} answered</span>
-          <span className="ie-progress-pct">{progressPct}%</span>
+          <span className={`ie-progress-pct ${isComplete ? 'complete' : ''}`}>{progressPct}%</span>
         </div>
         <div className="ie-progress-bar">
-          <div className="ie-progress-fill" style={{ width: `${progressPct}%` }} />
+          <div className={`ie-progress-fill ${isComplete ? 'complete' : ''}`} style={{ width: `${progressPct}%` }} />
         </div>
       </div>
 
@@ -312,44 +378,22 @@ export default function InspectionEditor() {
 
       {/* Sections */}
       <div className="ie-sections">
-        {/* Ungrouped */}
-        {ungrouped.length > 0 && (
-          <div className="ie-section">
-            <div className="ie-section-head">
-              <Icon name="file" size={16} /> General
-              <span className="ie-section-count">{ungrouped.length}</span>
-            </div>
-            <div className="ie-section-body">
-              {ungrouped.map(item => renderQuestion(item, ++questionNum))}
-            </div>
-          </div>
-        )}
+        {ungrouped.length > 0 && renderSection('_ungrouped', 'General', ungrouped, 'file', 0)}
 
-        {/* Grouped sections */}
         {sections.map((sec, sIdx) => {
           const questions = getQuestions(sec.item_key);
           if (questions.length === 0) return null;
-          return (
-            <div key={sec.item_key} className="ie-section" style={{ animationDelay: `${sIdx * 60}ms` }}>
-              <div className="ie-section-head">
-                <Icon name="shield" size={16} /> {sec.label || 'Untitled Section'}
-                <span className="ie-section-count">{questions.length}</span>
-              </div>
-              <div className="ie-section-body">
-                {questions.map(item => renderQuestion(item, ++questionNum))}
-              </div>
-            </div>
-          );
+          return renderSection(sec.item_key, sec.label || 'Untitled Section', questions, 'shield', sIdx + (ungrouped.length > 0 ? 1 : 0));
         })}
       </div>
 
       {/* Footer */}
       {isEditable && (
         <div className="ie-footer">
-          <button className="btn btn-danger" onClick={() => setShowAbandon(true)}>
+          <button className="ie-btn-abandon" onClick={() => setShowAbandon(true)}>
             <Icon name="close" size={14} /> Abandon
           </button>
-          <button className="ip-btn-start" onClick={() => setShowComplete(true)}>
+          <button className="ie-btn-complete" onClick={() => setShowComplete(true)}>
             <Icon name="check" size={16} /> Complete Inspection
           </button>
         </div>
@@ -361,7 +405,7 @@ export default function InspectionEditor() {
             <Icon name="arrowL" size={14} /> Back to List
           </button>
           {inspection.status === 'completed' && (
-            <button className="ip-btn-start" onClick={() => navigate(`/inspections/${id}/report`)}>
+            <button className="ie-btn-complete" onClick={() => navigate(`/inspections/${id}/report`)}>
               <Icon name="reports" size={16} /> View Report
             </button>
           )}
@@ -382,7 +426,7 @@ export default function InspectionEditor() {
               </button>
             </div>
             <div className="modal-body">
-              <div className="te-publish-info" style={{ background: 'rgba(46,125,50,0.06)', borderColor: 'rgba(46,125,50,0.15)' }}>
+              <div className="te-publish-info" style={{ background: 'var(--sds-brand-primary-tint)', borderColor: 'rgba(98,109,249,0.15)' }}>
                 <strong>{answeredCount}</strong> of <strong>{totalQuestions}</strong> questions answered ({progressPct}%).
                 {answeredCount < totalQuestions && (
                   <div style={{ marginTop: 8, color: 'var(--sds-warning)' }}>

@@ -102,9 +102,9 @@ export default function InspectionsList() {
   ];
 
   const statCards = [
-    { label: 'Total', value: summary.total, icon: 'shield', accent: '#2E7D32', accentBg: 'rgba(46,125,50,0.08)' },
-    { label: 'In Progress', value: summary.in_progress, icon: 'pulse', accent: 'var(--sds-brand-primary)', accentBg: 'rgba(98,109,249,0.08)' },
-    { label: 'Completed', value: summary.completed, icon: 'check', accent: '#2E7D32', accentBg: 'rgba(46,125,50,0.08)' },
+    { label: 'Total', value: summary.total, icon: 'shield', accent: 'var(--sds-brand-primary)', accentBg: 'var(--sds-brand-primary-tint)' },
+    { label: 'In Progress', value: summary.in_progress, icon: 'pulse', accent: 'var(--sds-brand-primary)', accentBg: 'var(--sds-brand-primary-tint)' },
+    { label: 'Completed', value: summary.completed, icon: 'check', accent: 'var(--sds-success)', accentBg: 'rgba(46,125,50,0.08)' },
     { label: 'Abandoned', value: summary.abandoned, icon: 'close', accent: '#999', accentBg: 'rgba(0,0,0,0.04)' },
   ];
 
