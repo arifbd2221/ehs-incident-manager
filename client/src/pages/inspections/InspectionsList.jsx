@@ -226,10 +226,10 @@ export default function InspectionsList() {
       {/* Start Inspection Modal */}
       {showStart && createPortal(
         <div className="modal-backdrop" onClick={() => setShowStart(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="start-inspection-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Start Inspection</div>
+                <div className="modal-title" id="start-inspection-modal-title">Start Inspection</div>
                 <div className="modal-sub">Choose a template and begin your inspection</div>
               </div>
               <button className="icon-btn" onClick={() => setShowStart(false)}>
@@ -269,7 +269,7 @@ export default function InspectionsList() {
         document.body
       )}
 
-      {toast && <div className="toast"><Icon name="check" size={16} /> {toast}</div>}
+      {toast && <div className="toast" role="status" aria-live="polite"><Icon name="check" size={16} /> {toast}</div>}
     </div>
   );
 }

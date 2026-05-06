@@ -225,10 +225,10 @@ export default function TemplatesList() {
       {/* Create Modal */}
       {showCreate && createPortal(
         <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="new-template-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">New Template</div>
+                <div className="modal-title" id="new-template-modal-title">New Template</div>
                 <div className="modal-sub">Create a new inspection template</div>
               </div>
               <button className="icon-btn" onClick={() => setShowCreate(false)}>
@@ -257,7 +257,7 @@ export default function TemplatesList() {
       )}
 
       {/* Toast */}
-      {toast && <div className="toast"><Icon name="check" size={16} /> {toast}</div>}
+      {toast && <div className="toast" role="status" aria-live="polite"><Icon name="check" size={16} /> {toast}</div>}
     </div>
   );
 }

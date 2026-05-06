@@ -26,10 +26,10 @@ export default function AssignCapaModal({ investigation, onCancel, onConfirm }) 
 
   return (
     <div className="idet-modal-backdrop" onClick={onCancel}>
-      <div className="idet-modal" onClick={e => e.stopPropagation()} role="dialog" style={{ maxWidth: 560 }}>
+      <div className="idet-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="assign-capa-modal-title" style={{ maxWidth: 560 }}>
         <div className="idet-modal-header">
           <div>
-            <div className="idet-modal-title">Assign CAPA</div>
+            <div className="idet-modal-title" id="assign-capa-modal-title">Assign CAPA</div>
             <div className="idet-modal-sub">{investigation.investigation_number} · creates a corrective/preventive action</div>
           </div>
           <button className="idet-modal-close" onClick={onCancel}><Icon name="close" size={16}/></button>

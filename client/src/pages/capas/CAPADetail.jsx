@@ -341,7 +341,7 @@ export default function CAPADetail() {
 
       {/* Toast */}
       {toast && createPortal(
-        <div className="capd-toast">
+        <div className="capd-toast" role="status" aria-live="polite">
           <span className="toast-check"><Icon name="check" size={12}/></span>
           {toast}
         </div>,

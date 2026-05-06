@@ -9,10 +9,10 @@ export default function CloseModal({ incident, onCancel, onConfirm }) {
 
   return (
     <div className="idet-modal-backdrop" onClick={onCancel}>
-      <div className="idet-modal" onClick={e => e.stopPropagation()} role="dialog">
+      <div className="idet-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="close-modal-title">
         <div className="idet-modal-header">
           <div>
-            <div className="idet-modal-title">Close — no action</div>
+            <div className="idet-modal-title" id="close-modal-title">Close — no action</div>
             <div className="idet-modal-sub">{incident.incident_number} · log only, no investigation</div>
           </div>
           <button className="idet-modal-close" onClick={onCancel}><Icon name="close" size={16}/></button>

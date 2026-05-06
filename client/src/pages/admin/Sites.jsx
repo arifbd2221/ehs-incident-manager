@@ -212,14 +212,14 @@ export default function Sites() {
 
       {editing !== null && createPortal(
         <div className="modal-backdrop" onClick={close}>
-          <form className={`sm-modal${success ? ' sm-success' : ''}`} onClick={e => e.stopPropagation()} onSubmit={handleSave}>
+          <form className={`sm-modal${success ? ' sm-success' : ''}`} onClick={e => e.stopPropagation()} onSubmit={handleSave} role="dialog" aria-modal="true" aria-labelledby="site-modal-title">
             {/* Header */}
             <div className="sm-header">
               <div className="sm-header-icon">
                 <Icon name="factory" size={20} />
               </div>
               <div className="sm-header-text">
-                <h2>{editing === 'new' ? 'New site' : `Edit ${editing.name}`}</h2>
+                <h2 id="site-modal-title">{editing === 'new' ? 'New site' : `Edit ${editing.name}`}</h2>
                 <p>{editing === 'new' ? 'Add a new site to your organization' : 'Update site details'}</p>
               </div>
               <button type="button" className="sm-close" onClick={close}>

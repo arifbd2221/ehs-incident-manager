@@ -58,6 +58,10 @@ body {
 .nav-item:hover svg { color: var(--nav-color); transform: scale(1.18) rotate(-3deg); }
 .nav-item:hover .lbl { color: var(--nav-color); transform: translateY(-1px); }
 .nav-item:active { transform: scale(0.92); }
+.nav-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-bg-surface), 0 0 0 4px var(--sds-brand-primary);
+}
 .nav-item.active {
   background: color-mix(in srgb, var(--nav-color) 10%, transparent);
   color: var(--nav-color);
@@ -69,7 +73,7 @@ body {
   transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1), color 200ms ease;
 }
 .nav-item .lbl {
-  font-size: 9px; font-weight: 500;
+  font-size: 10px; font-weight: 500;
   text-align: center; line-height: 1.15;
   letter-spacing: .02em;
   transition: transform 200ms ease, color 200ms ease;
@@ -227,6 +231,10 @@ body {
   position: relative;
 }
 .icon-btn:hover { background: rgba(0,0,0,0.04); }
+.icon-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-bg-surface), 0 0 0 4px var(--sds-brand-primary);
+}
 .icon-btn .badge-dot {
   position: absolute; top: 6px; right: 8px;
   width: 8px; height: 8px; border-radius: 50%;
@@ -429,7 +437,7 @@ body {
   display: flex; justify-content: flex-end; gap: 8px;
   background: var(--sds-bg-surface-alt);
 }
-.modal .btn[disabled] { opacity: .5; cursor: not-allowed; }
+.modal .btn[disabled] { opacity: .38; cursor: not-allowed; }
 
 .field-lbl {
   display: block; font-size: 12px; font-weight: 600;
@@ -638,10 +646,18 @@ body {
 .btn-tertiary:hover { background: var(--sds-bg-surface-alt); }
 .btn-text { background: transparent; color: var(--sds-brand-primary); padding: 6px 10px; }
 .btn-danger { background: var(--sds-error); color: #fff; }
+.btn-danger:hover { background: #b91c1c; box-shadow: 0 4px 12px rgba(211,47,47,0.3); }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .btn-lg { padding: 11px 22px; font-size: 14px; }
 .btn:active:not(:disabled) { transform: scale(0.97); }
-.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-bg-surface), 0 0 0 4px var(--sds-brand-primary);
+}
+.btn-danger:focus-visible {
+  box-shadow: 0 0 0 2px var(--sds-bg-surface), 0 0 0 4px var(--sds-error);
+}
+.btn:disabled { opacity: .38; cursor: not-allowed; }
 
 /* ================================================================
  * BADGES / PILLS
@@ -1739,4 +1755,41 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .swb-pulse { animation: none; }
   .swb { animation: none; }
+}
+
+/* ================================================================
+ * REDUCED MOTION — global fallbacks
+ * ================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .page { animation: none; }
+  .modal { animation: none; }
+  .modal-backdrop { animation: none; }
+  .toast { animation: none; }
+  .nav-item.active svg { animation: none; }
+  .nav-item svg { transition: none; }
+  .nav-item .lbl { transition: none; }
+  .sr-panel { animation: none; }
+  .notif-panel { animation: none; }
+  .notif-item { animation: none; }
+  .help-backdrop { animation: none; }
+  .help-panel { animation: none; }
+  .help-tip { animation: none; }
+  .empty-icon { animation: none; }
+  .skel-line, .skel-block { animation: none; }
+  .topbar-stopwork::before { animation: none; }
+  .auth-logo-wrap { animation: none; }
+  .auth-title, .auth-sub { animation: none; }
+  .auth-feature { animation: none; }
+  .auth-orb { animation: none; }
+  .auth-card { animation: none; }
+  .auth-error { animation: none; }
+  .login-spinner { animation: none; }
+  .reg-step { animation: none; }
+  .prof-hero { animation: none; }
+  .ppe-icon { animation: none; }
+  .ppe-check { animation: none; }
+  .pulse-dot::before { animation: none; }
+  .btn:active:not(:disabled) { transform: none; }
+  .nav-item:active { transform: none; }
+  .icon-btn { transition: none; }
 }

@@ -24,6 +24,11 @@
 .cb-trigger:hover {
   border-color: var(--sds-fg-tertiary);
 }
+.cb-trigger:focus-visible {
+  outline: none;
+  border-color: var(--sds-brand-primary);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--sds-brand-primary);
+}
 .cb-open .cb-trigger {
   border-color: var(--sds-brand-primary);
   box-shadow: 0 0 0 3px rgba(98, 109, 249, 0.1);
@@ -196,4 +201,8 @@
 .idet-modal-body .cb-trigger,
 .modal-body .cb-trigger {
   padding: 0 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-drop { animation: none; }
 }

@@ -1402,3 +1402,30 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .wiz-backdrop { animation: none; }
+  .wiz-sheet { animation: none; }
+  .wiz-dropzone { animation: none; }
+  .wiz-dropzone.dragging { animation: none; }
+  .wiz-dropzone.dragging svg { animation: none; }
+  .wiz-file-count { animation: none; }
+  .wiz-file-item { animation: none; }
+  .wiz-file-item.removing { animation: none; }
+  .wiz-file-item.error { animation: none; }
+  .wiz-file-thumb { animation: none; }
+  .wiz-rt-entry { animation: none; }
+  .wiz-rf-item { animation: none; }
+  .wiz-step-form { animation: none; }
+  .rm-cell { animation: none; }
+  .rm-cell.rm-selected { animation: none; }
+  .gauge-fill { animation: none; }
+  .gauge-val { animation: none; }
+  .rr2-card { animation: none; }
+  .rr2-title, .rr2-details, .rr2-actions { animation: none; }
+  .wiz-review-section { animation: none; }
+  .wiz-review-body { animation: none; }
+  .wiz-ai-pill { animation: none; }
+  .vimo-pulse { animation: none; }
+  .vimo-dot { animation: none; }
+}

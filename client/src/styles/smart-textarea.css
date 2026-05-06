@@ -141,10 +141,22 @@
 .st-chip:active {
   transform: translateY(0) scale(0.97);
 }
+.st-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--sds-brand-primary);
+}
 
 /* Inside modals — match context */
 .idet-modal-body .st-mic,
 .modal-body .st-mic {
   top: 6px;
   right: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-mic { animation: none; }
+  .st-mic-pulse { animation: none; }
+  .st-chips { animation: none; }
+  .st-chip:hover { transform: none; }
+  .st-chip:active { transform: none; }
 }

@@ -124,10 +124,10 @@ export default function NewCapaModal({ onCancel, onCreated }) {
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+      <div className="modal modal-lg" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="new-capa-modal-title">
         <div className="modal-h">
           <div>
-            <div className="modal-title">New CAPA</div>
+            <div className="modal-title" id="new-capa-modal-title">New CAPA</div>
             <div className="modal-sub">Corrective or preventive action — owner cannot self-verify</div>
           </div>
           <button className="icon-btn" onClick={onCancel}><Icon name="close" size={18}/></button>

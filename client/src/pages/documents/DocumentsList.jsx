@@ -1179,10 +1179,10 @@ export default function DocumentsList() {
       {/* ========== FOLDER MODALS ========== */}
       {(folderModal === 'create' || folderModal === 'rename') && createPortal(
         <div className="modal-backdrop" onClick={folderBusy ? undefined : closeFolderModal}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="folder-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">{folderModal === 'create' ? 'New folder' : `Rename "${folderModalTarget?.name}"`}</div>
+                <div className="modal-title" id="folder-modal-title">{folderModal === 'create' ? 'New folder' : `Rename "${folderModalTarget?.name}"`}</div>
                 {folderModal === 'create' && (
                   <div className="modal-sub">
                     {breadcrumb.length === 0
@@ -1228,10 +1228,10 @@ export default function DocumentsList() {
 
       {folderModal === 'delete' && folderModalTarget && createPortal(
         <div className="modal-backdrop" onClick={folderBusy ? undefined : closeFolderModal}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-folder-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Delete "{folderModalTarget.name}"?</div>
+                <div className="modal-title" id="delete-folder-modal-title">Delete "{folderModalTarget.name}"?</div>
                 <div className="modal-sub">This cannot be undone.</div>
               </div>
               <button className="icon-btn" onClick={closeFolderModal}><Icon name="close" size={18} /></button>

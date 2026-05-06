@@ -95,10 +95,10 @@ export default function StopWorkModal({ open, onClose, onSubmitted }) {
 
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div className="modal modal-lg" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="stopwork-modal-title">
         <div className="modal-h">
           <div>
-            <div className="modal-title" style={{ color: 'var(--sds-error)' }}>
+            <div className="modal-title" id="stopwork-modal-title" style={{ color: 'var(--sds-error)' }}>
               <Icon name="warning" size={18} color="var(--sds-error)" /> &nbsp;STOP WORK
             </div>
             <div className="modal-sub">Imminent danger — work halts until the area is made safe</div>

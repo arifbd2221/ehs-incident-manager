@@ -384,7 +384,7 @@ export default function InvestigationsPage() {
 
       {/* Toast */}
       {toast && createPortal(
-        <div className="invd-toast">
+        <div className="invd-toast" role="status" aria-live="polite">
           <span className="toast-check"><Icon name="check" size={12}/></span>
           {toast}
         </div>,

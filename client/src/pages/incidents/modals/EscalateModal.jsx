@@ -26,10 +26,10 @@ export default function EscalateModal({ incident, onCancel, onConfirm }) {
 
   return (
     <div className="idet-modal-backdrop" onClick={onCancel}>
-      <div className="idet-modal" onClick={e => e.stopPropagation()} role="dialog">
+      <div className="idet-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="escalate-modal-title">
         <div className="idet-modal-header">
           <div>
-            <div className="idet-modal-title">Escalate to investigation</div>
+            <div className="idet-modal-title" id="escalate-modal-title">Escalate to investigation</div>
             <div className="idet-modal-sub">{incident.incident_number} · creates a formal investigation file</div>
           </div>
           <button className="idet-modal-close" onClick={onCancel}><Icon name="close" size={16}/></button>

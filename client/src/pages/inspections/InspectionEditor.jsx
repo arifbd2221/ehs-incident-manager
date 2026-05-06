@@ -415,10 +415,10 @@ export default function InspectionEditor() {
       {/* Complete Modal */}
       {showComplete && createPortal(
         <div className="modal-backdrop" onClick={() => setShowComplete(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="complete-inspection-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Complete Inspection</div>
+                <div className="modal-title" id="complete-inspection-modal-title">Complete Inspection</div>
                 <div className="modal-sub">Mark this inspection as finished</div>
               </div>
               <button className="icon-btn" onClick={() => setShowComplete(false)}>
@@ -449,10 +449,10 @@ export default function InspectionEditor() {
       {/* Abandon Modal */}
       {showAbandon && createPortal(
         <div className="modal-backdrop" onClick={() => setShowAbandon(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="abandon-inspection-modal-title">
             <div className="modal-h">
               <div>
-                <div className="modal-title">Abandon Inspection</div>
+                <div className="modal-title" id="abandon-inspection-modal-title">Abandon Inspection</div>
                 <div className="modal-sub">This cannot be undone</div>
               </div>
               <button className="icon-btn" onClick={() => setShowAbandon(false)}>
@@ -475,7 +475,7 @@ export default function InspectionEditor() {
         document.body
       )}
 
-      {toast && <div className="toast"><Icon name="check" size={16} /> {toast}</div>}
+      {toast && <div className="toast" role="status" aria-live="polite"><Icon name="check" size={16} /> {toast}</div>}
     </div>
   );
 }

@@ -618,7 +618,7 @@ export default function IncidentDetail() {
 
       {/* Toast */}
       {toast && createPortal(
-        <div className="idet-toast">
+        <div className="idet-toast" role="status" aria-live="polite">
           <span className="toast-icon"><Icon name="check" size={13}/></span>
           {toast}
         </div>,

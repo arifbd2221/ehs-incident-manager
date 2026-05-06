@@ -1545,3 +1545,15 @@
   color: var(--sds-brand-primary);
   background: var(--sds-brand-primary-tint);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .investigations-page { animation: none; }
+  .inv-kcard { animation: none; }
+  .invd-card { animation: none; }
+  .invd-why-card { animation: none; }
+  .invd-why-connector::after { animation: none; }
+  .inv-skel-line { animation: none; }
+  .inv-toast { animation: none; }
+  .invd-spin { animation: none; }
+  .inv-kflag .kf-dot { animation: none; }
+}

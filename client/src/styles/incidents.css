@@ -2214,3 +2214,26 @@
   cursor: not-allowed;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .incidents-page { animation: none; }
+  .inc-drop { animation: none; }
+  .inc-chip { animation: none; }
+  .inc-card { animation: none; }
+  .idet-cascade, .idet-alert,
+  .idet-main .idet-card, .idet-side .idet-card { animation: none; }
+  .idet-skel-line { animation: none; }
+  .idet-attach-thumb-skel { animation: none; }
+  .idet-attach-thumb-wrap { animation: none; }
+  .idet-attach-file { animation: none; }
+  .idet-tl-item { animation: none; }
+  .idet-modal-bd { animation: none; }
+  .idet-modal { animation: none; }
+  .idet-toast { animation: none; }
+  .lb-overlay { animation: none; }
+  .lb-img { animation: none; }
+  .lb-nav:active { animation: none; }
+  .lb-info { animation: none; }
+  .idet-spin { animation: none; }
+  .shimmer-line { animation: none; }
+}
+

@@ -1321,3 +1321,14 @@
   color: var(--sds-brand-primary-hover);
   text-decoration: underline;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .capa-kcard { animation: none; }
+  .capd-card { animation: none; }
+  .capd-prog-fill { animation: none; }
+  .capd-check-step { animation: none; }
+  .capd-check-dot { animation: none; }
+  .capd-toast { animation: none; }
+  .capa-skel-line { animation: none; }
+  .ncap-chip { animation: none; }
+}

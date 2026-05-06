@@ -7,10 +7,10 @@ export default function CloseInvestigationModal({ investigation, onCancel, onCon
 
   return (
     <div className="idet-modal-backdrop" onClick={onCancel}>
-      <div className="idet-modal" onClick={e => e.stopPropagation()} role="dialog">
+      <div className="idet-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="close-inv-modal-title">
         <div className="idet-modal-header">
           <div>
-            <div className="idet-modal-title">Close investigation</div>
+            <div className="idet-modal-title" id="close-inv-modal-title">Close investigation</div>
             <div className="idet-modal-sub">{investigation.investigation_number} · no CAPA required</div>
           </div>
           <button className="idet-modal-close" onClick={onCancel}><Icon name="close" size={16}/></button>
