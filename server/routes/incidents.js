@@ -9,6 +9,7 @@ import { extractFromTranscript } from '../services/voice_extract.js';
 import { injuryTypeForOsha300, descriptionForOsha300 } from '../services/osha_300_helpers.js';
 import { createCapaRow } from './capas.js';
 import { notifyUser, notifyElevatedAtSite, notifyRole } from '../services/notifications.js';
+import { evaluateClosureGates } from '../services/closure_gates.js';
 
 const router = Router();
 
@@ -134,7 +135,17 @@ router.get('/:id', (req, res) => {
     incident.reported_by = null;
   }
 
-  res.json({ ...incident, witnesses, attachments, activity });
+  const closure_request = db.prepare(`
+    SELECT cr.*, u.name as requested_by_name, u.initials as requested_by_initials,
+           rv.name as reviewed_by_name, rv.initials as reviewed_by_initials
+    FROM closure_requests cr
+    LEFT JOIN users u ON u.id = cr.requested_by
+    LEFT JOIN users rv ON rv.id = cr.reviewed_by
+    WHERE cr.incident_id = ? AND cr.status = 'pending'
+    ORDER BY cr.created_at DESC LIMIT 1
+  `).get(incident.id);
+
+  res.json({ ...incident, witnesses, attachments, activity, closure_request: closure_request || null });
 });
 
 router.post('/', async (req, res, next) => {
@@ -1145,30 +1156,273 @@ router.post('/:id/escalate', (req, res) => {
   res.status(201).json({ incident_id: incident.id, investigation });
 });
 
+// --- Closure checklist: returns gate evaluation for the UI ---
+router.get('/:id/closure-checklist', (req, res) => {
+  const incident = db.prepare('SELECT id FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  const gates = evaluateClosureGates(incident.id, req.user.org_id);
+  res.json(gates);
+});
+
+// --- Close: tiered by track ---
 router.post('/:id/close', (req, res) => {
   if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot close incidents.' });
-  const { reason, notes } = req.body;
+  const { reason, notes, force } = req.body;
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (incident.status === 'Closed') return res.status(409).json({ error: 'Incident is already closed.' });
 
-  db.prepare(`
-    UPDATE incidents SET status = 'Closed', closed_reason = ?, closed_notes = ?, closed_at = datetime('now'), closed_by = ?, updated_at = datetime('now') WHERE id = ?
-  `).run(reason || null, notes || null, req.user.id, incident.id);
+  const gates = evaluateClosureGates(incident.id, req.user.org_id);
+
+  // Force-close: admin only, bypasses all gates
+  if (force === true) {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Only admin can force-close.' });
+
+    db.prepare(`
+      UPDATE incidents SET status = 'Closed', closure_type = 'force_closed', closed_reason = ?, closed_notes = ?, closed_at = datetime('now'), closed_by = ?, updated_at = datetime('now') WHERE id = ?
+    `).run(reason || 'Force-closed by admin', notes || null, req.user.id, incident.id);
+
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+      VALUES (?, 'incident', ?, 'force_closed', ?, ?, ?)
+    `).run(incident.org_id, incident.id, `FORCE-CLOSED ${incident.incident_number} — ${reason || 'no reason'}`, req.user.id, JSON.stringify({ skipped_gates: gates }));
+
+    notifyElevatedAtSite({
+      orgId: incident.org_id, siteId: incident.site_id, type: 'force_closed', incidentId: incident.id,
+      title: `Incident force-closed — ${incident.incident_number}`,
+      body: `${reason || 'No reason provided'}. All closure gates bypassed by admin.`,
+      severity: 'err',
+      actionUrl: `/incidents/${incident.id}`,
+    });
+
+    if (incident.reported_by) {
+      notifyUser({
+        orgId: incident.org_id, userId: incident.reported_by, type: 'incident_closed', incidentId: incident.id,
+        title: `Your incident ${incident.incident_number} has been closed`,
+        body: reason || 'Closed by management.',
+        severity: 'info', actionUrl: `/incidents/${incident.id}`,
+      });
+    }
+
+    const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
+    updated.type_data = JSON.parse(updated.type_data || '{}');
+    return res.json(updated);
+  }
+
+  // Track C: minimal gates
+  if (gates.track === 'C') {
+    if (!reason) return res.status(400).json({ error: 'Closure reason required.' });
+
+    db.prepare(`
+      UPDATE incidents SET status = 'Closed', closure_type = 'standard', closed_reason = ?, closed_notes = ?, closed_at = datetime('now'), closed_by = ?, updated_at = datetime('now') WHERE id = ?
+    `).run(reason, notes || null, req.user.id, incident.id);
+
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+      VALUES (?, 'incident', ?, 'closed', ?, ?)
+    `).run(incident.org_id, incident.id, `closed ${incident.incident_number} — ${reason}`, req.user.id);
+
+    if (incident.reported_by) {
+      notifyUser({
+        orgId: incident.org_id, userId: incident.reported_by, type: 'incident_closed', incidentId: incident.id,
+        title: `Your incident ${incident.incident_number} has been closed`,
+        body: reason, severity: 'info', actionUrl: `/incidents/${incident.id}`,
+      });
+    }
+
+    const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
+    updated.type_data = JSON.parse(updated.type_data || '{}');
+    return res.json(updated);
+  }
+
+  // Track B: CAPA + investigation gates
+  if (gates.track === 'B') {
+    if (!reason) return res.status(400).json({ error: 'Closure reason required.' });
+    if (!gates.gates.capasComplete.passed) return res.status(409).json({ error: 'Cannot close: open CAPAs remain.', blockers: gates });
+    if (!gates.gates.investigationClosed.passed) return res.status(409).json({ error: 'Cannot close: investigation not yet closed.', blockers: gates });
+
+    db.prepare(`
+      UPDATE incidents SET status = 'Closed', closure_type = 'standard', closed_reason = ?, closed_notes = ?, closed_at = datetime('now'), closed_by = ?, updated_at = datetime('now') WHERE id = ?
+    `).run(reason, notes || null, req.user.id, incident.id);
+
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+      VALUES (?, 'incident', ?, 'closed', ?, ?)
+    `).run(incident.org_id, incident.id, `closed ${incident.incident_number} — ${reason}`, req.user.id);
+
+    if (incident.reported_by) {
+      notifyUser({
+        orgId: incident.org_id, userId: incident.reported_by, type: 'incident_closed', incidentId: incident.id,
+        title: `Your incident ${incident.incident_number} has been closed`,
+        body: reason, severity: 'info', actionUrl: `/incidents/${incident.id}`,
+      });
+    }
+
+    const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
+    updated.type_data = JSON.parse(updated.type_data || '{}');
+    return res.json(updated);
+  }
+
+  // Track A: requires closure request + manager approval
+  return res.status(409).json({
+    error: 'Track A incidents require a closure request and manager approval.',
+    blockers: gates,
+  });
+});
+
+// --- Closure request: Track A approval flow ---
+router.post('/:id/closure-request', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Insufficient permissions.' });
+  const { closure_summary, lessons_learned } = req.body;
+  if (!closure_summary) return res.status(400).json({ error: 'Closure summary is required.' });
+  if (!lessons_learned) return res.status(400).json({ error: 'Lessons learned are required for Track A closure.' });
+
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (incident.status === 'Closed') return res.status(409).json({ error: 'Incident is already closed.' });
+
+  const existing = db.prepare("SELECT id FROM closure_requests WHERE incident_id = ? AND status = 'pending'").get(incident.id);
+  if (existing) return res.status(409).json({ error: 'A closure request is already pending.' });
+
+  const gates = evaluateClosureGates(incident.id, req.user.org_id);
+  if (!gates.gates.capasComplete.passed) return res.status(409).json({ error: 'Cannot request closure: open CAPAs remain.', blockers: gates });
+  if (!gates.gates.investigationClosed.passed) return res.status(409).json({ error: 'Cannot request closure: investigation not yet closed.', blockers: gates });
+  if (!gates.gates.rootCauseDocumented.passed) return res.status(409).json({ error: 'Cannot request closure: root cause not documented.', blockers: gates });
+  if (gates.gates.osha300Entry.required && !gates.gates.osha300Entry.passed) return res.status(409).json({ error: 'Cannot request closure: OSHA 300 log entry missing.', blockers: gates });
+  if (gates.gates.riddorFiled.required && !gates.gates.riddorFiled.passed) return res.status(409).json({ error: 'Cannot request closure: RIDDOR report not filed.', blockers: gates });
+
+  const result = db.prepare(`
+    INSERT INTO closure_requests (incident_id, org_id, requested_by, closure_summary, lessons_learned, gate_snapshot)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(incident.id, req.user.org_id, req.user.id, closure_summary, lessons_learned, JSON.stringify(gates));
 
   db.prepare(`
     INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
-    VALUES (?, 'incident', ?, 'closed', ?, ?)
-  `).run(incident.org_id, incident.id, `closed ${incident.incident_number} — ${reason || 'no reason'}`, req.user.id);
+    VALUES (?, 'incident', ?, 'closure_requested', ?, ?)
+  `).run(incident.org_id, incident.id, `closure requested for ${incident.incident_number}`, req.user.id);
 
-  if (incident.reported_by) {
-    notifyUser({
-      orgId: incident.org_id, userId: incident.reported_by, type: 'incident_closed', incidentId: incident.id,
-      title: `Your incident ${incident.incident_number} has been closed`,
-      body: reason || 'Closed by management.',
-      severity: 'info',
-      actionUrl: `/incidents/${incident.id}`,
-    });
+  notifyRole({ orgId: incident.org_id, role: 'ehs_manager', type: 'closure_requested', incidentId: incident.id,
+    title: `Closure approval needed — ${incident.incident_number}`, body: closure_summary, severity: 'warn', actionUrl: `/incidents/${incident.id}` });
+  notifyRole({ orgId: incident.org_id, role: 'admin', type: 'closure_requested', incidentId: incident.id,
+    title: `Closure approval needed — ${incident.incident_number}`, body: closure_summary, severity: 'warn', actionUrl: `/incidents/${incident.id}` });
+
+  const row = db.prepare('SELECT * FROM closure_requests WHERE id = ?').get(result.lastInsertRowid);
+  res.status(201).json(row);
+});
+
+// --- Approve closure request ---
+router.post('/:id/closure-request/:requestId/approve', (req, res) => {
+  if (!['ehs_manager', 'admin'].includes(req.user.role)) return res.status(403).json({ error: 'Only EHS managers or admins can approve closure.' });
+
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  const cr = db.prepare("SELECT * FROM closure_requests WHERE id = ? AND incident_id = ? AND status = 'pending'").get(req.params.requestId, incident.id);
+  if (!cr) return res.status(404).json({ error: 'Pending closure request not found.' });
+  if (cr.requested_by === req.user.id) return res.status(403).json({ error: 'Cannot self-approve a closure request.' });
+
+  // Re-validate gates at approval time
+  const gates = evaluateClosureGates(incident.id, req.user.org_id);
+  const prereqs = gates.gates;
+  if (!prereqs.capasComplete.passed || !prereqs.investigationClosed.passed || !prereqs.rootCauseDocumented.passed) {
+    return res.status(409).json({ error: 'Closure gates have regressed since the request was submitted. Review the checklist.', blockers: gates });
   }
+  if (prereqs.osha300Entry.required && !prereqs.osha300Entry.passed) return res.status(409).json({ error: 'OSHA 300 entry removed since request.', blockers: gates });
+  if (prereqs.riddorFiled.required && !prereqs.riddorFiled.passed) return res.status(409).json({ error: 'RIDDOR status regressed since request.', blockers: gates });
+
+  const { notes } = req.body;
+
+  db.prepare("UPDATE closure_requests SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now'), review_notes = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(req.user.id, notes || null, cr.id);
+
+  db.prepare(`
+    UPDATE incidents SET status = 'Closed', closure_type = 'approved', closed_reason = ?, closed_notes = ?, closed_at = datetime('now'), closed_by = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(cr.closure_summary, cr.lessons_learned + (notes ? `\n\nReviewer: ${notes}` : ''), req.user.id, incident.id);
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+    VALUES (?, 'incident', ?, 'closure_approved', ?, ?)
+  `).run(incident.org_id, incident.id, `closure approved for ${incident.incident_number}`, req.user.id);
+
+  notifyUser({ orgId: incident.org_id, userId: cr.requested_by, type: 'closure_approved', incidentId: incident.id,
+    title: `Closure approved — ${incident.incident_number}`, body: notes || 'Your closure request has been approved.', severity: 'info', actionUrl: `/incidents/${incident.id}` });
+  if (incident.reported_by && incident.reported_by !== cr.requested_by) {
+    notifyUser({ orgId: incident.org_id, userId: incident.reported_by, type: 'incident_closed', incidentId: incident.id,
+      title: `Your incident ${incident.incident_number} has been closed`, body: 'Closed after manager approval.', severity: 'info', actionUrl: `/incidents/${incident.id}` });
+  }
+
+  const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
+  updated.type_data = JSON.parse(updated.type_data || '{}');
+  res.json(updated);
+});
+
+// --- Reject closure request ---
+router.post('/:id/closure-request/:requestId/reject', (req, res) => {
+  if (!['ehs_manager', 'admin'].includes(req.user.role)) return res.status(403).json({ error: 'Only EHS managers or admins can reject closure.' });
+  const { notes } = req.body;
+  if (!notes) return res.status(400).json({ error: 'Rejection reason is required.' });
+
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  const cr = db.prepare("SELECT * FROM closure_requests WHERE id = ? AND incident_id = ? AND status = 'pending'").get(req.params.requestId, incident.id);
+  if (!cr) return res.status(404).json({ error: 'Pending closure request not found.' });
+
+  db.prepare("UPDATE closure_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = datetime('now'), review_notes = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(req.user.id, notes, cr.id);
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+    VALUES (?, 'incident', ?, 'closure_rejected', ?, ?)
+  `).run(incident.org_id, incident.id, `closure request rejected for ${incident.incident_number} — ${notes}`, req.user.id);
+
+  notifyUser({ orgId: incident.org_id, userId: cr.requested_by, type: 'closure_rejected', incidentId: incident.id,
+    title: `Closure rejected — ${incident.incident_number}`, body: notes, severity: 'err', actionUrl: `/incidents/${incident.id}` });
+
+  res.json({ success: true });
+});
+
+// --- Reopen a closed incident ---
+router.post('/:id/reopen', (req, res) => {
+  if (!['ehs_manager', 'admin'].includes(req.user.role)) return res.status(403).json({ error: 'Only EHS managers or admins can reopen incidents.' });
+  const { reason } = req.body;
+  if (!reason || reason.trim().length < 10) return res.status(400).json({ error: 'Reopen reason must be at least 10 characters.' });
+
+  const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (incident.status !== 'Closed') return res.status(409).json({ error: 'Incident is not closed.' });
+
+  // Determine appropriate reopen status
+  const inv = db.prepare("SELECT id, status FROM investigations WHERE incident_id = ? ORDER BY id DESC LIMIT 1").get(incident.id);
+  const openCapas = db.prepare(`
+    SELECT COUNT(*) as c FROM capas WHERE (incident_id = ? OR investigation_id IN (SELECT id FROM investigations WHERE incident_id = ?)) AND org_id = ? AND status != 'closed'
+  `).get(incident.id, incident.id, req.user.org_id);
+
+  let reopenStatus = 'Triage';
+  if (openCapas.c > 0) reopenStatus = 'Awaiting CAPA';
+  else if (inv && inv.status !== 'closed') reopenStatus = 'Investigating';
+
+  db.prepare(`
+    UPDATE incidents SET status = ?, closed_at = NULL, closed_by = NULL, closed_reason = NULL, closed_notes = NULL, closure_type = NULL,
+      reopened_at = datetime('now'), reopened_by = ?, reopened_reason = ?, reopen_count = reopen_count + 1, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(reopenStatus, req.user.id, reason, incident.id);
+
+  db.prepare(`
+    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+    VALUES (?, 'incident', ?, 'incident_reopened', ?, ?)
+  `).run(incident.org_id, incident.id, `reopened ${incident.incident_number} → ${reopenStatus} — ${reason}`, req.user.id);
+
+  if (incident.assigned_to) {
+    notifyUser({ orgId: incident.org_id, userId: incident.assigned_to, type: 'incident_reopened', incidentId: incident.id,
+      title: `Incident reopened — ${incident.incident_number}`, body: reason, severity: 'warn', actionUrl: `/incidents/${incident.id}` });
+  }
+  if (incident.reported_by && incident.reported_by !== incident.assigned_to) {
+    notifyUser({ orgId: incident.org_id, userId: incident.reported_by, type: 'incident_reopened', incidentId: incident.id,
+      title: `Your incident ${incident.incident_number} has been reopened`, body: reason, severity: 'info', actionUrl: `/incidents/${incident.id}` });
+  }
+  notifyElevatedAtSite({ orgId: incident.org_id, siteId: incident.site_id, type: 'incident_reopened', incidentId: incident.id,
+    title: `Incident reopened — ${incident.incident_number}`, body: reason, severity: 'warn', actionUrl: `/incidents/${incident.id}` });
 
   const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
   updated.type_data = JSON.parse(updated.type_data || '{}');

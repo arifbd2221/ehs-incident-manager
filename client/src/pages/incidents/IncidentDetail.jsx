@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness } from '../../api/incidents';
+import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness, requestClosure, approveClosure, rejectClosure, reopenIncident, forceCloseIncident } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
@@ -10,6 +10,9 @@ import { timeAgo, formatDate } from '../../utils/time';
 import AssignModal from './modals/AssignModal';
 import EscalateModal from './modals/EscalateModal';
 import CloseModal from './modals/CloseModal';
+import ClosureChecklistModal from './modals/ClosureChecklistModal';
+import ClosureApprovalModal from './modals/ClosureApprovalModal';
+import ReopenModal from './modals/ReopenModal';
 import SeverityOverrideModal from './modals/SeverityOverrideModal';
 import WitnessModal from './modals/WitnessModal';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
@@ -30,6 +33,11 @@ const tlDotClass = (action) => {
   if (action === 'recordability_verified') return 'tl-verified';
   if (action === 'attached' || action === 'attachment_deleted') return 'tl-attach';
   if (action === 'stop_work_submitted' || action === 'stop_work_acknowledged' || action === 'stop_work_resolved' || action === 'stop_work_cancelled') return 'tl-stopwork';
+  if (action === 'closure_requested') return 'tl-assigned';
+  if (action === 'closure_approved') return 'tl-closed';
+  if (action === 'closure_rejected') return 'tl-note';
+  if (action === 'force_closed') return 'tl-stopwork';
+  if (action === 'incident_reopened') return 'tl-escalated';
   return 'tl-created';
 };
 
@@ -47,6 +55,11 @@ const tlIcon = (action) => {
   if (action === 'attached') return 'file';
   if (action === 'attachment_deleted') return 'close';
   if (action === 'stop_work_submitted' || action === 'stop_work_acknowledged' || action === 'stop_work_resolved' || action === 'stop_work_cancelled') return 'warning';
+  if (action === 'closure_requested') return 'clock';
+  if (action === 'closure_approved') return 'check';
+  if (action === 'closure_rejected') return 'close';
+  if (action === 'force_closed') return 'warning';
+  if (action === 'incident_reopened') return 'edit';
   return 'capa';
 };
 
@@ -233,8 +246,54 @@ export default function IncidentDetail() {
       const updated = await closeIncident(r.id, form);
       setIncident({ ...incident, ...updated, witnesses: incident.witnesses, attachments: incident.attachments, activity: incident.activity });
       showToast('Incident closed.');
+      setModal(null);
       load();
-    } catch { showToast('Failed to close.'); }
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to close.'); }
+  };
+
+  const handleRequestClosure = async (form) => {
+    try {
+      await requestClosure(r.id, form);
+      showToast('Closure request submitted for approval.');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to submit closure request.'); }
+  };
+
+  const handleApproveClosure = async (requestId, form) => {
+    try {
+      await approveClosure(r.id, requestId, form);
+      showToast('Closure approved — incident closed.');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to approve closure.'); }
+  };
+
+  const handleRejectClosure = async (requestId, form) => {
+    try {
+      await rejectClosure(r.id, requestId, form);
+      showToast('Closure request rejected.');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to reject.'); }
+  };
+
+  const handleReopen = async (form) => {
+    try {
+      await reopenIncident(r.id, form);
+      showToast('Incident reopened.');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to reopen.'); }
+  };
+
+  const handleForceClose = async (form) => {
+    try {
+      await forceCloseIncident(r.id, form);
+      showToast('Incident force-closed.');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to force-close.'); }
   };
 
   const saveField = async (field, value) => {
@@ -385,7 +444,14 @@ export default function IncidentDetail() {
 
           <div className="idet-header-actions">
             {recommendedAction === 'closed' ? (
-              <button className="idet-act-btn" disabled>Closed</button>
+              <>
+                <button className="idet-act-btn" disabled>Closed</button>
+                {['ehs_manager', 'admin'].includes(user?.role) && (
+                  <button className="idet-act-btn" onClick={() => setModal('reopen')}>
+                    <Icon name="edit" size={15}/>Reopen
+                  </button>
+                )}
+              </>
             ) : (
               <>
                 {ELEVATED_ROLES.has(user?.role) && (
@@ -399,7 +465,9 @@ export default function IncidentDetail() {
                   </button>
                 ) : (
                   <>
-                    <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no action</button>
+                    <button className="idet-act-btn" onClick={() => setModal('close')}>
+                      {r.track === 'C' ? 'Close — no action' : 'Close incident'}
+                    </button>
                     <button className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`} onClick={() => setModal('assign')}>
                       <Icon name="person" size={15}/>Assign
                     </button>
@@ -413,6 +481,23 @@ export default function IncidentDetail() {
           </div>
         </div>
       </div>
+
+      {/* Pending closure request banner */}
+      {r.closure_request && ['ehs_manager', 'admin'].includes(user?.role) && r.closure_request.requested_by !== user?.id && (
+        <div className="idet-closure-banner">
+          <div className="idet-closure-banner-text">
+            <Icon name="clock" size={16}/>
+            <span>Closure approval requested by <strong>{r.closure_request.requested_by_name}</strong></span>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setModal('closure-approval')}>Review request</button>
+        </div>
+      )}
+
+      {r.reopen_count > 0 && r.status !== 'Closed' && (
+        <div className="idet-reopen-badge">
+          <Icon name="edit" size={14}/> Reopened {r.reopen_count} time{r.reopen_count > 1 ? 's' : ''} — {r.reopened_reason}
+        </div>
+      )}
 
       {/* Triage alert */}
       <div className={`idet-alert ${alertType}`}>
@@ -850,7 +935,14 @@ export default function IncidentDetail() {
       {/* Modals — portal to escape .page transform */}
       {modal === 'assign' && createPortal(<AssignModal incident={r} onCancel={() => setModal(null)} onConfirm={handleAssign}/>, document.body)}
       {modal === 'escalate' && createPortal(<EscalateModal incident={r} onCancel={() => setModal(null)} onConfirm={handleEscalate}/>, document.body)}
-      {modal === 'close' && createPortal(<CloseModal incident={r} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
+      {modal === 'close' && r.track === 'C' && createPortal(<CloseModal incident={r} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
+      {modal === 'close' && r.track !== 'C' && createPortal(
+        <ClosureChecklistModal incident={r} onCancel={() => setModal(null)} onClose={handleClose}
+          onRequestClosure={handleRequestClosure} onForceClose={handleForceClose} userRole={user?.role}/>, document.body)}
+      {modal === 'closure-approval' && r.closure_request && createPortal(
+        <ClosureApprovalModal incident={r} closureRequest={r.closure_request} onCancel={() => setModal(null)}
+          onApprove={handleApproveClosure} onReject={handleRejectClosure}/>, document.body)}
+      {modal === 'reopen' && createPortal(<ReopenModal incident={r} onCancel={() => setModal(null)} onConfirm={handleReopen}/>, document.body)}
       {modal === 'severity' && createPortal(<SeverityOverrideModal incident={r} onCancel={() => setModal(null)} onConfirm={handleSeverityOverride}/>, document.body)}
       {witnessModal === 'add' && createPortal(<WitnessModal incident={r} onCancel={() => setWitnessModal(null)} onConfirm={handleAddWitness}/>, document.body)}
       {witnessModal && witnessModal !== 'add' && createPortal(<WitnessModal incident={r} witness={witnessModal} onCancel={() => setWitnessModal(null)} onConfirm={handleUpdateWitness}/>, document.body)}
