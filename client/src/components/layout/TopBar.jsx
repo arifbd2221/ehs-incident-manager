@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../shared/Icon';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
-import { getNotifications, markAllRead } from '../../api/notifications';
+import { getNotifications, markAllRead, markRead } from '../../api/notifications';
 import { globalSearch } from '../../api/search';
 import StopWorkModal from '../modals/StopWorkModal';
 
@@ -62,6 +62,30 @@ const SHORTCUTS = [
   { keys: ['↑', '↓'], desc: 'Navigate search results' },
   { keys: ['↵'], desc: 'Open selected result' },
 ];
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr + 'Z').getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
+const NOTIF_ICON = {
+  incident_created: 'incidents',
+  incident_assigned: 'person',
+  incident_escalated: 'investigation',
+  incident_closed: 'check',
+  capa_assigned: 'capa',
+  capa_overdue: 'clock',
+  osha_24hr: 'reports',
+  riddor_immediate: 'warning',
+};
 
 const CATEGORY_META = {
   incidents:      { icon: 'incidents', label: 'Incidents',      path: '/incidents' },
@@ -258,7 +282,21 @@ export default function TopBar() {
   const closeSearch = () => { setSearchOpen(false); };
 
   const handleMarkAllRead = () => {
-    markAllRead().then(() => { setUnreadCount(0); setNotifOpen(false); });
+    markAllRead().then(() => {
+      setUnreadCount(0);
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
+    });
+  };
+
+  const handleNotifClick = (n) => {
+    if (!n.is_read) {
+      markRead(n.id).catch(() => {});
+      setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: 1 } : x));
+      setUnreadCount(c => Math.max(0, c - 1));
+    }
+    setNotifOpen(false);
+    const url = n.action_url || (n.incident_id ? `/incidents/${n.incident_id}` : null);
+    if (url) navigate(url);
   };
 
   const crumb = () => {
@@ -331,15 +369,23 @@ export default function TopBar() {
                 <div className="notif-list">
                   {notifications.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: 'var(--sds-fg-tertiary)' }}>No notifications</div>}
                   {notifications.map(n => (
-                    <div key={n.id} className={`notif-item notif-${n.severity}`}>
-                      <div className="notif-icon"><Icon name="warning" size={16} /></div>
+                    <div key={n.id} className={`notif-item notif-${n.severity}${n.is_read ? ' notif-read' : ''}`} onClick={() => handleNotifClick(n)} style={{ cursor: 'pointer' }}>
+                      <div className="notif-icon"><Icon name={NOTIF_ICON[n.type] || 'bell'} size={16} /></div>
                       <div className="notif-body">
                         <div className="notif-title">{n.title}</div>
-                        {n.incident_number && <div className="notif-meta">{n.incident_number}</div>}
-                        <div className="notif-desc">{n.body}</div>
+                        <div className="notif-meta">
+                          {n.incident_number && <span>{n.incident_number}</span>}
+                          {n.incident_number && n.created_at && <span> · </span>}
+                          {n.created_at && <span>{timeAgo(n.created_at)}</span>}
+                        </div>
+                        {n.body && <div className="notif-desc">{n.body}</div>}
                       </div>
+                      {!n.is_read && <span className="notif-unread-dot" />}
                     </div>
                   ))}
+                </div>
+                <div className="notif-f">
+                  <a href="#" onClick={e => { e.preventDefault(); setNotifOpen(false); }}>Close</a>
                 </div>
               </div>
             </>
