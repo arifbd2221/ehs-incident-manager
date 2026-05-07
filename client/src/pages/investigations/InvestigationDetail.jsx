@@ -573,8 +573,6 @@ export default function InvestigationDetail() {
             </div>
           </div>
 
-          <ReferencedByCard entityType="investigation" entityId={inv.id} />
-
           {/* Team */}
           <div className="invd-card">
             <div className="invd-card-h">
@@ -626,6 +624,8 @@ export default function InvestigationDetail() {
               </div>
             </div>
           </div>
+
+          <ReferencedByCard entityType="investigation" entityId={inv.id} />
         </div>
       </div>
 
