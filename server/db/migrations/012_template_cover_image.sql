@@ -1,0 +1,1 @@
+ALTER TABLE templates ADD COLUMN cover_image TEXT DEFAULT NULL;

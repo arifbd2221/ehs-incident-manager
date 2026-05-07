@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTemplate, updateTemplate, publishTemplate, updateTemplateItems } from '../../api/templates';
+import { getTemplate, updateTemplate, publishTemplate, updateTemplateItems, uploadTemplateCover, removeTemplateCover } from '../../api/templates';
 import { getAnswerSets, createAnswerSet } from '../../api/answer_sets';
 import Icon from '../../components/shared/Icon';
 import '../../styles/templates.css';
@@ -160,6 +160,23 @@ export default function TemplateEditor() {
     setTemplate(t => ({ ...t, description }));
     clearTimeout(descTimeout.current);
     descTimeout.current = setTimeout(() => { updateTemplate(id, { description }).catch(() => {}); }, 600);
+  };
+
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const handleCoverUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingCover(true);
+    uploadTemplateCover(id, file)
+      .then(data => { setTemplate(t => ({ ...t, cover_image: data.cover_image })); showToast('Cover image updated'); })
+      .catch(() => showToast('Failed to upload image'))
+      .finally(() => setUploadingCover(false));
+    e.target.value = '';
+  };
+  const handleCoverRemove = () => {
+    removeTemplateCover(id)
+      .then(() => { setTemplate(t => ({ ...t, cover_image: null })); showToast('Cover image removed'); })
+      .catch(() => showToast('Failed to remove image'));
   };
 
   // --- Item CRUD ---
@@ -372,16 +389,11 @@ export default function TemplateEditor() {
     <div className="page te-page" ref={editorRef}>
       {/* Header */}
       <div className="te-header">
-        <div className="te-header-left">
+        <div className="te-header-top">
           <button className="te-back" onClick={() => navigate('/templates')}>
             <Icon name="arrowL" size={18} />
           </button>
-          <div>
-            <input className="te-title-input" value={template.name || ''} onChange={e => handleNameChange(e.target.value)} placeholder="Untitled template..." disabled={isArchived} />
-            <input className="te-desc-input" value={template.description || ''} onChange={e => handleDescChange(e.target.value)} placeholder="Add a description..." disabled={isArchived} />
-          </div>
-        </div>
-        <div className="te-header-actions">
+          <div className="te-header-actions">
           {/* Version badge */}
           {latestVersion > 0 && (
             <button className="te-version-badge" onClick={() => setShowVersions(true)} title="View version history">
@@ -410,12 +422,46 @@ export default function TemplateEditor() {
               <Icon name="check" size={16} /> Publish{latestVersion > 0 ? ` v${nextVersion}` : ''}
             </button>
           )}
+          </div>
         </div>
       </div>
 
       {/* Editor body: sections + floating toolbar */}
       <div className="te-editor-body">
         <div className="te-sections">
+          <div className="te-hero-card">
+            <div className="te-hero-image-area">
+              {template.cover_image ? (
+                <div className="te-hero-image-wrap">
+                  <img src={template.cover_image} alt="Template cover" className="te-hero-image" />
+                  {isDraft && (
+                    <div className="te-hero-image-overlay">
+                      <label className="te-hero-img-btn">
+                        <Icon name="photo" size={14} /> Change
+                        <input type="file" accept="image/*" hidden onChange={handleCoverUpload} />
+                      </label>
+                      <button className="te-hero-img-btn te-hero-img-btn--remove" onClick={handleCoverRemove}>
+                        <Icon name="close" size={14} /> Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <label className={`te-hero-placeholder ${uploadingCover ? 'is-uploading' : ''}`}>
+                  {uploadingCover ? (
+                    <><span className="login-spinner" style={{ width: 22, height: 22, borderWidth: 2 }} /> Uploading...</>
+                  ) : (
+                    <><Icon name="photo" size={26} /><span>Add cover</span></>
+                  )}
+                  {isDraft && !uploadingCover && <input type="file" accept="image/*" hidden onChange={handleCoverUpload} />}
+                </label>
+              )}
+            </div>
+            <div className="te-hero-meta">
+              <input className="te-title-input" value={template.name || ''} onChange={e => handleNameChange(e.target.value)} placeholder="Untitled template..." disabled={isArchived} />
+              <input className="te-desc-input" value={template.description || ''} onChange={e => handleDescChange(e.target.value)} placeholder="Add a description..." disabled={isArchived} />
+            </div>
+          </div>
           {/* Ungrouped items */}
           {ungrouped.length > 0 && (
             <div className="te-section">
