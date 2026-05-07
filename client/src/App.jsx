@@ -19,6 +19,7 @@ import ReportsPage from './pages/reports/ReportsPage';
 import Settings from './pages/Settings';
 import Sites from './pages/admin/Sites';
 import SiteDetail from './pages/admin/SiteDetail';
+import Members from './pages/admin/Members';
 import AssetsList from './pages/assets/AssetsList';
 import AssetDetail from './pages/assets/AssetDetail';
 import DocumentsList from './pages/documents/DocumentsList';
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/admin/sites" element={<Sites />} />
         <Route path="/admin/sites/:id" element={<SiteDetail />} />
+        <Route path="/admin/members" element={<Members />} />
         <Route path="/assets" element={<AssetsList />} />
         <Route path="/assets/:id" element={<AssetDetail />} />
         <Route path="/documents" element={<DocumentsList />} />
