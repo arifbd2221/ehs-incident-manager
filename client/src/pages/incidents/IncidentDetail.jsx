@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness } from '../../api/incidents';
+import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness, requestClosure, approveClosure, rejectClosure, reopenIncident, forceCloseIncident } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
@@ -10,6 +10,9 @@ import { timeAgo, formatDate } from '../../utils/time';
 import AssignModal from './modals/AssignModal';
 import EscalateModal from './modals/EscalateModal';
 import CloseModal from './modals/CloseModal';
+import ClosureChecklistModal from './modals/ClosureChecklistModal';
+import ClosureApprovalModal from './modals/ClosureApprovalModal';
+import ReopenModal from './modals/ReopenModal';
 import SeverityOverrideModal from './modals/SeverityOverrideModal';
 import WitnessModal from './modals/WitnessModal';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
@@ -30,6 +33,11 @@ const tlDotClass = (action) => {
   if (action === 'recordability_verified') return 'tl-verified';
   if (action === 'attached' || action === 'attachment_deleted') return 'tl-attach';
   if (action === 'stop_work_submitted' || action === 'stop_work_acknowledged' || action === 'stop_work_resolved' || action === 'stop_work_cancelled') return 'tl-stopwork';
+  if (action === 'closure_requested') return 'tl-assigned';
+  if (action === 'closure_approved') return 'tl-closed';
+  if (action === 'closure_rejected') return 'tl-note';
+  if (action === 'force_closed') return 'tl-stopwork';
+  if (action === 'incident_reopened') return 'tl-escalated';
   return 'tl-created';
 };
 
@@ -47,6 +55,11 @@ const tlIcon = (action) => {
   if (action === 'attached') return 'file';
   if (action === 'attachment_deleted') return 'close';
   if (action === 'stop_work_submitted' || action === 'stop_work_acknowledged' || action === 'stop_work_resolved' || action === 'stop_work_cancelled') return 'warning';
+  if (action === 'closure_requested') return 'clock';
+  if (action === 'closure_approved') return 'check';
+  if (action === 'closure_rejected') return 'close';
+  if (action === 'force_closed') return 'warning';
+  if (action === 'incident_reopened') return 'edit';
   return 'capa';
 };
 
@@ -233,8 +246,54 @@ export default function IncidentDetail() {
       const updated = await closeIncident(r.id, form);
       setIncident({ ...incident, ...updated, witnesses: incident.witnesses, attachments: incident.attachments, activity: incident.activity });
       showToast('Incident closed.');
+      setModal(null);
       load();
-    } catch { showToast('Failed to close.'); }
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to close.'); }
+  };
+
+  const handleRequestClosure = async (form) => {
+    try {
+      await requestClosure(r.id, form);
+      showToast('Closure request submitted for approval.');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to submit closure request.'); }
+  };
+
+  const handleApproveClosure = async (requestId, form) => {
+    try {
+      await approveClosure(r.id, requestId, form);
+      showToast('Closure approved — incident closed.');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to approve closure.'); }
+  };
+
+  const handleRejectClosure = async (requestId, form) => {
+    try {
+      await rejectClosure(r.id, requestId, form);
+      showToast('Closure request rejected.');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to reject.'); }
+  };
+
+  const handleReopen = async (form) => {
+    try {
+      await reopenIncident(r.id, form);
+      showToast('Incident reopened.');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to reopen.'); }
+  };
+
+  const handleForceClose = async (form) => {
+    try {
+      await forceCloseIncident(r.id, form);
+      showToast('Incident force-closed.');
+      setModal(null);
+      load();
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to force-close.'); }
   };
 
   const saveField = async (field, value) => {
@@ -385,7 +444,14 @@ export default function IncidentDetail() {
 
           <div className="idet-header-actions">
             {recommendedAction === 'closed' ? (
-              <button className="idet-act-btn" disabled>Closed</button>
+              <>
+                <button className="idet-act-btn" disabled>Closed</button>
+                {['ehs_manager', 'admin'].includes(user?.role) && (
+                  <button className="idet-act-btn" onClick={() => setModal('reopen')}>
+                    <Icon name="edit" size={15}/>Reopen
+                  </button>
+                )}
+              </>
             ) : (
               <>
                 {ELEVATED_ROLES.has(user?.role) && (
@@ -397,9 +463,11 @@ export default function IncidentDetail() {
                   <button className="idet-act-btn primary" onClick={() => navigate('/investigations')}>
                     <Icon name="investigation" size={15}/>Open investigation
                   </button>
-                ) : (
+                ) : ELEVATED_ROLES.has(user?.role) && (
                   <>
-                    <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no action</button>
+                    <button className="idet-act-btn" onClick={() => setModal('close')}>
+                      {r.track === 'C' ? 'Close — no action' : 'Close incident'}
+                    </button>
                     <button className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`} onClick={() => setModal('assign')}>
                       <Icon name="person" size={15}/>Assign
                     </button>
@@ -412,7 +480,47 @@ export default function IncidentDetail() {
             )}
           </div>
         </div>
+
+        {/* Reporter strip */}
+        <div className="idet-hero-people">
+          <div className="idet-hero-person">
+            <div className="idet-hero-person-av">{r.reporter_initials || '??'}</div>
+            <div>
+              <div className="idet-hero-person-label">Reporter</div>
+              <div className="idet-hero-person-name">{r.reporter_name}</div>
+            </div>
+          </div>
+          {r.assignee_name && (
+            <>
+              <div className="idet-hero-divider"/>
+              <div className="idet-hero-person">
+                <div className="idet-hero-person-av av-owner">{r.assignee_initials}</div>
+                <div>
+                  <div className="idet-hero-person-label">Owner</div>
+                  <div className="idet-hero-person-name">{r.assignee_name}</div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Pending closure request banner */}
+      {r.closure_request && ['ehs_manager', 'admin'].includes(user?.role) && r.closure_request.requested_by !== user?.id && (
+        <div className="idet-closure-banner">
+          <div className="idet-closure-banner-text">
+            <Icon name="clock" size={16}/>
+            <span>Closure approval requested by <strong>{r.closure_request.requested_by_name}</strong></span>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setModal('closure-approval')}>Review request</button>
+        </div>
+      )}
+
+      {r.reopen_count > 0 && r.status !== 'Closed' && (
+        <div className="idet-reopen-badge">
+          <Icon name="edit" size={14}/> Reopened {r.reopen_count} time{r.reopen_count > 1 ? 's' : ''} — {r.reopened_reason}
+        </div>
+      )}
 
       {/* Triage alert */}
       <div className={`idet-alert ${alertType}`}>
@@ -630,24 +738,88 @@ export default function IncidentDetail() {
 
         {/* Sidebar */}
         <div className="idet-side">
-          {/* Reporter */}
+          {/* Details — merged triage + quick facts */}
           <div className="idet-card">
             <div className="idet-card-h">
-              <div className="hicon hi-person"><Icon name="person" size={16}/></div>
-              Reporter
+              <div className="hicon hi-triage"><Icon name="incidents" size={16}/></div>
+              Details
             </div>
             <div className="idet-card-body">
-              <div className="idet-person">
-                <div className="idet-person-av">{r.reporter_initials || '??'}</div>
-                <div>
-                  <div className="idet-person-name">{r.reporter_name}</div>
-                  <div className="idet-person-sub">Reported {timeAgo(r.created_at)}</div>
+              <div className="idet-triage-rows">
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Status</span>
+                  <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
+                    <span className="st-dot"/>{r.status}
+                  </span>
                 </div>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Severity</span>
+                  <SevBadge s={r.severity}/>
+                </div>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Track</span>
+                  <TrackBadge t={r.track}/>
+                </div>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">OSHA recordable</span>
+                  <span className={`inc-card-status ${r.osha_recordable ? 'st-capa' : 'st-closed'}`}>
+                    <span className="st-dot"/>{r.osha_recordable ? 'Yes' : 'No'}
+                  </span>
+                </div>
+                {r.osha_recordable === 1 && (
+                  <>
+                    {r.osha_privacy_case === 1 && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">Privacy case</span>
+                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
+                      </div>
+                    )}
+                    {r.er_treated === 1 && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">ER treatment</span>
+                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
+                      </div>
+                    )}
+                    {r.hospitalized === 1 && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">Hospitalized</span>
+                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
+                      </div>
+                    )}
+                    {r.osha_work_related && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">Work-related</span>
+                        <span style={{ fontSize: 12, color: 'var(--sds-fg-secondary)' }}>{r.osha_work_related}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div className="idet-triage-divider"/>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Incident date</span>
+                  <span className="idet-fact-val">{formatDate(r.incident_datetime)}</span>
+                </div>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Days open</span>
+                  <span className="idet-fact-val">{r.status === 'Closed' ? '—' : `${daysOpen}d`}</span>
+                </div>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Site</span>
+                  <span className="idet-fact-val">{r.site_name}</span>
+                </div>
+                {(r.area || canEdit) && (
+                  <FactEdit label="Area" value={r.area} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('area', v)}/>
+                )}
+                {(r.department || canEdit) && (
+                  <FactEdit label="Department" value={r.department} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('department', v)}/>
+                )}
+                <div className="idet-triage-divider"/>
+                <ReferencedByCard entityType="incident" entityId={incident.id} compact />
               </div>
             </div>
           </div>
 
-          {/* Witnesses (UX-D) */}
+          {/* Witnesses */}
           <div className="idet-card">
             <div className="idet-card-h">
               <div className="hicon hi-person"><Icon name="person" size={16}/></div>
@@ -689,83 +861,6 @@ export default function IncidentDetail() {
                   ))}
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Triage state */}
-          <div className="idet-card">
-            <div className="idet-card-h">
-              <div className="hicon hi-triage"><Icon name="incidents" size={16}/></div>
-              Triage state
-            </div>
-            <div className="idet-card-body">
-              <div className="idet-triage-rows">
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">Status</span>
-                  <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
-                    <span className="st-dot"/>{r.status}
-                  </span>
-                </div>
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">Severity</span>
-                  <SevBadge s={r.severity}/>
-                </div>
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">Track</span>
-                  <TrackBadge t={r.track}/>
-                </div>
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">Owner</span>
-                  {r.assignee_initials ? (
-                    <div className="idet-person" style={{ gap: 8 }}>
-                      <div className="inc-card-avatar">{r.assignee_initials}</div>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--sds-fg-heading)' }}>{r.assignee_name}</span>
-                    </div>
-                  ) : (
-                    <span style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>Unassigned</span>
-                  )}
-                </div>
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">OSHA recordable</span>
-                  <span className={`inc-card-status ${r.osha_recordable ? 'st-capa' : 'st-closed'}`}>
-                    <span className="st-dot"/>{r.osha_recordable ? 'Yes' : 'No'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick facts */}
-          <div className="idet-card">
-            <div className="idet-card-h">
-              <div className="hicon hi-facts"><Icon name="info" size={16}/></div>
-              Quick facts
-            </div>
-            <div className="idet-card-body">
-              <div className="idet-facts">
-                <div className="idet-fact">
-                  <span className="idet-fact-label">Created</span>
-                  <span className="idet-fact-val">{formatDate(r.created_at)}</span>
-                </div>
-                <div className="idet-fact">
-                  <span className="idet-fact-label">Incident date</span>
-                  <span className="idet-fact-val">{formatDate(r.incident_datetime)}</span>
-                </div>
-                <div className="idet-fact">
-                  <span className="idet-fact-label">Days open</span>
-                  <span className="idet-fact-val">{r.status === 'Closed' ? '—' : `${daysOpen}d`}</span>
-                </div>
-                <div className="idet-fact">
-                  <span className="idet-fact-label">Site</span>
-                  <span className="idet-fact-val">{r.site_name}</span>
-                </div>
-                {(r.area || canEdit) && (
-                  <FactEdit label="Area" value={r.area} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('area', v)}/>
-                )}
-                {(r.department || canEdit) && (
-                  <FactEdit label="Department" value={r.department} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('department', v)}/>
-                )}
-              </div>
             </div>
           </div>
 
@@ -817,12 +912,17 @@ export default function IncidentDetail() {
         document.body
       )}
 
-      <ReferencedByCard entityType="incident" entityId={incident.id} />
-
       {/* Modals — portal to escape .page transform */}
       {modal === 'assign' && createPortal(<AssignModal incident={r} onCancel={() => setModal(null)} onConfirm={handleAssign}/>, document.body)}
       {modal === 'escalate' && createPortal(<EscalateModal incident={r} onCancel={() => setModal(null)} onConfirm={handleEscalate}/>, document.body)}
-      {modal === 'close' && createPortal(<CloseModal incident={r} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
+      {modal === 'close' && r.track === 'C' && createPortal(<CloseModal incident={r} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
+      {modal === 'close' && r.track !== 'C' && createPortal(
+        <ClosureChecklistModal incident={r} onCancel={() => setModal(null)} onClose={handleClose}
+          onRequestClosure={handleRequestClosure} onForceClose={handleForceClose} userRole={user?.role}/>, document.body)}
+      {modal === 'closure-approval' && r.closure_request && createPortal(
+        <ClosureApprovalModal incident={r} closureRequest={r.closure_request} onCancel={() => setModal(null)}
+          onApprove={handleApproveClosure} onReject={handleRejectClosure}/>, document.body)}
+      {modal === 'reopen' && createPortal(<ReopenModal incident={r} onCancel={() => setModal(null)} onConfirm={handleReopen}/>, document.body)}
       {modal === 'severity' && createPortal(<SeverityOverrideModal incident={r} onCancel={() => setModal(null)} onConfirm={handleSeverityOverride}/>, document.body)}
       {witnessModal === 'add' && createPortal(<WitnessModal incident={r} onCancel={() => setWitnessModal(null)} onConfirm={handleAddWitness}/>, document.body)}
       {witnessModal && witnessModal !== 'add' && createPortal(<WitnessModal incident={r} witness={witnessModal} onCancel={() => setWitnessModal(null)} onConfirm={handleUpdateWitness}/>, document.body)}

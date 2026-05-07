@@ -569,6 +569,8 @@ export default function InvestigationDetail() {
                     <span className="inv-kflag kf-riddor"><span className="kf-dot"/>Reportable</span>
                   </div>
                 )}
+                <div className="invd-summary-divider"/>
+                <ReferencedByCard entityType="investigation" entityId={inv.id} compact />
               </div>
             </div>
           </div>
@@ -624,6 +626,7 @@ export default function InvestigationDetail() {
               </div>
             </div>
           </div>
+
         </div>
       </div>
 
@@ -728,8 +731,6 @@ export default function InvestigationDetail() {
         </div>,
         document.body
       )}
-
-      <ReferencedByCard entityType="investigation" entityId={inv.id} />
 
       {/* Toast */}
       {toast && createPortal(

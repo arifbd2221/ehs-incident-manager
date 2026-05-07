@@ -5,6 +5,7 @@ import { getCapa, updateCapa, completeCapa, verifyCapa, rejectCapa } from '../..
 import Icon from '../../components/shared/Icon';
 import { timeAgo, formatDateShort } from '../../utils/time';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
+import UpdateProgressModal from './UpdateProgressModal';
 import '../../styles/capas.css';
 
 const LANE_LABELS = { pending: 'Pending', progress: 'In progress', verify: 'Pending verification', closed: 'Verified · Closed' };
@@ -27,6 +28,7 @@ export default function CAPADetail() {
   const [capa, setCapa] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [showProgressModal, setShowProgressModal] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -67,22 +69,12 @@ export default function CAPADetail() {
   const handleReject = async () => {
     try { await rejectCapa(c.id, { notes: 'Needs more work' }); showToast('Rejected — sent back.'); load(); } catch(e) { showToast(e.response?.data?.error || 'Failed.'); }
   };
-  const handleProgress = async (val) => {
-    try { await updateCapa(c.id, { progress: val }); load(); } catch {}
-  };
   const handleStart = async () => {
     try { await updateCapa(c.id, { status: 'progress' }); showToast('Started.'); load(); } catch {}
   };
 
-  const progressFillClass = c.overdue ? 'pf-overdue' : c.progress >= 100 ? 'pf-done' : '';
-
-  const milestones = [
-    ['Action drafted & reviewed', true],
-    ['Resources allocated', (c.progress || 0) >= 25],
-    ['Implementation in progress', (c.progress || 0) >= 50],
-    ['Owner marks complete', (c.progress || 0) >= 100],
-    ['Independent verification', c.status === 'closed'],
-  ];
+  const progressPct = c.progress || 0;
+  const progressFillClass = c.overdue ? 'pf-overdue' : progressPct >= 100 ? 'pf-done' : '';
 
   return (
     <div className="page capd">
@@ -91,61 +83,92 @@ export default function CAPADetail() {
         <Icon name="arrowL" size={14}/> Back to CAPAs
       </button>
 
-      {/* Header */}
-      <div className="capd-header">
-        <div className="capd-header-left">
-          <div className="capd-meta-row">
-            <span className="capd-number">{c.capa_number}</span>
-            <span style={{ color: 'var(--sds-border)' }}>·</span>
-            {c.source_type === 'proactive' ? (
-              <span className="capd-number">Proactive</span>
-            ) : c.source_type === 'incident' && c.incident_id ? (
-              <span className="capd-number">
-                From{' '}
-                <a className="capd-source-link" onClick={() => navigate(`/incidents/${c.incident_id}`)}>
-                  {c.incident_number}
-                </a>
+      {/* Hero header card */}
+      <div className="capd-hero">
+        <div className="capd-hero-top">
+          <div className="capd-hero-left">
+            <div className="capd-meta-row">
+              <span className="capd-number">{c.capa_number}</span>
+              <span style={{ color: 'var(--sds-border)' }}>·</span>
+              {c.source_type === 'proactive' ? (
+                <span className="capd-number">Proactive</span>
+              ) : c.source_type === 'incident' && c.incident_id ? (
+                <span className="capd-number">
+                  From{' '}
+                  <a className="capd-source-link" onClick={() => navigate(`/incidents/${c.incident_id}`)}>
+                    {c.incident_number}
+                  </a>
+                </span>
+              ) : c.investigation_id ? (
+                <span className="capd-number">
+                  From{' '}
+                  <a className="capd-source-link" onClick={() => navigate(`/investigations/${c.investigation_id}`)}>
+                    {c.investigation_number}
+                  </a>
+                </span>
+              ) : null}
+            </div>
+            <h1 className="capd-title">{c.title}</h1>
+            <div className="capd-badges">
+              <span className={`capa-kcard-type kt-${c.type}`}>
+                <span className="kt-dot"/>{c.type === 'corrective' ? 'Corrective' : 'Preventive'}
               </span>
-            ) : c.investigation_id ? (
-              <span className="capd-number">
-                From{' '}
-                <a className="capd-source-link" onClick={() => navigate(`/investigations/${c.investigation_id}`)}>
-                  {c.investigation_number}
-                </a>
+              <span className={`capa-kcard-lane kl-${c.status}`}>
+                <span className="kl-dot"/>{LANE_LABELS[c.status] || c.status}
               </span>
-            ) : null}
+              {c.overdue && <span className="capa-kcard-flag kf-overdue"><span className="kf-dot"/>Overdue</span>}
+            </div>
           </div>
-          <h1 className="capd-title">{c.title}</h1>
-          <div className="capd-badges">
-            <span className={`capa-kcard-type kt-${c.type}`}>
-              <span className="kt-dot"/>{c.type === 'corrective' ? 'Corrective' : 'Preventive'}
-            </span>
-            <span className={`capa-kcard-lane kl-${c.status}`}>
-              <span className="kl-dot"/>{LANE_LABELS[c.status] || c.status}
-            </span>
-            {c.overdue && <span className="capa-kcard-flag kf-overdue"><span className="kf-dot"/>Overdue</span>}
-            <span className="capd-owner-info">
-              Owner <b>{c.owner_name}</b> · Due <b>{formatDateShort(c.due_date)}</b>
-            </span>
+          <div className="capd-hero-actions">
+            {c.status === 'closed' && <button className="idet-act-btn" disabled>Closed</button>}
+            {c.status === 'verify' && (
+              <>
+                <button className="idet-act-btn" onClick={handleReject}>Reject — needs work</button>
+                <button className="idet-act-btn primary" onClick={handleVerify}><Icon name="check" size={14}/>Verify & close</button>
+              </>
+            )}
+            {c.status === 'progress' && (
+              <>
+                <button className="idet-act-btn" onClick={() => setShowProgressModal(true)}>
+                  <Icon name="edit" size={14}/>Update progress
+                </button>
+                <button className="idet-act-btn primary" onClick={handleComplete}><Icon name="check" size={14}/>Mark complete</button>
+              </>
+            )}
+            {c.status === 'pending' && <button className="idet-act-btn primary" onClick={handleStart}>Start working</button>}
           </div>
         </div>
-        <div className="capd-header-actions">
-          {c.status === 'closed' && <button className="idet-act-btn" disabled>Closed</button>}
-          {c.status === 'verify' && (
-            <>
-              <button className="idet-act-btn" onClick={handleReject}>Reject — needs work</button>
-              <button className="idet-act-btn primary" onClick={handleVerify}><Icon name="check" size={14}/>Verify & close</button>
-            </>
-          )}
-          {c.status === 'progress' && (
-            <>
-              <button className="idet-act-btn" onClick={() => handleProgress(Math.min(100, (c.progress || 0) + 25))}>
-                <Icon name="edit" size={14}/>Update progress
-              </button>
-              <button className="idet-act-btn primary" onClick={handleComplete}><Icon name="check" size={14}/>Mark complete</button>
-            </>
-          )}
-          {c.status === 'pending' && <button className="idet-act-btn primary" onClick={handleStart}>Start working</button>}
+
+        {/* Inline progress bar */}
+        <div className="capd-hero-progress">
+          <div className="capd-hero-progress-info">
+            <span className="capd-hero-pct">{progressPct}%</span>
+            <span className={`capd-hero-due ${c.overdue ? 'overdue' : ''}`}>
+              {c.status === 'closed' ? `Closed ${formatDateShort(c.closed_at)}` : `Due ${formatDateShort(c.due_date)}`}
+            </span>
+          </div>
+          <div className="capd-hero-bar">
+            <div className={`capd-hero-bar-fill ${progressFillClass}`} style={{ width: `${progressPct}%` }}/>
+          </div>
+        </div>
+
+        {/* People strip */}
+        <div className="capd-hero-people">
+          <div className="capd-hero-person">
+            <div className="capd-person-av av-owner">{c.owner_initials}</div>
+            <div>
+              <div className="capd-hero-person-label">Owner</div>
+              <div className="capd-hero-person-name">{c.owner_name}</div>
+            </div>
+          </div>
+          <div className="capd-hero-divider"/>
+          <div className="capd-hero-person">
+            <div className="capd-person-av av-verifier">{c.verifier_initials}</div>
+            <div>
+              <div className="capd-hero-person-label">Verifier</div>
+              <div className="capd-hero-person-name">{c.verifier_name}</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -164,7 +187,6 @@ export default function CAPADetail() {
 
       {/* Grid */}
       <div className="capd-grid">
-        {/* Main */}
         <div className="capd-main">
           {/* Description */}
           <div className="capd-card">
@@ -174,35 +196,6 @@ export default function CAPADetail() {
             </div>
             <div className="capd-card-body">
               <p className="capd-desc-text">{c.description || c.title}</p>
-            </div>
-          </div>
-
-          {/* Progress */}
-          <div className="capd-card">
-            <div className="capd-card-h">
-              <div className="hicon hi-progress"><Icon name="check" size={16}/></div>
-              Progress
-            </div>
-            <div className="capd-card-body">
-              <div className="capd-progress-header">
-                <span className="capd-progress-pct">{c.progress || 0}% complete</span>
-                <span className={`capd-progress-due ${c.overdue ? 'overdue' : ''}`}>
-                  {c.status === 'closed' ? `Closed ${formatDateShort(c.closed_at)}` : `Due ${formatDateShort(c.due_date)}`}
-                </span>
-              </div>
-              <div className="capd-progress-track">
-                <div className={`capd-progress-fill ${progressFillClass}`} style={{ width: `${c.progress || 0}%` }}/>
-              </div>
-              <div className="capd-checklist">
-                {milestones.map(([label, done], i) => (
-                  <div key={i} className="capd-check-item">
-                    <div className={`capd-check-dot ${done ? 'done' : 'pending'}`}>
-                      {done && <Icon name="check" size={12}/>}
-                    </div>
-                    <span className={`capd-check-label ${done ? 'done' : ''}`}>{label}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
 
@@ -225,41 +218,48 @@ export default function CAPADetail() {
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No evidence uploaded yet.</p>
+                <div className="capd-empty-evidence">
+                  <Icon name="upload" size={20}/>
+                  <span>No evidence uploaded yet</span>
+                </div>
               )}
+            </div>
+          </div>
+
+          {/* Activity — full width in main */}
+          <div className="capd-card">
+            <div className="capd-card-h">
+              <div className="hicon hi-activity"><Icon name="capa" size={16}/></div>
+              Activity timeline
+            </div>
+            <div className="capd-card-body">
+              <div className="capd-timeline">
+                {(c.activity || []).map((e, i) => (
+                  <div className="capd-tl-item" key={i}>
+                    <div className={`capd-tl-dot ${tlDotClass(e.action)}`}>
+                      <Icon name={tlIcon(e.action)} size={13}/>
+                    </div>
+                    <div className="capd-tl-body">
+                      <div className="tl-who">{e.user_name || 'System'}</div>
+                      <div className="tl-what">{e.description}</div>
+                      {(() => { try { const m = typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata; return m?.note ? <div className="tl-note">{m.note}</div> : null; } catch { return null; } })()}
+                      <div className="tl-when">{timeAgo(e.created_at)}</div>
+                    </div>
+                  </div>
+                ))}
+                {(c.activity || []).length === 0 && (
+                  <div className="capd-empty-evidence">
+                    <Icon name="clock" size={20}/>
+                    <span>No activity yet</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Sidebar */}
+        {/* Sidebar — details only */}
         <div className="capd-side">
-          {/* People */}
-          <div className="capd-card">
-            <div className="capd-card-h">
-              <div className="hicon hi-people"><Icon name="person" size={16}/></div>
-              People
-            </div>
-            <div className="capd-card-body">
-              <div className="capd-people-list">
-                <div className="capd-person">
-                  <div className="capd-person-av av-owner">{c.owner_initials}</div>
-                  <div>
-                    <div className="capd-person-name">Owner · {c.owner_name}</div>
-                    <div className="capd-person-role">Responsible for executing the action</div>
-                  </div>
-                </div>
-                <div className="capd-person">
-                  <div className="capd-person-av av-verifier">{c.verifier_initials}</div>
-                  <div>
-                    <div className="capd-person-name">Verifier · {c.verifier_name}</div>
-                    <div className="capd-person-role">Confirms effectiveness — cannot be the owner</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Details */}
           <div className="capd-card">
             <div className="capd-card-h">
               <div className="hicon hi-details"><Icon name="info" size={16}/></div>
@@ -275,7 +275,7 @@ export default function CAPADetail() {
                 </div>
                 <div className="capd-detail-row">
                   <span className="capd-detail-label">Source</span>
-                  <span className="capd-detail-val" style={{ fontFamily: 'SF Mono, Menlo, monospace', fontSize: 12 }}>
+                  <span className="capd-detail-val" style={{ fontFamily: "'SF Mono', Menlo, monospace", fontSize: 12 }}>
                     {c.source_type === 'proactive' ? (
                       'Proactive'
                     ) : c.source_type === 'incident' && c.incident_id ? (
@@ -305,44 +305,25 @@ export default function CAPADetail() {
                 </div>
                 <div className="capd-detail-row">
                   <span className="capd-detail-label">Progress</span>
-                  <span className="capd-detail-val">{c.progress || 0}%</span>
+                  <span className="capd-detail-val">{progressPct}%</span>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Activity */}
-          <div className="capd-card">
-            <div className="capd-card-h">
-              <div className="hicon hi-activity"><Icon name="capa" size={16}/></div>
-              Activity timeline
-            </div>
-            <div className="capd-card-body">
-              <div className="capd-timeline">
-                {(c.activity || []).map((e, i) => (
-                  <div className="capd-tl-item" key={i}>
-                    <div className={`capd-tl-dot ${tlDotClass(e.action)}`}>
-                      <Icon name={tlIcon(e.action)} size={13}/>
-                    </div>
-                    <div className="capd-tl-body">
-                      <div className="tl-who">{e.user_name || 'System'}</div>
-                      <div className="tl-what">{e.description}</div>
-                      <div className="tl-when">{timeAgo(e.created_at)}</div>
-                    </div>
-                  </div>
-                ))}
-                {(c.activity || []).length === 0 && (
-                  <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No activity yet</p>
-                )}
+                <div className="capd-detail-divider"/>
+                <ReferencedByCard entityType="capa" entityId={capa.id} compact />
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <ReferencedByCard entityType="capa" entityId={capa.id} />
+      {showProgressModal && createPortal(
+        <UpdateProgressModal
+          capa={c}
+          onCancel={() => setShowProgressModal(false)}
+          onSaved={() => { setShowProgressModal(false); showToast('Progress updated.'); load(); }}
+        />,
+        document.body
+      )}
 
-      {/* Toast */}
       {toast && createPortal(
         <div className="capd-toast" role="status" aria-live="polite">
           <span className="toast-check"><Icon name="check" size={12}/></span>

@@ -9,6 +9,13 @@ export const escalateIncident = (id, data) => api.post(`/incidents/${id}/escalat
 export const closeIncident = (id, data) => api.post(`/incidents/${id}/close`, data).then(r => r.data);
 export const verifyRecordability = (id, gates) => api.post(`/incidents/${id}/recordability-verify`, gates).then(r => r.data);
 
+export const getClosureChecklist = (id) => api.get(`/incidents/${id}/closure-checklist`).then(r => r.data);
+export const requestClosure = (id, data) => api.post(`/incidents/${id}/closure-request`, data).then(r => r.data);
+export const approveClosure = (id, requestId, data) => api.post(`/incidents/${id}/closure-request/${requestId}/approve`, data).then(r => r.data);
+export const rejectClosure = (id, requestId, data) => api.post(`/incidents/${id}/closure-request/${requestId}/reject`, data).then(r => r.data);
+export const reopenIncident = (id, data) => api.post(`/incidents/${id}/reopen`, data).then(r => r.data);
+export const forceCloseIncident = (id, data) => api.post(`/incidents/${id}/close`, { ...data, force: true }).then(r => r.data);
+
 export const uploadAttachments = (entityType, entityId, files) => {
   const form = new FormData();
   form.append('entity_type', entityType);

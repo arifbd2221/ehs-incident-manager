@@ -38,7 +38,13 @@ router.get('/osha-300', (req, res) => {
     LEFT JOIN sites s ON s.id = o.site_id
     WHERE ${where.join(' AND ')}
     ORDER BY o.case_number DESC
-  `).all(...params);
+  `).all(...params).map(e => {
+    if (e.is_privacy_case) {
+      e.employee_name = 'Privacy Case';
+      e.job_title = '';
+    }
+    return e;
+  });
 
   const site = site_id ? db.prepare('SELECT * FROM sites WHERE id = ?').get(Number(site_id)) : null;
 
@@ -179,6 +185,57 @@ router.post('/osha-300a/certify', (req, res) => {
   res.status(201).json(cert);
 });
 
+router.post('/osha-300', (req, res) => {
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can create manual 300 log entries.' });
+  }
+  const { site_id, employee_name, job_title, injury_date, location, description,
+    classification, days_away_count, days_restricted_count, injury_type, is_privacy_case } = req.body;
+
+  if (!site_id || !employee_name || !injury_date) {
+    return res.status(400).json({ error: 'site_id, employee_name, and injury_date are required.' });
+  }
+
+  const site = db.prepare('SELECT id FROM sites WHERE id = ? AND org_id = ?').get(Number(site_id), req.user.org_id);
+  if (!site) return res.status(404).json({ error: 'Site not found in your organization.' });
+
+  const year = new Date(injury_date).getFullYear();
+  const maxCase = db.prepare('SELECT MAX(case_number) as m FROM osha_300_log WHERE site_id = ? AND calendar_year = ?').get(Number(site_id), year);
+  const caseNum = (maxCase?.m || 0) + 1;
+
+  const cls = classification || 'other_recordable';
+
+  const result = db.prepare(`
+    INSERT INTO osha_300_log (org_id, site_id, incident_id, calendar_year, case_number,
+      employee_name, job_title, injury_date, location, description,
+      classification_death, classification_days_away, classification_job_transfer, classification_other,
+      days_away_count, days_restricted_count, injury_type, is_privacy_case)
+    VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    req.user.org_id, Number(site_id), year, caseNum,
+    employee_name, job_title || null, injury_date, location || null, description || null,
+    cls === 'death' ? 1 : 0,
+    cls === 'days_away' ? 1 : 0,
+    cls === 'job_transfer' ? 1 : 0,
+    cls === 'other_recordable' ? 1 : 0,
+    Number(days_away_count) || 0, Number(days_restricted_count) || 0,
+    injury_type || null, is_privacy_case ? 1 : 0,
+  );
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'system',
+    entity_id: null,
+    action: 'osha_300_manual_entry',
+    description: `manually added case #${caseNum} to OSHA 300 log for CY ${year}`,
+    user_id: req.user.id,
+    metadata: { osha_300_log_id: result.lastInsertRowid, site_id: Number(site_id), year },
+  });
+
+  const entry = db.prepare('SELECT * FROM osha_300_log WHERE id = ?').get(result.lastInsertRowid);
+  res.status(201).json(entry);
+});
+
 router.get('/osha-301/:incidentId', (req, res) => {
   const incident = db.prepare(`
     SELECT i.*, s.name as site_name, s.address as site_address,
@@ -207,6 +264,7 @@ router.get('/osha-301/:incidentId', (req, res) => {
       date: incident.incident_datetime,
       location: `${incident.area || ''} ${incident.specific_location || ''}`.trim(),
       site: incident.site_name,
+      site_address: incident.site_address,
       description: incident.description,
       title: incident.title,
     },
@@ -223,6 +281,16 @@ router.get('/osha-301/:incidentId', (req, res) => {
       date_of_death: incident.osha_date_of_death,
     },
     treatment: td.treatment || td.treatments || [],
+    physician: {
+      name: td.physician_name || '',
+      phone: td.physician_phone || '',
+      facility_name: td.facility_name || '',
+      facility_address: td.facility_address || '',
+    },
+    er_treated: incident.er_treated || 0,
+    hospitalized: incident.hospitalized || 0,
+    hospitalization_date: incident.hospitalization_date || '',
+    work_related: incident.osha_work_related || '',
     type_data: td,
   });
 });

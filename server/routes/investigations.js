@@ -3,6 +3,7 @@ import db from '../db/connection.js';
 import { nextInvestigationNumber, nextCapaNumber } from '../services/numbering.js';
 import { listLinksTouching } from '../services/entity_links.js';
 import { writeActivity } from '../services/activity_log.js';
+import { notifyUser } from '../services/notifications.js';
 
 const router = Router();
 
@@ -270,6 +271,13 @@ router.post('/:id/assign-capa', (req, res) => {
     .run(inv.org_id, inv.id, `assigned ${capaNumber} to ${owner?.initials} · due ${due_date}`, req.user.id);
   db.prepare(`INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id) VALUES (?, 'capa', ?, 'created', ?, ?)`)
     .run(inv.org_id, result.lastInsertRowid, `created from ${inv.investigation_number}`, req.user.id);
+
+  notifyUser({
+    orgId: inv.org_id, userId: owner_id, type: 'capa_assigned',
+    title: `CAPA assigned to you — ${capaNumber}`,
+    body: `${title} · due ${due_date}`,
+    severity: 'warn',
+  });
 
   const capa = db.prepare('SELECT * FROM capas WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(capa);

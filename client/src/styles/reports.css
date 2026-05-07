@@ -921,3 +921,58 @@
   font-size: 12px;
   color: var(--sds-fg-tertiary);
 }
+
+/* OSHA 301 Form */
+.rpt-301-form { padding: 0 20px 20px; }
+.rpt-301-section {
+  border: 1px solid var(--sds-border);
+  border-radius: var(--sds-radius-md);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.rpt-301-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sds-fg-heading);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sds-border);
+}
+.rpt-301-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+}
+.rpt-301-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rpt-301-wide { grid-column: 1 / -1; margin-top: 8px; }
+.rpt-301-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sds-fg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.rpt-301-val {
+  font-size: 13px;
+  color: var(--sds-fg-primary);
+  min-height: 20px;
+}
+
+/* OSHA 300 privacy row */
+.privacy-row { background: var(--sds-bg-surface-alt); }
+.privacy-row .cell-name { font-style: italic; color: var(--sds-fg-tertiary); }
+
+/* OSHA 300 day count cells */
+.cell-num {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* OSHA 301 report type card */
+.rt-osha301 { --rt-accent: #7c3aed; }
+.rt-osha301.active { border-color: #7c3aed; background: rgba(124, 58, 237, 0.04); }
