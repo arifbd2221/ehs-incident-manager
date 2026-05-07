@@ -159,15 +159,14 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 
 ## State
 
-- **Branch**: `backend` — pushed through `d38cbc0` (P3-N1 + main merge). Working tree at end of session has 4 stacked uncommitted chunks on top: P3-L1 prototype, P3-A1 chunks 1+2+3+4. PR #6 was merged earlier in this session (`52479ba`).
+- **Branch**: `backend` — pushed through `8b3359d` (P3-L1 follow-ups). All work this session committed and pushed. Working tree clean.
 - **Phase 2**: code complete. Only F6.2 (manual demo walkthrough) outstanding.
 - **Wave 7**: E7.1 done.
-- **Productionization backlog** (UX-A through UX-H): A, B, G, H done. C, D, E, F pending.
+- **Productionization backlog** (UX-A through UX-H): **A, B, D, E, F, G, H done. C done except body-parts editor (deferred — needs BodyMap3D integration outside the wizard).**
 - **BUG-001**: closed.
-- **Phase 3** (P3-* items): **N1 (site detail + hierarchy, this session), N2 (folders), N3 (preview), L2 (media on investigations), OP2 (inspections), OP3 (templates) done.**
-  - **In code, uncommitted at end of session:** L1 (back-tracking BE service + ReferencedByCard on 4 detail pages — inspections + documents detail are open follow-ups under L1); A1 (4 chunks: migrations 013/014, `services/activity_log.js`, 9 mutation files wired, audit-log export with multi-select filters + role gate at ehs_officer/ehs_manager/admin).
-  - **Open** (not started): O1, O2, AI1, AI2, **AI3** (video intake — new), OP1, OP4, **OP5** (risk register — new), OB1, OB2, OB3, **RG1** (Australian regulation — new).
-- **Migrations applied**: 001–014 (008 templates+inspections + 009 template_versioning from main, 010 document_folders earlier, 011 dashboard_layout from main, 012 site_hierarchy this session for P3-N1, 013 activity_log_widen + 014 activity_log_admin_types this session for P3-A1).
+- **Phase 3** (P3-* items): **N1, N2, N3, L1, L2, A1, OP2, OP3 all done.**
+  - **Open** (not started): O1, O2, AI1, AI2, AI3 (video intake), OP1, OP4, OP5 (risk register), OB1, OB2, OB3, RG1 (Australian regulation).
+- **Migrations applied**: 001–014 (008 templates+inspections + 009 template_versioning from main, 010 document_folders, 011 dashboard_layout from main, 012 site_hierarchy, 013 activity_log_widen + 014 activity_log_admin_types).
 - **Running**: dev servers via `cd server && node --watch index.js` (BE :3001) and `cd client && npm run dev` (FE :5173). Demo accounts in seed.
 
 ## Most recent session — 2026-05-06 (evening) — P3-N1 + L1 prototype + A1 foundation + new roadmap items
@@ -208,18 +207,29 @@ Session shipped the document folder system, fixed the demo seed's missing PDFs, 
 
 Two PRs merged into `main`: **#5** (folder system + seed fix + investigation link-modal repair, merged at `18940c7`) and **#6** (L2 media + search fix + worker-upload alignment, status open at end of session — merge if not already). After PR #6 lands, main = backend.
 
+## Most recent session — 2026-05-07 — UX backlog cleanup + P3-L1 closure
+
+Session shipped the entire remaining UX backlog (UX-C/D/E + ticked F) and closed P3-L1 with link/unlink + missing CSS. Pulled `origin/main` mid-session bringing investigations redesign + ComboBox/SmartTextarea components + accessibility passes.
+
+| Area | What changed | Commit |
+|---|---|---|
+| Merge from main | 7 commits from main folded in (investigations redesign `0fb699c`, kanban hover-fix `79d66e9`, ComboBox + SmartTextarea `1782fa6`, accessibility `da194fd`, etc.). Used `-X theirs` so main's UI/UX wins on conflicting hunks; backend feature additions (ReferencedByCard mounts, audit-log card, site-detail page, `/admin/sites` page tip) survived as non-conflicting hunks. | `f313722` |
+| UX-E severity override modal | New `SeverityOverrideModal.jsx` mirrors AssignModal's `idet-modal-*` pattern (zero new CSS). "Override severity" trigger in incident detail header-actions row, gated to elevated. Sev `<select>` + required-reason textarea; BE already wired severity_override / _by / _reason and writes severity_overridden activity_log row. | `dffaf1f` |
+| UX-C inline-edit description / area / department | `<DescEdit>` + `<FactEdit>` components in IncidentDetail. Field-level edit affordance via small `idet-edit-trigger` pencil. Department added as a first-class fact-row. **Closed compliance gap**: PATCH /incidents/:id now writes incident_updated activity_log row with field-level diff metadata, so non-restricted edits aren't silent (OSHA 1904.33 amendment trail). New action wired into timeline icon helpers. Body-parts editor deferred. | `ff465d8` |
+| UX-D witnesses post-creation | BE: 3 new routes (POST/PATCH/DELETE `/incidents/:id/witnesses[/:wid]`), all gated to elevated, all logging witness_added / witness_updated / witness_removed with full data + diff in metadata. FE: dual-purpose `WitnessModal.jsx`, Witnesses card placed between Reporter and Triage state in the sidebar, hover-reveal × on rows for elevated. Page-scoped `.idet-witness-*` CSS. | `d87ea04` |
+| P3-L1 follow-ups | `inspection` added to `LINKABLE_TYPES` + `PARENT_TABLES`. New `inspectionsReferencing()` (poly-only) + `assetsReferencing()` (uses incidents.asset_id direct FK + poly). Six buckets total. Every row carries `link_id` (NULL on direct-FK). `<ReferencedByCard>` gains "+ Link" header button + hover-reveal × per poly row. New `<AddLinkModal>` (type chips + debounced search + click-to-link, sends both `search` and `q` params because endpoints are inconsistent — bug caught in testing). Mounted on InspectionReport.jsx and inside the document preview modal. Document rows deep-link to `/documents?folder=N` (DocumentsList consumes via `useSearchParams` and walks parent_id for breadcrumb). **Retro-added `.refby-*` CSS (~140 lines) — original P3-L1 ship had row classes referenced in JSX with zero CSS anywhere in the tree, making click affordances invisible.** New `.alm-*` (~155 lines) for the modal. | `8b3359d` |
+| Roadmap | Ticked UX-C, UX-D, UX-E, UX-F (already-implemented), P3-L1; itemized P3-L1 follow-up sub-chunks; updated `## State` section to reflect this session's pushes. | this entry |
+
 ## Quick re-orientation for a fresh session
 
 1. Read this `roadmap.md` first — full status with commit SHAs.
 2. Read `plan-phase-2.md` if you need design rationale for any Phase-2 wave.
 3. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System-project-ehs-incident-manager/memory/MEMORY.md` for user preferences and project context.
-4. `git fetch origin && git status` — local `backend` is `d38cbc0` plus 4 uncommitted stacked chunks (P3-L1 + P3-A1 chunks 1–4). `origin/backend` is at `d38cbc0`.
+4. `git fetch origin && git status` — `backend` should be at `8b3359d`, working tree clean. `origin/backend == backend`.
 5. Boot: `cd server && node --watch index.js` and `cd client && npm run dev`. Login as `elena@sdsmanager.com / password123`.
-6. **What's likely next**:
-   - **First**: commit the 4 stacked chunks once user has clicked through — order: L1, A1-1, A1-2, A1-3 (combined with chunk 4 polish since they're cohesive). Hard-refresh the browser before judging the new MultiPicker UI.
-   - **Then close P3-L1 properly**: add inspection back-tracking (extend `LINKABLE_TYPES` + decide what links to what); add a `/documents/:id` detail page so the Refby card has a home for documents.
-   - **UX-C/D/E/F** productionization backlog (incident editable / witnesses / severity override / global search) — BE already wires C/D/E.
-   - **Remaining P3 themes** in user-priority order: org/multi-tenancy (O1/O2), AI assistance (AI1/AI2/AI3 video), ops (OP1 maintenance / OP4 scheduling / OP5 risk register), regulatory (RG1 Australia), onboarding (OB1/OB2/OB3).
+6. **What's likely next** (in user-priority order):
+   - **Body-parts editor** to fully close UX-C — needs BodyMap3D integration outside the wizard flow.
+   - **Remaining P3 themes**: org/multi-tenancy (O1/O2), AI assistance (AI1/AI2/AI3 video), ops (OP1 maintenance / OP4 scheduling / OP5 risk register), regulatory (RG1 Australia), onboarding (OB1/OB2/OB3).
 7. **Operating norms** (per user feedback during Phase 2 + Phase 3):
    - Treat as an actual app, not hackathon polish.
    - Each task = one focused commit + push to `origin/backend`.
