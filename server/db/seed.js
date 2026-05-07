@@ -21,6 +21,7 @@
 import db from './connection.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { writeActivity } from '../services/activity_log.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -108,8 +109,15 @@ if (force && exists > 0) {
 console.log('Seeding database...');
 
 db.transaction(() => {
-  // ----- Organization -----
-  const orgId = db.prepare("INSERT INTO organizations (name) VALUES ('SDS Manager Inc.')").run().lastInsertRowid;
+  // ----- Organization (with onboarding-showcase fields backfilled) -----
+  const orgId = db.prepare(
+    `INSERT INTO organizations (name, country, industry_sector, naics_code, compliance_frameworks, company_size)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(
+    'SDS Manager Inc.', 'US', 'Manufacturing', '325199',
+    JSON.stringify(['osha_300', 'osha_300a', 'osha_301', 'riddor_f2508']),
+    '201-1000',
+  ).lastInsertRowid;
 
   // ----- Sites — three so the dashboard has multi-site rollup -----
   const clevelandId = db.prepare(
@@ -486,6 +494,45 @@ db.transaction(() => {
   actIns.run(orgId, 'capa', null, 'created', 'created proactive CAPA CAPA-044 (compressed-air audit)', elenaId, '2026-04-30T10:00:00');
 })();
 
+// =====================================================================
+// Second demo org — empty new-tenant onboarding showcase (P3-O1).
+// No sites/assets/incidents → login as the Acme founder lands on an empty
+// dashboard, demonstrating the post-signup experience for a fresh tenant.
+// =====================================================================
+db.transaction(() => {
+  const acmeOrgId = db.prepare(
+    `INSERT INTO organizations (name, country, industry_sector, naics_code, compliance_frameworks, company_size)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(
+    'Acme Manufacturing', 'US', 'Construction', null,
+    JSON.stringify(['osha_300', 'osha_300a', 'osha_301']),
+    '51-200',
+  ).lastInsertRowid;
+
+  const acmePw = bcrypt.hashSync('password123', 10);
+  const acmeFounderId = db.prepare(
+    'INSERT INTO users (org_id, site_id, email, password_hash, name, initials, role, department, job_title) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(acmeOrgId, 'acme@sdsmanager.com', acmePw, 'Aisha Carter', 'AC', 'admin', 'Leadership', 'Founder').lastInsertRowid;
+
+  writeActivity({
+    org_id: acmeOrgId,
+    entity_type: 'organization',
+    entity_id: acmeOrgId,
+    action: 'org_created',
+    description: 'created organization Acme Manufacturing',
+    user_id: acmeFounderId,
+    metadata: {
+      org_name: 'Acme Manufacturing',
+      country: 'US',
+      industry_sector: 'Construction',
+      naics_code: null,
+      compliance_frameworks: ['osha_300', 'osha_300a', 'osha_301'],
+      company_size: '51-200',
+      founder_email: 'acme@sdsmanager.com',
+    },
+  });
+})();
+
 console.log('Seed complete.');
 console.log('Demo users (password: password123):');
 console.log('  elena@sdsmanager.com   (EHS Lead)');
@@ -493,6 +540,7 @@ console.log('  marcus@sdsmanager.com  (Supervisor)');
 console.log('  james@sdsmanager.com   (EHS Manager — Sheffield)');
 console.log('  mehta@sdsmanager.com   (Occupational Health)');
 console.log('  wendy@sdsmanager.com   (Worker — Press Operator)');
+console.log('  acme@sdsmanager.com    (Acme Manufacturing founder — empty new-tenant demo)');
 
 // Wave 6 risk #5 mitigation: clean checkpoint before exit so the boot
 // process never opens with WAL contention from the seed transaction.

@@ -2,6 +2,7 @@ import api from './client';
 
 export const login = (email, password) => api.post('/auth/login', { email, password }).then(r => r.data);
 export const register = (data) => api.post('/auth/register', data).then(r => r.data);
+export const signupOrg = (data) => api.post('/auth/signup-org', data).then(r => r.data);
 export const getMe = () => api.get('/auth/me').then(r => r.data);
 export const getSites = () => api.get('/auth/sites').then(r => r.data);
 export const updateProfile = (data) => api.patch('/auth/profile', data).then(r => r.data);

@@ -28,6 +28,7 @@ const NAV = [
   { id: 'inspections', path: '/inspections', icon: 'shield', label: 'Inspections', color: '#00897B' },
   { id: 'reports', path: '/reports', icon: 'reports', label: 'Reports', color: '#5C6BC0' },
   { id: 'sites', path: '/admin/sites', icon: 'factory', label: 'Sites', color: '#78909C' },
+  { id: 'members', path: '/admin/members', icon: 'people', label: 'Members', color: '#9575CD' },
 ];
 
 export default function Sidebar() {

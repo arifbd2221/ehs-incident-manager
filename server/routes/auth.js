@@ -3,15 +3,50 @@ import bcrypt from 'bcryptjs';
 import db from '../db/connection.js';
 import { generateToken, authMiddleware } from '../middleware/auth.js';
 import { writeActivity, diffFields } from '../services/activity_log.js';
+import { validEmail, checkLen, checkPassword, NAME_MAX, NAICS_MAX } from '../services/validators.js';
 
 const router = Router();
 
 const PROFILE_AUDIT_FIELDS = ['name', 'department', 'job_title', 'site_id'];
 
-router.post('/register', (req, res) => {
-  const { email, password, name, role, site_id, department, job_title } = req.body;
-  if (!email || !password || !name) {
-    return res.status(400).json({ error: 'Email, password, and name are required' });
+// Public sign-up of a brand-new organization. Founder gets role='admin'.
+// One transaction so a half-written org never exists.
+// Whitelist of valid framework codes — keeps bad payloads out of the DB.
+const VALID_FRAMEWORKS = new Set([
+  'osha_300', 'osha_300a', 'osha_301',
+  'riddor_f2508', 'safework_nsw', 'generic',
+]);
+
+router.post('/signup-org', (req, res) => {
+  const {
+    org_name, country, industry_sector, compliance_frameworks, company_size, naics_code,
+    email, password, name, job_title, department,
+  } = req.body;
+
+  if (!org_name || !org_name.trim()) return res.status(400).json({ error: 'Organization name is required' });
+  if (!country) return res.status(400).json({ error: 'Country is required' });
+  if (!industry_sector) return res.status(400).json({ error: 'Industry sector is required' });
+  if (!Array.isArray(compliance_frameworks) || compliance_frameworks.length === 0) {
+    return res.status(400).json({ error: 'Select at least one compliance framework' });
+  }
+  const cleanFrameworks = compliance_frameworks.filter(f => VALID_FRAMEWORKS.has(f));
+  if (cleanFrameworks.length === 0) {
+    return res.status(400).json({ error: 'No valid compliance frameworks selected' });
+  }
+  if (!company_size) return res.status(400).json({ error: 'Company size is required' });
+  if (!email || !password || !name) return res.status(400).json({ error: 'Email, password, and name are required' });
+  if (!validEmail(email)) return res.status(400).json({ error: 'Email format is invalid' });
+  const pwErr = checkPassword(password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
+  for (const [val, label] of [
+    [org_name, 'Organization name'], [name, 'Name'],
+    [department, 'Department'], [job_title, 'Job title'],
+  ]) {
+    const e = checkLen(val, NAME_MAX, label);
+    if (e) return res.status(400).json({ error: e });
+  }
+  if (naics_code && checkLen(naics_code, NAICS_MAX, 'NAICS code')) {
+    return res.status(400).json({ error: `NAICS code is too long (max ${NAICS_MAX} characters)` });
   }
 
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
@@ -19,32 +54,61 @@ router.post('/register', (req, res) => {
 
   const passwordHash = bcrypt.hashSync(password, 10);
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const frameworksJson = JSON.stringify(cleanFrameworks);
 
-  let orgId = db.prepare('SELECT id FROM organizations LIMIT 1').get()?.id;
-  if (!orgId) {
-    const result = db.prepare('INSERT INTO organizations (name) VALUES (?)').run('SDS Manager');
-    orgId = result.lastInsertRowid;
-  }
+  const txn = db.transaction(() => {
+    const orgRes = db.prepare(
+      `INSERT INTO organizations (name, country, industry_sector, naics_code, compliance_frameworks, company_size)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(org_name.trim(), country, industry_sector, naics_code || null, frameworksJson, company_size);
+    const orgId = orgRes.lastInsertRowid;
 
-  const result = db.prepare(`
-    INSERT INTO users (org_id, site_id, email, password_hash, name, initials, role, department, job_title)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(orgId, site_id || null, email, passwordHash, name, initials, role || 'worker', department || null, job_title || null);
+    const userRes = db.prepare(
+      `INSERT INTO users (org_id, site_id, email, password_hash, name, initials, role, department, job_title)
+       VALUES (?, NULL, ?, ?, ?, ?, 'admin', ?, ?)`
+    ).run(orgId, email, passwordHash, name, initials, department || null, job_title || null);
 
-  const user = db.prepare('SELECT id, org_id, site_id, email, name, initials, role, department, job_title FROM users WHERE id = ?').get(result.lastInsertRowid);
-  const token = generateToken(user);
-
-  writeActivity({
-    org_id: user.org_id,
-    entity_type: 'user',
-    entity_id: user.id,
-    action: 'user_registered',
-    description: `registered ${user.name} (${user.email})`,
-    user_id: user.id,
-    metadata: { role: user.role, site_id: user.site_id, department: user.department },
+    return { orgId, userId: userRes.lastInsertRowid };
   });
 
+  const { orgId, userId } = txn();
+
+  const user = db.prepare(`
+    SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
+           u.department, u.job_title, u.created_at,
+           o.name AS org_name, o.country, o.industry_sector, o.naics_code,
+           o.compliance_frameworks, o.company_size
+    FROM users u JOIN organizations o ON o.id = u.org_id
+    WHERE u.id = ?
+  `).get(userId);
+  user.compliance_frameworks = cleanFrameworks;
+
+  writeActivity({
+    org_id: orgId,
+    entity_type: 'organization',
+    entity_id: orgId,
+    action: 'org_created',
+    description: `created organization ${org_name}`,
+    user_id: userId,
+    metadata: {
+      org_name: org_name.trim(),
+      country, industry_sector, naics_code: naics_code || null,
+      compliance_frameworks: cleanFrameworks, company_size,
+      founder_email: email,
+    },
+  });
+
+  const token = generateToken(user);
   res.status(201).json({ token, user });
+});
+
+// Public registration is disabled. New users come from org sign-up (this slice)
+// or invitations (slice 2). Kept as a clear 403 instead of a 404 so existing
+// callers see the disabled message.
+router.post('/register', (_req, res) => {
+  return res.status(403).json({
+    error: 'Public registration is disabled. Create a new organization at /signup, or ask your admin for an invite.',
+  });
 });
 
 router.post('/login', (req, res) => {
@@ -53,28 +117,40 @@ router.post('/login', (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1').get(email);
+  const user = db.prepare(`
+    SELECT u.*, o.name AS org_name, o.country, o.industry_sector, o.naics_code,
+           o.compliance_frameworks, o.company_size
+    FROM users u JOIN organizations o ON o.id = u.org_id
+    WHERE u.email = ? AND u.is_active = 1
+  `).get(email);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
   const { password_hash, ...safeUser } = user;
   if (safeUser.dashboard_layout) safeUser.dashboard_layout = JSON.parse(safeUser.dashboard_layout);
+  safeUser.compliance_frameworks = safeUser.compliance_frameworks ? JSON.parse(safeUser.compliance_frameworks) : [];
   const token = generateToken(safeUser);
   res.json({ token, user: safeUser });
 });
 
 router.get('/me', authMiddleware, (req, res) => {
-  const user = db.prepare(
-    'SELECT id, org_id, site_id, email, name, initials, role, department, job_title, created_at, dashboard_layout FROM users WHERE id = ?'
-  ).get(req.user.id);
+  const user = db.prepare(`
+    SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
+           u.department, u.job_title, u.created_at, u.dashboard_layout,
+           o.name AS org_name, o.country, o.industry_sector, o.naics_code,
+           o.compliance_frameworks, o.company_size
+    FROM users u JOIN organizations o ON o.id = u.org_id
+    WHERE u.id = ?
+  `).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   if (user.dashboard_layout) user.dashboard_layout = JSON.parse(user.dashboard_layout);
+  user.compliance_frameworks = user.compliance_frameworks ? JSON.parse(user.compliance_frameworks) : [];
   res.json({ user });
 });
 
-router.get('/sites', (req, res) => {
-  const sites = db.prepare('SELECT id, name FROM sites ORDER BY name').all();
+router.get('/sites', authMiddleware, (req, res) => {
+  const sites = db.prepare('SELECT id, name FROM sites WHERE org_id = ? ORDER BY name').all(req.user.org_id);
   res.json({ sites });
 });
 
@@ -100,9 +176,15 @@ router.patch('/profile', authMiddleware, (req, res) => {
   params.push(req.user.id);
   db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params);
 
-  const user = db.prepare(
-    'SELECT id, org_id, site_id, email, name, initials, role, department, job_title, created_at FROM users WHERE id = ?'
-  ).get(req.user.id);
+  const user = db.prepare(`
+    SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
+           u.department, u.job_title, u.created_at,
+           o.name AS org_name, o.country, o.industry_sector, o.naics_code,
+           o.compliance_frameworks, o.company_size
+    FROM users u JOIN organizations o ON o.id = u.org_id
+    WHERE u.id = ?
+  `).get(req.user.id);
+  user.compliance_frameworks = user.compliance_frameworks ? JSON.parse(user.compliance_frameworks) : [];
 
   const changes = diffFields(before, user, PROFILE_AUDIT_FIELDS);
   if (changes) {
@@ -132,7 +214,8 @@ router.put('/dashboard-layout', authMiddleware, (req, res) => {
 router.post('/password', authMiddleware, (req, res) => {
   const { current_password, new_password } = req.body;
   if (!current_password || !new_password) return res.status(400).json({ error: 'Current and new password are required' });
-  if (new_password.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  const pwErr = checkPassword(new_password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
 
   const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
   if (!row || !bcrypt.compareSync(current_password, row.password_hash)) {

@@ -53,6 +53,11 @@ const PAGE_TIPS = {
     { icon: 'plus', text: 'Use "New site" to add a location; pick a parent to nest it under another site' },
     { icon: 'shield', text: 'NAICS, OSHA, and HSE establishment IDs feed regulatory reports' },
   ],
+  '/admin/members': [
+    { icon: 'people', text: 'See everyone in your organization, including inactive members' },
+    { icon: 'plus', text: 'Admins can add new members with an initial password (handed off out-of-band)' },
+    { icon: 'shield', text: 'Role and active-status changes are written to the activity log for audit' },
+  ],
 };
 
 const SHORTCUTS = [
@@ -441,7 +446,7 @@ export default function TopBar() {
       )}
 
       <div className="page-strip">
-        <div className="crumbs">SDS Manager / EHS / <b>{crumb()}</b></div>
+        <div className="crumbs">{user?.org_name || 'SDS Manager'} / EHS / <b>{crumb()}</b></div>
         <div className="grow" />
       </div>
 

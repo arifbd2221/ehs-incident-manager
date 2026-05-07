@@ -6,6 +6,8 @@ import TopBar from './components/layout/TopBar';
 import StopWorkBanner from './components/layout/StopWorkBanner';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import SignupOrg from './pages/SignupOrg';
+import OnboardingFirstSite from './pages/OnboardingFirstSite';
 import Dashboard from './pages/Dashboard';
 import IncidentsList from './pages/incidents/IncidentsList';
 import IncidentDetail from './pages/incidents/IncidentDetail';
@@ -17,6 +19,7 @@ import ReportsPage from './pages/reports/ReportsPage';
 import Settings from './pages/Settings';
 import Sites from './pages/admin/Sites';
 import SiteDetail from './pages/admin/SiteDetail';
+import Members from './pages/admin/Members';
 import AssetsList from './pages/assets/AssetsList';
 import AssetDetail from './pages/assets/AssetDetail';
 import DocumentsList from './pages/documents/DocumentsList';
@@ -57,8 +60,10 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/signup" element={<SignupOrg />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/onboarding/site" element={<OnboardingFirstSite />} />
         <Route path="/incidents" element={<IncidentsList />} />
         <Route path="/incidents/:id" element={<IncidentDetail />} />
         <Route path="/investigations" element={<InvestigationsPage />} />
@@ -68,6 +73,7 @@ export default function App() {
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/admin/sites" element={<Sites />} />
         <Route path="/admin/sites/:id" element={<SiteDetail />} />
+        <Route path="/admin/members" element={<Members />} />
         <Route path="/assets" element={<AssetsList />} />
         <Route path="/assets/:id" element={<AssetDetail />} />
         <Route path="/documents" element={<DocumentsList />} />

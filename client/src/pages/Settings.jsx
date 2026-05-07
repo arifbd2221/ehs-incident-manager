@@ -9,6 +9,21 @@ const TABS = [
   { id: 'security', label: 'Security', icon: 'shield' },
 ];
 
+// Mirror of FRAMEWORKS in SignupOrg.jsx — kept as a flat map here for readout.
+const FRAMEWORK_LABELS = {
+  osha_300: 'OSHA 300 Log',
+  osha_300a: 'OSHA 300A Annual Summary',
+  osha_301: 'OSHA 301 Incident Report',
+  riddor_f2508: 'RIDDOR F2508',
+  safework_nsw: 'SafeWork NSW Incident Notification',
+  generic: 'Generic Incident Report',
+};
+
+function frameworkLabels(codes) {
+  if (!Array.isArray(codes) || codes.length === 0) return '';
+  return codes.map(c => FRAMEWORK_LABELS[c] || c).join(', ');
+}
+
 export default function Profile() {
   const { user, updateUser, logout } = useAuth();
   const [sites, setSites] = useState([]);
@@ -200,6 +215,21 @@ export default function Profile() {
                 <div className="prof-row"><span className="prof-lbl">Role</span><span className="prof-val prof-role">{user.role?.replace('_', ' ')}</span></div>
               </div>
             )}
+          </section>
+
+          <section className="prof-section" style={{ animationDelay: '100ms' }}>
+            <div className="prof-sec-h">
+              <Icon name="factory" size={18} color="var(--sds-brand-primary)" />
+              <span>Organization</span>
+            </div>
+            <div className="prof-info">
+              <div className="prof-row"><span className="prof-lbl">Name</span><span className="prof-val">{user.org_name || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Country</span><span className="prof-val">{user.country || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Industry</span><span className="prof-val">{user.industry_sector || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Frameworks</span><span className="prof-val">{frameworkLabels(user.compliance_frameworks) || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Company size</span><span className="prof-val">{user.company_size || '—'}</span></div>
+              {user.naics_code && <div className="prof-row"><span className="prof-lbl">NAICS</span><span className="prof-val">{user.naics_code}</span></div>}
+            </div>
           </section>
         </div>
       )}
