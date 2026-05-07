@@ -12,8 +12,10 @@
 import db from '../db/connection.js';
 
 // Recognized entity types. Add to this set when adding a new linkable entity.
+// Inspections are linkable polymorphically — they have no direct FK to other
+// entities, so cross-references travel exclusively via entity_links.
 export const LINKABLE_TYPES = new Set([
-  'incident', 'investigation', 'capa', 'asset', 'document',
+  'incident', 'investigation', 'capa', 'asset', 'document', 'inspection',
 ]);
 
 /**
@@ -141,19 +143,43 @@ const CAPA_JOINS = `
 
 const DOCUMENT_FIELDS = `
   d.id, d.document_number, d.name, d.document_type,
-  d.mime_type, d.size_bytes, d.created_at,
+  d.mime_type, d.size_bytes, d.folder_id, d.created_at,
   u.name AS uploader_name, u.initials AS uploader_initials
 `;
 const DOCUMENT_JOINS = `
   LEFT JOIN users u ON u.id = d.uploaded_by
 `;
 
+const INSPECTION_FIELDS = `
+  ins.id, ins.inspection_number, ins.title, ins.status,
+  ins.conducted_on, ins.location, ins.completed_at, ins.created_at,
+  t.name AS template_name,
+  u.name AS started_by_name, u.initials AS started_by_initials
+`;
+const INSPECTION_JOINS = `
+  LEFT JOIN templates t ON t.id = ins.template_id
+  LEFT JOIN users u ON u.id = ins.started_by
+`;
+
+const ASSET_FIELDS = `
+  a.id, a.asset_number, a.name, a.asset_type, a.location_description,
+  a.serial_number, a.active, a.created_at,
+  s.name AS site_name
+`;
+const ASSET_JOINS = `
+  LEFT JOIN sites s ON s.id = a.site_id
+`;
+
 // Pull rows of `target_alias` table linked to (entity_type, entity_id) via
 // entity_links in either direction. Caller supplies the SELECT fields and
 // JOINs for display. Always org-scoped via the target row's org_id.
+//
+// link_id is included so the FE can offer an "unlink" affordance per row.
+// Direct-FK rows (e.g., incidents.asset_id) carry link_id=NULL and are not
+// removable from the references card — those are structural FKs.
 function polyJoinTo({ entity_type, entity_id, target_type, target_table, target_alias, select_fields, joins, orgId }) {
   return db.prepare(`
-    SELECT ${select_fields}
+    SELECT ${select_fields}, el.id AS link_id
     FROM entity_links el
     JOIN ${target_table} ${target_alias} ON ${target_alias}.id = CASE
       WHEN el.source_type = ? AND el.source_id = ? AND el.target_type = ? THEN el.target_id
@@ -194,7 +220,7 @@ function investigationsReferencing(entity_type, entity_id, orgId) {
   let direct = [];
   if (entity_type === 'incident') {
     direct = db.prepare(`
-      SELECT ${INVESTIGATION_FIELDS}
+      SELECT ${INVESTIGATION_FIELDS}, NULL AS link_id
       FROM investigations inv
       ${INVESTIGATION_JOINS}
       WHERE inv.incident_id = ? AND inv.org_id = ?
@@ -217,14 +243,14 @@ function capasReferencing(entity_type, entity_id, orgId) {
   let direct = [];
   if (entity_type === 'incident') {
     direct = db.prepare(`
-      SELECT ${CAPA_FIELDS}
+      SELECT ${CAPA_FIELDS}, NULL AS link_id
       FROM capas c
       ${CAPA_JOINS}
       WHERE c.incident_id = ? AND c.org_id = ?
     `).all(entity_id, orgId);
   } else if (entity_type === 'investigation') {
     direct = db.prepare(`
-      SELECT ${CAPA_FIELDS}
+      SELECT ${CAPA_FIELDS}, NULL AS link_id
       FROM capas c
       ${CAPA_JOINS}
       WHERE c.investigation_id = ? AND c.org_id = ?
@@ -250,9 +276,43 @@ function documentsReferencing(entity_type, entity_id, orgId) {
   });
 }
 
+function inspectionsReferencing(entity_type, entity_id, orgId) {
+  if (entity_type === 'inspection') return [];
+  // Inspections only link via entity_links — no direct FK columns exist
+  // between inspections and assets / incidents / capas / documents.
+  return polyJoinTo({
+    entity_type, entity_id,
+    target_type: 'inspection', target_table: 'inspections', target_alias: 'ins',
+    select_fields: INSPECTION_FIELDS, joins: INSPECTION_JOINS, orgId,
+  });
+}
+
+function assetsReferencing(entity_type, entity_id, orgId) {
+  if (entity_type === 'asset') return [];
+
+  // Direct FK: incidents.asset_id when entity is incident.
+  let direct = [];
+  if (entity_type === 'incident') {
+    direct = db.prepare(`
+      SELECT ${ASSET_FIELDS}, NULL AS link_id
+      FROM assets a
+      ${ASSET_JOINS}
+      WHERE a.id = (SELECT asset_id FROM incidents WHERE id = ?) AND a.org_id = ?
+    `).all(entity_id, orgId);
+  }
+
+  const poly = polyJoinTo({
+    entity_type, entity_id,
+    target_type: 'asset', target_table: 'assets', target_alias: 'a',
+    select_fields: ASSET_FIELDS, joins: ASSET_JOINS, orgId,
+  });
+
+  return dedupeById([...direct, ...poly]);
+}
+
 export function referencesFor(entity_type, entity_id, orgId) {
   if (!LINKABLE_TYPES.has(entity_type)) {
-    return { incidents: [], investigations: [], capas: [], documents: [] };
+    return { incidents: [], investigations: [], capas: [], documents: [], inspections: [], assets: [] };
   }
   const eid = Number(entity_id);
   return {
@@ -260,6 +320,8 @@ export function referencesFor(entity_type, entity_id, orgId) {
     investigations: investigationsReferencing(entity_type, eid, orgId),
     capas: capasReferencing(entity_type, eid, orgId),
     documents: documentsReferencing(entity_type, eid, orgId),
+    inspections: inspectionsReferencing(entity_type, eid, orgId),
+    assets: assetsReferencing(entity_type, eid, orgId),
   };
 }
 
@@ -278,7 +340,8 @@ export function incidentsLinkedToAsset(assetId, orgId) {
            i.incident_datetime, i.created_at,
            s.name as site_name,
            u.name as reporter_name, u.initials as reporter_initials,
-           'asset_id' as link_source
+           'asset_id' as link_source,
+           NULL as link_id
     FROM incidents i
     LEFT JOIN sites s ON s.id = i.site_id
     LEFT JOIN users u ON u.id = i.reported_by
@@ -291,7 +354,8 @@ export function incidentsLinkedToAsset(assetId, orgId) {
            i.incident_datetime, i.created_at,
            s.name as site_name,
            u.name as reporter_name, u.initials as reporter_initials,
-           'entity_link' as link_source
+           'entity_link' as link_source,
+           el.id as link_id
     FROM entity_links el
     JOIN incidents i ON i.id = CASE
       WHEN el.source_type = 'asset' AND el.source_id = ? AND el.target_type = 'incident' THEN el.target_id
