@@ -257,8 +257,16 @@ router.patch('/:id', (req, res) => {
   db.prepare(`UPDATE capas SET ${sets.join(', ')} WHERE id = ?`).run(...params);
 
   if (req.body.progress !== undefined) {
-    db.prepare(`INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id) VALUES (?, 'capa', ?, 'progress_updated', ?, ?)`)
-      .run(capa.org_id, capa.id, `updated progress to ${req.body.progress}%`, req.user.id);
+    const note = (req.body.progress_note || '').trim();
+    const desc = note
+      ? `updated progress to ${req.body.progress}% — ${note.slice(0, 120)}`
+      : `updated progress to ${req.body.progress}%`;
+    const metadata = JSON.stringify({
+      note: note || null,
+      previous_progress: capa.progress || 0,
+    });
+    db.prepare(`INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata) VALUES (?, 'capa', ?, 'progress_updated', ?, ?, ?)`)
+      .run(capa.org_id, capa.id, desc, req.user.id, metadata);
   }
 
   const updated = db.prepare('SELECT * FROM capas WHERE id = ?').get(capa.id);

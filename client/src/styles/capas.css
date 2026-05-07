@@ -671,17 +671,26 @@
   gap: 10px;
 }
 
-/* Header */
-.capd-header {
+/* Hero card */
+.capd-hero {
+  background: #fff;
+  border: 1px solid var(--sds-border);
+  border-radius: 16px;
+  padding: 24px 28px 20px;
+  margin-bottom: 24px;
+  animation: capdCardIn 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.capd-hero-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
   margin-bottom: 20px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--sds-border);
 }
-.capd-header-left { flex: 1; min-width: 0; }
+.capd-hero-left {
+  flex: 1;
+  min-width: 0;
+}
 .capd-meta-row {
   display: flex;
   align-items: center;
@@ -713,19 +722,120 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-.capd-owner-info {
-  font-size: 12px;
-  color: var(--sds-fg-tertiary);
-}
-.capd-owner-info b {
-  color: var(--sds-fg-heading);
-}
-.capd-header-actions {
+.capd-hero-actions {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
   align-items: flex-start;
   flex-wrap: wrap;
+}
+
+/* Inline progress bar */
+.capd-hero-progress {
+  padding: 16px 0;
+  border-top: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f3f4f6;
+}
+.capd-hero-progress-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.capd-hero-pct {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sds-fg-heading);
+  font-family: 'SF Mono', Menlo, monospace;
+}
+.capd-hero-due {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sds-fg-tertiary);
+}
+.capd-hero-due.overdue {
+  color: #dc2626;
+  font-weight: 700;
+}
+.capd-hero-bar {
+  height: 8px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.capd-hero-bar-fill {
+  height: 100%;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #f59e0b, #ea580c);
+  animation: progressGrow 800ms cubic-bezier(0.4, 0, 0.2, 1) 200ms both;
+  transform-origin: left;
+}
+.capd-hero-bar-fill.pf-done {
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+.capd-hero-bar-fill.pf-overdue {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+/* People strip */
+.capd-hero-people {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding-top: 16px;
+}
+.capd-hero-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.capd-person-av {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+.capd-person-av.av-owner {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #d97706;
+}
+.capd-person-av.av-verifier {
+  background: linear-gradient(135deg, #e0e7ff, #ede9fe);
+  color: #626DF9;
+}
+.capd-hero-person-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sds-fg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.capd-hero-person-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sds-fg-heading);
+  margin-top: 1px;
+}
+.capd-hero-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--sds-border);
+}
+
+/* Empty evidence placeholder */
+.capd-empty-evidence {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 16px;
+  color: var(--sds-fg-tertiary);
+  font-size: 13px;
+  text-align: center;
 }
 
 /* Verification alert */
@@ -841,146 +951,11 @@
   color: var(--sds-fg-secondary);
 }
 
-/* Progress card */
-.capd-progress-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.capd-progress-pct {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--sds-fg-heading);
-}
-.capd-progress-due {
-  font-size: 12px;
-  color: var(--sds-fg-tertiary);
-}
-.capd-progress-due.overdue {
-  color: #dc2626;
-  font-weight: 700;
-}
-.capd-progress-track {
-  height: 10px;
-  background: #f3f4f6;
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 20px;
-}
-.capd-progress-fill {
-  height: 100%;
-  border-radius: 10px;
-  background: linear-gradient(90deg, #f59e0b, #ea580c);
-  animation: progressGrow 800ms cubic-bezier(0.4, 0, 0.2, 1) 200ms both;
-  transform-origin: left;
-}
 @keyframes progressGrow {
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
 }
-.capd-progress-fill.pf-done {
-  background: linear-gradient(90deg, #22c55e, #16a34a);
-}
-.capd-progress-fill.pf-overdue {
-  background: linear-gradient(90deg, #ef4444, #dc2626);
-}
 
-/* Checklist */
-.capd-checklist {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.capd-check-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  padding: 6px 0;
-  animation: checkStepIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-.capd-check-item:nth-child(1) { animation-delay: 400ms; }
-.capd-check-item:nth-child(2) { animation-delay: 480ms; }
-.capd-check-item:nth-child(3) { animation-delay: 560ms; }
-.capd-check-item:nth-child(4) { animation-delay: 640ms; }
-.capd-check-item:nth-child(5) { animation-delay: 720ms; }
-@keyframes checkStepIn {
-  from { opacity: 0; transform: translateX(-10px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-.capd-check-dot {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: all 200ms;
-}
-.capd-check-dot.done {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
-  color: #fff;
-  animation: checkDotPop 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@keyframes checkDotPop {
-  0% { transform: scale(0); }
-  70% { transform: scale(1.2); }
-  100% { transform: scale(1); }
-}
-.capd-check-dot.pending {
-  background: var(--sds-bg-surface-alt);
-  border: 1.5px solid var(--sds-border);
-}
-.capd-check-label {
-  font-weight: 500;
-  color: var(--sds-fg-tertiary);
-}
-.capd-check-label.done {
-  color: var(--sds-fg-heading);
-  font-weight: 600;
-}
-
-/* People */
-.capd-people-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.capd-person {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.capd-person-av {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 700;
-}
-.capd-person-av.av-owner {
-  background: linear-gradient(135deg, #fef3c7, #fde68a);
-  color: #d97706;
-}
-.capd-person-av.av-verifier {
-  background: linear-gradient(135deg, #e0e7ff, #ede9fe);
-  color: #626DF9;
-}
-.capd-person-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--sds-fg-heading);
-}
-.capd-person-role {
-  font-size: 11px;
-  color: var(--sds-fg-tertiary);
-  margin-top: 2px;
-}
 
 /* Details rows */
 .capd-detail-rows {
@@ -1142,7 +1117,10 @@
   .capa-kanban { grid-template-columns: 1fr; }
   .capa-skeleton { grid-template-columns: 1fr; }
   .capd-grid { grid-template-columns: 1fr; }
-  .capd-header { flex-direction: column; }
+  .capd-hero-top { flex-direction: column; gap: 16px; }
+  .capd-hero-actions { width: 100%; }
+  .capd-hero-people { flex-wrap: wrap; gap: 16px; }
+  .capd-hero-divider { display: none; }
   .capa-hero { flex-direction: column; align-items: flex-start; gap: 12px; }
   .capa-list-row {
     grid-template-columns: 80px 1fr 80px 80px;
@@ -1320,6 +1298,73 @@
 .capd-source-link:hover {
   color: var(--sds-brand-primary-hover);
   text-decoration: underline;
+}
+
+/* ── Update Progress Modal ── */
+.capd-progress-input-row {
+  display: flex; align-items: center; gap: 14px;
+}
+.capd-progress-slider {
+  flex: 1; -webkit-appearance: none; appearance: none;
+  height: 8px; border-radius: 8px; background: var(--sds-bg-surface-alt); outline: none;
+}
+.capd-progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--sds-brand-primary); cursor: pointer;
+  box-shadow: 0 2px 8px rgba(98,109,249,0.3);
+  transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.capd-progress-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.capd-progress-slider::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%; border: none;
+  background: var(--sds-brand-primary); cursor: pointer;
+}
+.capd-progress-slider::-moz-range-track {
+  height: 8px; border-radius: 8px; background: var(--sds-bg-surface-alt);
+}
+.capd-progress-num {
+  width: 52px; text-align: center; font-size: 15px; font-weight: 700;
+  font-family: 'SF Mono', Menlo, monospace; color: var(--sds-fg-heading);
+}
+.capd-modal-progress-track {
+  height: 8px; background: var(--sds-bg-surface-alt); border-radius: 8px;
+  overflow: hidden; margin-top: 6px;
+}
+.capd-modal-progress-fill {
+  height: 100%; border-radius: 8px;
+  background: var(--sds-brand-primary);
+  transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.capd-modal-progress-fill.pf-done { background: var(--sds-success); }
+
+.capd-file-drop {
+  border: 1.5px dashed var(--sds-border); border-radius: var(--sds-radius-md);
+  padding: 16px; text-align: center; cursor: pointer;
+  transition: all 150ms; font-size: 13px; color: var(--sds-fg-tertiary);
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.capd-file-drop:hover {
+  border-color: var(--sds-brand-primary); background: var(--sds-brand-primary-tint);
+  color: var(--sds-brand-primary);
+}
+.capd-file-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.capd-file-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: var(--sds-radius-sm);
+  background: var(--sds-bg-surface-alt); font-size: 12px; color: var(--sds-fg-secondary);
+}
+.capd-file-rm {
+  margin-left: auto; border: none; background: none;
+  color: var(--sds-fg-tertiary); cursor: pointer; padding: 2px; border-radius: 4px;
+}
+.capd-file-rm:hover { color: var(--sds-error); background: rgba(211,47,47,0.08); }
+
+/* Timeline note */
+.capd-tl-body .tl-note {
+  margin-top: 4px; padding: 6px 10px;
+  border-radius: var(--sds-radius-sm); background: var(--sds-bg-surface-alt);
+  font-size: 12px; line-height: 1.5; color: var(--sds-fg-secondary);
+  border-left: 2.5px solid var(--sds-brand-primary);
 }
 
 @media (prefers-reduced-motion: reduce) {
