@@ -15,8 +15,14 @@ import db from '../db/connection.js';
 import { nextAssetNumber } from '../services/numbering.js';
 import { incidentsLinkedToAsset } from '../services/entity_links.js';
 import { loadFieldsForCategory, validateCustomFields } from '../services/custom_fields.js';
+import { writeActivity, diffFields } from '../services/activity_log.js';
 
 const router = Router();
+
+const ASSET_AUDIT_FIELDS = [
+  'name', 'display_id', 'site_id', 'asset_type', 'asset_category_id',
+  'location_description', 'serial_number', 'description', 'active',
+];
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
@@ -158,6 +164,21 @@ router.post('/', (req, res) => {
     LEFT JOIN asset_categories ac ON ac.id = a.asset_category_id
     WHERE a.id = ?
   `).get(result.lastInsertRowid);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'asset',
+    entity_id: asset.id,
+    action: 'asset_created',
+    description: `created asset ${asset.name} (${asset.display_id || asset.asset_number})`,
+    user_id: req.user.id,
+    metadata: {
+      site_id: asset.site_id,
+      asset_type: asset.asset_type,
+      asset_category_id: asset.asset_category_id,
+    },
+  });
+
   res.status(201).json(asset);
 });
 
@@ -241,6 +262,32 @@ router.patch('/:id', (req, res) => {
     LEFT JOIN asset_categories ac ON ac.id = a.asset_category_id
     WHERE a.id = ?
   `).get(asset.id);
+
+  // Detect archive/restore via active flip and use a distinct action so the
+  // audit trail reads cleanly ("archived" / "restored" rather than "updated").
+  let action = 'asset_updated';
+  let description = `updated asset ${updated.name}`;
+  if (asset.active === 1 && updated.active === 0) {
+    action = 'asset_archived';
+    description = `archived asset ${updated.name}`;
+  } else if (asset.active === 0 && updated.active === 1) {
+    action = 'asset_restored';
+    description = `restored asset ${updated.name}`;
+  }
+
+  const changes = diffFields(asset, updated, ASSET_AUDIT_FIELDS);
+  if (changes || action !== 'asset_updated') {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'asset',
+      entity_id: asset.id,
+      action,
+      description,
+      user_id: req.user.id,
+      metadata: changes,
+    });
+  }
+
   res.json(updated);
 });
 
@@ -253,6 +300,17 @@ router.delete('/:id', (req, res) => {
   if (!asset) return res.status(404).json({ error: 'Asset not found' });
 
   db.prepare("UPDATE assets SET active = 0, updated_at = datetime('now') WHERE id = ?").run(asset.id);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'asset',
+    entity_id: asset.id,
+    action: 'asset_archived',
+    description: `archived asset ${asset.name}`,
+    user_id: req.user.id,
+    metadata: { display_id: asset.display_id, asset_number: asset.asset_number },
+  });
+
   res.json({ success: true, soft_deleted: true });
 });
 

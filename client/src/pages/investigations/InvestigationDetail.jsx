@@ -15,6 +15,7 @@ import { TypePill, SevBadge, TrackBadge } from '../../components/shared/Badges';
 import { timeAgo, formatDate } from '../../utils/time';
 import CloseInvestigationModal from './modals/CloseInvestigationModal';
 import AssignCapaModal from './modals/AssignCapaModal';
+import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/investigations.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -727,6 +728,8 @@ export default function InvestigationDetail() {
         </div>,
         document.body
       )}
+
+      <ReferencedByCard entityType="investigation" entityId={inv.id} />
 
       {/* Toast */}
       {toast && createPortal(

@@ -17,8 +17,12 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
 import { loadFieldsForCategory } from '../services/custom_fields.js';
+import { writeActivity, diffFields } from '../services/activity_log.js';
 
 const router = Router();
+
+const CATEGORY_AUDIT_FIELDS = ['name', 'icon', 'color', 'active'];
+const FIELD_AUDIT_FIELDS = ['field_label', 'is_required', 'helper_text', 'position', 'options'];
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
@@ -62,6 +66,14 @@ router.post('/', (req, res) => {
       // Reactivate instead of failing
       db.prepare("UPDATE asset_categories SET active = 1 WHERE id = ?").run(existing.id);
       const cat = db.prepare('SELECT * FROM asset_categories WHERE id = ?').get(existing.id);
+      writeActivity({
+        org_id: req.user.org_id,
+        entity_type: 'asset_category',
+        entity_id: cat.id,
+        action: 'asset_category_reactivated',
+        description: `reactivated asset category ${cat.name}`,
+        user_id: req.user.id,
+      });
       return res.json(cat);
     }
     return res.status(409).json({ error: 'Category with that name already exists', id: existing.id });
@@ -73,6 +85,17 @@ router.post('/', (req, res) => {
   `).run(req.user.org_id, trimmed, icon || null, color || null, req.user.id);
 
   const cat = db.prepare('SELECT * FROM asset_categories WHERE id = ?').get(result.lastInsertRowid);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'asset_category',
+    entity_id: cat.id,
+    action: 'asset_category_created',
+    description: `created asset category ${cat.name}`,
+    user_id: req.user.id,
+    metadata: { icon: cat.icon, color: cat.color },
+  });
+
   res.status(201).json(cat);
 });
 
@@ -94,6 +117,20 @@ router.patch('/:id', (req, res) => {
   params.push(cat.id);
   db.prepare(`UPDATE asset_categories SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   const updated = db.prepare('SELECT * FROM asset_categories WHERE id = ?').get(cat.id);
+
+  const changes = diffFields(cat, updated, CATEGORY_AUDIT_FIELDS);
+  if (changes) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'asset_category',
+      entity_id: cat.id,
+      action: 'asset_category_updated',
+      description: `updated asset category ${updated.name}`,
+      user_id: req.user.id,
+      metadata: changes,
+    });
+  }
+
   res.json(updated);
 });
 
@@ -115,6 +152,17 @@ router.delete('/:id', (req, res) => {
 
   // Soft delete to preserve historical asset references.
   db.prepare('UPDATE asset_categories SET active = 0 WHERE id = ?').run(cat.id);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'asset_category',
+    entity_id: cat.id,
+    action: 'asset_category_deleted',
+    description: `deleted asset category ${cat.name}`,
+    user_id: req.user.id,
+    metadata: { name: cat.name },
+  });
+
   res.json({ success: true, soft_deleted: true });
 });
 
@@ -185,6 +233,23 @@ router.post('/:id/fields', (req, res) => {
   const row = db.prepare('SELECT * FROM asset_category_fields WHERE id = ?').get(result.lastInsertRowid);
   row.options = row.options ? JSON.parse(row.options) : null;
   row.is_required = !!row.is_required;
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'asset_category',
+    entity_id: cat.id,
+    action: 'asset_category_field_added',
+    description: `added field "${row.field_label}" to category ${cat.id}`,
+    user_id: req.user.id,
+    metadata: {
+      field_id: row.id,
+      field_key: row.field_key,
+      field_label: row.field_label,
+      field_type: row.field_type,
+      is_required: row.is_required,
+    },
+  });
+
   res.status(201).json(row);
 });
 
@@ -226,6 +291,24 @@ router.patch('/:id/fields/:fieldId', (req, res) => {
   const updated = db.prepare('SELECT * FROM asset_category_fields WHERE id = ?').get(field.id);
   updated.options = updated.options ? JSON.parse(updated.options) : null;
   updated.is_required = !!updated.is_required;
+
+  // Compare raw rows (not the parsed updated.options) so the diff captures
+  // option-set changes as plain JSON-string flips.
+  const beforeRaw = field;
+  const afterRaw = db.prepare('SELECT * FROM asset_category_fields WHERE id = ?').get(field.id);
+  const changes = diffFields(beforeRaw, afterRaw, FIELD_AUDIT_FIELDS);
+  if (changes) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'asset_category',
+      entity_id: cat.id,
+      action: 'asset_category_field_updated',
+      description: `updated field "${updated.field_label}" on category ${cat.id}`,
+      user_id: req.user.id,
+      metadata: { field_id: field.id, field_key: field.field_key, ...changes },
+    });
+  }
+
   res.json(updated);
 });
 
@@ -233,13 +316,30 @@ router.delete('/:id/fields/:fieldId', (req, res) => {
   if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot edit category fields.' });
   const cat = ensureCategoryOwnedByOrg(req, res);
   if (!cat) return;
-  const field = db.prepare('SELECT id FROM asset_category_fields WHERE id = ? AND category_id = ?').get(req.params.fieldId, cat.id);
+  const field = db.prepare('SELECT * FROM asset_category_fields WHERE id = ? AND category_id = ?').get(req.params.fieldId, cat.id);
   if (!field) return res.status(404).json({ error: 'Field not found on this category' });
 
   // Hard delete the definition. Existing assets keep the value on their
   // custom_fields row — it just stops being rendered (our display loop only
   // walks the current field defs, not the JSON).
   db.prepare('DELETE FROM asset_category_fields WHERE id = ?').run(field.id);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'asset_category',
+    entity_id: cat.id,
+    action: 'asset_category_field_deleted',
+    description: `deleted field "${field.field_label}" from category ${cat.id}`,
+    user_id: req.user.id,
+    metadata: {
+      field_id: field.id,
+      field_key: field.field_key,
+      field_label: field.field_label,
+      field_type: field.field_type,
+      was_required: !!field.is_required,
+    },
+  });
+
   res.json({ success: true });
 });
 
@@ -254,6 +354,17 @@ router.put('/:id/fields/order', (req, res) => {
   db.transaction(() => {
     order.forEach((id, idx) => update.run(idx, id, cat.id));
   })();
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'asset_category',
+    entity_id: cat.id,
+    action: 'asset_category_fields_reordered',
+    description: `reordered fields on category ${cat.id}`,
+    user_id: req.user.id,
+    metadata: { order },
+  });
+
   res.json({ success: true });
 });
 

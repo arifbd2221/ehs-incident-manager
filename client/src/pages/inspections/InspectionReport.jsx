@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getInspectionReport } from '../../api/inspections';
 import Icon from '../../components/shared/Icon';
+import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/inspections.css';
 
 export default function InspectionReport() {
@@ -193,6 +194,8 @@ export default function InspectionReport() {
           );
         })}
       </div>
+
+      <ReferencedByCard entityType="inspection" entityId={inspection.id} />
 
       {/* Footer */}
       <div className="ir-footer">

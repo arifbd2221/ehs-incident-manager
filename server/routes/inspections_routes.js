@@ -13,6 +13,7 @@
 
 import { Router } from 'express';
 import db from '../db/connection.js';
+import { writeActivity, diffFields } from '../services/activity_log.js';
 
 const router = Router();
 
@@ -303,11 +304,37 @@ router.patch('/:id', (req, res) => {
     WHERE i.id = ?
   `).get(inspection.id);
 
+  // Metadata edits to a completed/abandoned inspection are still allowed
+  // through this route (only item-level changes are blocked by the PUT
+  // handler below). That's audit-relevant — someone could relabel or
+  // relocate a finalized inspection record. Capture the field-level diff.
+  const beforeMeta = { title: inspection.title, conducted_on: inspection.conducted_on, location: inspection.location };
+  const afterMeta  = { title: updated.title,    conducted_on: updated.conducted_on,    location: updated.location };
+  const changes = diffFields(beforeMeta, afterMeta, ['title', 'conducted_on', 'location']);
+  if (changes) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'inspection',
+      entity_id: inspection.id,
+      action: 'updated',
+      description: `updated metadata on inspection ${inspection.inspection_number || `#${inspection.id}`}`,
+      user_id: req.user.id,
+      metadata: { ...changes, status_at_edit: inspection.status },
+    });
+  }
+
   res.json(updated);
 });
 
 // ---------------------------------------------------------------------------
 // PUT /:id/items/:item_key — save single item response
+//
+// No activity_log row is written here. The route enforces status=='in_progress'
+// (returns 409 otherwise), so item-level edits to completed/abandoned
+// inspections cannot reach the database via this code path. In-progress entry
+// is normal data capture, not audit-worthy. If the route is ever loosened to
+// allow post-completion amendments, add an `inspection_item_amended` log here
+// at that time — see roadmap P3-A1 chunk 2 notes.
 // ---------------------------------------------------------------------------
 router.put('/:id/items/:item_key', (req, res) => {
   const inspection = db.prepare(

@@ -1448,6 +1448,104 @@
   font-weight: 600;
 }
 
+/* ---- Inline edit (UX-C) — field-level edit affordances ---- */
+.idet-edit-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  color: var(--sds-brand-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 8px;
+  margin-left: 6px;
+  border-radius: var(--sds-radius-sm);
+  transition: background 150ms;
+}
+.idet-edit-trigger:hover {
+  background: var(--sds-brand-primary-tint);
+}
+.idet-edit-row {
+  display: flex;
+  gap: var(--sds-space-sm);
+  margin-top: var(--sds-space-sm);
+  justify-content: flex-end;
+}
+.idet-edit-empty {
+  color: var(--sds-fg-muted);
+  font-style: italic;
+  font-weight: 400;
+}
+.idet-fact.is-editing {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.idet-fact.is-editing .idet-fact-label {
+  margin-bottom: 2px;
+}
+
+/* ---- Witnesses card (UX-D) ---- */
+.idet-witnesses {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.idet-witness {
+  padding: 12px;
+  border: 1px solid var(--sds-border);
+  border-radius: var(--sds-radius-md);
+  background: var(--sds-bg-surface-alt);
+}
+.idet-witness-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.idet-witness-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.idet-witness-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sds-fg-heading);
+}
+.idet-witness-contact {
+  font-size: 12px;
+  color: var(--sds-fg-tertiary);
+}
+.idet-witness-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.idet-witness-del {
+  color: var(--sds-error);
+}
+.idet-witness-del:hover {
+  background: rgba(211, 47, 47, 0.08);
+}
+.idet-witness-statement {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--sds-border);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--sds-fg-primary);
+  white-space: pre-wrap;
+}
+.idet-witness-empty {
+  font-size: 12px;
+  color: var(--sds-fg-tertiary);
+  font-style: italic;
+}
+
 /* ---- MODALS — Glassmorphism ---- */
 .idet-modal-backdrop {
   position: fixed;

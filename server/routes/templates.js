@@ -19,6 +19,8 @@ import { upload, uploadDir } from '../middleware/upload.js';
 
 const router = Router();
 
+const TEMPLATE_AUDIT_FIELDS = ['name', 'description'];
+
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
 
@@ -234,6 +236,20 @@ router.patch('/:id', (req, res) => {
   db.prepare(`UPDATE templates SET ${sets.join(', ')} WHERE id = ?`).run(...params);
 
   const updated = db.prepare('SELECT * FROM templates WHERE id = ?').get(template.id);
+
+  const changes = diffFields(template, updated, TEMPLATE_AUDIT_FIELDS);
+  if (changes) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'template',
+      entity_id: template.id,
+      action: 'updated',
+      description: `updated template "${updated.name}"`,
+      user_id: req.user.id,
+      metadata: changes,
+    });
+  }
+
   res.json(updated);
 });
 
@@ -448,6 +464,29 @@ router.patch('/:id/items', (req, res) => {
   });
 
   applyChanges();
+
+  // Items changes affect what every future inspection captures, so they're
+  // worth a single rollup row. We don't expand each upsert into its own row;
+  // the metadata carries upsert/delete counts and the affected item_keys for
+  // forensics.
+  const upsertCount = Array.isArray(upserts) ? upserts.length : 0;
+  const deleteCount = Array.isArray(deletes) ? deletes.length : 0;
+  if (upsertCount > 0 || deleteCount > 0) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'template',
+      entity_id: template.id,
+      action: 'items_updated',
+      description: `updated items on template "${template.name}" (${upsertCount} upsert, ${deleteCount} delete)`,
+      user_id: req.user.id,
+      metadata: {
+        upsert_count: upsertCount,
+        delete_count: deleteCount,
+        upserted_keys: Array.isArray(upserts) ? upserts.map(i => i.item_key) : [],
+        deleted_keys: Array.isArray(deletes) ? deletes : [],
+      },
+    });
+  }
 
   const updatedItems = db.prepare(`
     SELECT * FROM template_items

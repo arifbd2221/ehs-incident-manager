@@ -24,3 +24,7 @@ export const voiceExtract = (transcript) =>
 
 export const addIncidentNote = (id, text) =>
   api.post(`/incidents/${id}/note`, { text }).then(r => r.data);
+
+export const addWitness = (id, data) => api.post(`/incidents/${id}/witnesses`, data).then(r => r.data);
+export const updateWitness = (id, wid, data) => api.patch(`/incidents/${id}/witnesses/${wid}`, data).then(r => r.data);
+export const deleteWitness = (id, wid) => api.delete(`/incidents/${id}/witnesses/${wid}`).then(r => r.data);

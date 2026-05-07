@@ -8,6 +8,7 @@ import { listAssetCategories, createAssetCategory, listCategoryFields } from '..
 import Icon from '../../components/shared/Icon';
 import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
 import CustomFieldsDisplay from '../../components/assets/CustomFieldsDisplay';
+import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/assets.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -369,6 +370,8 @@ export default function AssetDetail() {
           <p>Edits, archive/restore actions, and inspections will be tracked here.</p>
         </div>
       )}
+
+      <ReferencedByCard entityType="asset" entityId={asset.id} />
 
       {/* Edit modal */}
       {editOpen && createPortal(

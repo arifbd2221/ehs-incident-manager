@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { listDocuments, uploadDocument, updateDocument, deleteDocument } from '../../api/documents';
@@ -6,6 +7,7 @@ import { listFolders, createFolder, updateFolder, deleteFolder } from '../../api
 import { getSites } from '../../api/auth';
 import api from '../../api/client';
 import Icon from '../../components/shared/Icon';
+import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/documents.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -158,6 +160,40 @@ export default function DocumentsList() {
   };
 
   useEffect(refresh, [activeTab, typeFilter, currentFolderId, siteFilter, searchingGlobally]);
+
+  // Deep-link: ?folder=N from a Referenced-by card row navigates straight into
+  // the folder containing that document. Waits for `folders` to populate, then
+  // walks up parent_id to build the breadcrumb. Clears siteFilter once if the
+  // folder isn't visible in the current site so cross-site links resolve.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [paramConsumed, setParamConsumed] = useState(false);
+  useEffect(() => {
+    if (paramConsumed) return;
+    const want = searchParams.get('folder');
+    if (!want) { setParamConsumed(true); return; }
+    if (folders.length === 0) return;
+    const folderId = Number(want);
+    const folder = folders.find(f => f.id === folderId);
+    if (folder) {
+      const crumbs = [];
+      let curId = folderId;
+      while (curId != null) {
+        const f = folders.find(x => x.id === curId);
+        if (!f) break;
+        crumbs.unshift({ id: f.id, name: f.name });
+        curId = f.parent_id;
+      }
+      setCurrentFolderId(folderId);
+      setBreadcrumb(crumbs);
+      setParamConsumed(true);
+      setSearchParams({}, { replace: true });
+    } else if (siteFilter) {
+      setSiteFilter('');
+    } else {
+      setParamConsumed(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [folders, searchParams, paramConsumed, siteFilter, setSearchParams]);
 
   // Folders shown at the current location: root-level (parent_id NULL) at root,
   // otherwise direct children of currentFolderId. When the user searches from
@@ -969,6 +1005,11 @@ export default function DocumentsList() {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* References (P3-L1 follow-up) */}
+            <div className="dpv-references">
+              <ReferencedByCard entityType="document" entityId={previewDoc.id} />
             </div>
 
             {/* Footer */}

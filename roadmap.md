@@ -68,16 +68,30 @@ actual app, not a hackathon. Order shifts based on user direction; nothing
 here ships without explicit go-ahead.
 
 ### Navigation / pages
-- [ ] **P3-N1** **Site details page** — /sites/:id with assets, incidents, work_hours, regulatory subs scoped to that site.
+- [x] **P3-N1** **Site details page + hierarchy** — `/admin/sites/:id` with breadcrumb, sub-sites, recent incidents/assets, compliance, workforce. Migration 015 adds `parent_id` to sites (originally landed as 012; renumbered to 015 after main merged its own 012_template_cover_image in parallel). BE: cycle/self/depth-cap (5 levels) validation on POST/PATCH, child-blocks-delete on DELETE, enriched `GET /api/sites/:id` returns parent + ancestors + children + counts + recents + work_hours total. FE: stacked-cards detail page with `sd-*` page-scoped styles in `sites.css`, clickable list cards with "Sub-site of …" parent chip, "Parent site" select in the General section of the site modal that excludes self + descendants to prevent cycles from the UI. Login demo grid gains a Worker (Wendy) row so role gates are click-testable.
 - [x] **P3-N2** **Document folder structure** — folders/sub-folders for documents — commit `12862f8` (BE: migration `010_document_folders` + `/api/folders` CRUD + folder_id filter on docs; FE: breadcrumb, site filter, "+ New folder", folder tiles in grid + list, kebab rename/delete with content-count warning, native HTML5 DnD doc → folder / folder → folder / either → breadcrumb; Drive-style global search at root, scoped inside folders; folder navigation in the link-from-library modal on investigations).
 - [x] **P3-N3** **Document preview** — inline PDF/image/video/audio preview without leaving the page — commit `1873bb2` (Drive-inspired redesign on origin/main, merged in `eeafa48`).
 
 ### Cross-entity linking + history
-- [ ] **P3-L1** **Back-tracking everywhere** — "where is this referenced?" on inspections / CAPAs / incidents / assets / docs. The `entity_links` table already exists; need consistent surfacing.
-- [ ] **P3-L2** **Media on investigations** — attachments card on investigation detail (parallel to the incident one).
+- [x] **P3-L1** **Back-tracking everywhere** — "where is this referenced?" on inspections / CAPAs / incidents / assets / docs. The `entity_links` table already exists; consistent surfacing across all detail pages.
+  - **Initial chunk:** shared `referencesFor()` service + `GET /api/links/references?type=X&id=Y` endpoint; reusable `<ReferencedByCard>` component dropped into `AssetDetail`, `IncidentDetail`, `InvestigationDetail`, `CAPADetail`. Four buckets (incidents/investigations/capas/documents) merging direct FKs (e.g., `incidents.asset_id`, `capas.incident_id`) with polymorphic `entity_links` rows in either direction.
+  - **Follow-up (this commit):**
+    1. **Inspections back-tracking** — `'inspection'` added to `LINKABLE_TYPES` in `entity_links.js` and `PARENT_TABLES` in `routes/links.js`. New `inspectionsReferencing()` (poly-only — no direct FK between inspections and other entities). `referencesFor()` now returns an `inspections` bucket on every entity, and `<ReferencedByCard>` mounted on `InspectionReport.jsx` so an inspection can see its own back-references.
+    2. **Assets bucket** — added `assetsReferencing()` (uses `incidents.asset_id` as direct FK + polymorphic links) so an inspection can see "Assets I inspected" / a document or CAPA can see linked assets. Six buckets total (incidents/investigations/capas/documents/inspections/assets).
+    3. **Documents detail surfacing** — chose the inline path. `<ReferencedByCard>` mounted inside the Drive-style preview modal between content and footer; new `.dpv-references` CSS slot caps it at 220px max-height with overflow scroll so the modal layout stays bounded.
+    4. **Link / unlink post-creation + clickable rows** — `referencesFor()` now returns `link_id` on every row (NULL on direct-FK rows like `incidents.asset_id`, populated on polymorphic `entity_links` rows). `<ReferencedByCard>` gains a "+ Link" button in the header and a hover-reveal × on every poly row, both gated to elevated. Clicking the button opens new `<AddLinkModal>` (type chips + debounced search of the chosen list endpoint + click-to-link); unlink calls DELETE /api/links/:id then refreshes via a tick counter. **Also retro-added the missing `.refby-*` CSS** — the original P3-L1 ship had row classes referenced in JSX with no styles anywhere in the tree, so rows had no cursor/hover and the click affordance was invisible. New `.refby-*` (~140 lines) and `.alm-*` (~155 lines) sit at the bottom of `styles.css`, all design-token references.
+- [x] **P3-L2** **Media on investigations** — attachments card on investigation detail (parallel to UX-A on incidents) — commit `e75e8ce` (FE-only; BE polymorphic route already supported `entity_type='investigation'`). Follow-up `77a2eab` aligned upload to UX-A's worker-can-upload behavior. Page-scoped `.invd-attach-*` styles mirror UX-A's `.idet-attach-*` design (hover-reveal red ×, dashed CTA empty state). Bug-fix folded in: rendering read `a.original_name` / `a.size` but schema columns are `filename` / `size_bytes` — never exercised before because nothing seeded investigation attachments.
 
 ### Audit
-- [ ] **P3-A1** **Proper activity logging** — wider coverage (every mutation writes a row), consistent shape, filterable by entity / actor / action / timestamp window.
+- [ ] **P3-A1** **Proper activity logging + audit export** — wider coverage (every mutation writes a row), consistent shape, filterable + exportable. Compliance framing: OSHA / HSE / ISO 45001 inspectors can request the chain of custody for any record on demand.
+  - **Done in 4 chunks (uncommitted at end of session):**
+    1. **Foundation** — migration `013_activity_log_widen` (CHECK adds asset/document/folder/site/user/link), shared `services/activity_log.js` (`writeActivity` + `diffFields` for old/new diffs in metadata). Wired into `sites.js` (3 routes), `assets.js` (3, plus `asset_archived` / `asset_restored` distinct from `asset_updated`), `documents.js` (3, plus `document_moved` when only `folder_id` changes), `folders.js` (3, plus distinct `folder_renamed` / `folder_moved` / `folder_updated` actions), `links.js` (2), `auth.js` (3 — registered / profile_updated / password_changed; login intentionally skipped as noise). 15 audit rows verified end-to-end.
+    2. **Admin config + partial-coverage gaps** — migration `014_activity_log_admin_types` (CHECK adds asset_category, answer_set). Wired into `asset_categories.js` (8 actions covering category + per-field CRUD + reorder), `answer_sets.js` (3, with options before/after diff in metadata). Filled gaps in `investigations.js` (delete five-why preserves removed Q/A in metadata; team_member_added), `templates.js` (PATCH metadata + items_updated rollup), `inspections_routes.js` (PATCH metadata with `status_at_edit` flag — item-level PUT skipped because the route already enforces 409 immutability after completion).
+    3. **Audit-log export endpoint + Reports tab** — `GET /api/reports/audit-log` (paginated) and `GET /api/reports/audit-log/export.csv` (UTF-8 BOM + RFC 4180 escaping; `Content-Disposition: attachment`). New "Audit Log" card on the Reports page (slate/gray `rt-audit` accent). The export itself writes an `audit_log_exported` row with the filters used → tamper-evident chain of custody.
+    4. **Polish** — entity-number resolver (accepts `INC-2026-0150` / `CAPA-048` / `AST-2026-00001` etc., case-insensitive, falls back to entity_type/id on bogus prefix). Role-narrowed: audit endpoints require `ehs_officer` / `ehs_manager` / `admin` only (supervisor blocked). Multi-select pickers for actions (grouped by entity_type with select-all per group), entity types (flat), and actors (flat). Distinct-actions endpoint feeds the dropdown. Popover portal'd to `document.body` because `.rpt-panel` has `overflow: hidden`; scrollable body, `position: fixed`, repositions on scroll/resize.
+  - **Intentionally deferred:**
+    - Per-answer inspection-item logging (`#9` from the audit survey) — the route's status='in_progress' guard returns 409 for completed/abandoned inspections, so a successful mutation can't reach a state worth auditing. Code comment in `inspections_routes.js` documents where to add the log if the route is ever loosened.
+    - Verb normalization (`#10`) — cosmetic only; would touch every existing log call site and risk silent breakage if any FE/dashboard filters on `action` strings.
 
 ### Org / multi-tenancy
 - [ ] **P3-O1** **Concept of organization** — proper multi-tenant model. Today there's a single org row in the seed; needs sign-up, invite flows, switching, isolation tests.
@@ -86,17 +100,22 @@ here ships without explicit go-ahead.
 ### AI assistance
 - [ ] **P3-AI1** **Auto-fill investigation (AI + manual modes)** — five-Why suggestions, root-cause prompts, contributing-factors checklist, recommended CAPAs.
 - [ ] **P3-AI2** **Prompt-driven autofill** — system asks targeted questions ("Was the press locked out?"), user answers free-text, AI normalizes into structured fields.
+- [ ] **P3-AI3** **Video → incident report** — extend the existing voice-intake flow (Phase 2 T5.1 / T5.2 / F5.1) to accept video. Pipeline: video upload → audio extracted → transcript (Whisper or similar) → re-use `services/voice_extract.js` (Anthropic tool-use schema) → structured incident draft + same confirmation UX as voice. Visual frames could later feed a separate hazard-detection model — out of scope for v1.
 
 ### Operational features
 - [ ] **P3-OP1** **Asset maintenance** — schedules, due dates, last-done, escalations to CAPA when overdue.
 - [x] **P3-OP2** **Inspection module** — full inspection lifecycle (templates → schedule → run → findings → CAPAs) — commit `918279a` (origin/main; merged in `eeafa48`). Pages: `/inspections`, `/inspections/:id` editor + report; routes `/api/inspections`, `/api/answer-sets`; migrations `008_templates_inspections` + `009_template_versioning`.
 - [x] **P3-OP3** **Templates** — reusable templates with versioning + Google-Forms-style builder — commit `918279a` (origin/main; merged in `eeafa48`). Pages: `/templates`, `/templates/:id/edit`; route `/api/templates`.
 - [ ] **P3-OP4** **Scheduling** — recurring inspections, calibrations, training, walkthroughs; calendar view + reminders.
+- [ ] **P3-OP5** **Risk register / risk assessment module** — distinct from the 5×5 matrix used by `ReportWizard.jsx` (which scores incidents *post-event*). This is a *proactive* register: identify hazards at sites/assets, assess L×C, assign mitigations, periodic review, link to incidents/CAPAs that arose from a given risk. Likely needs `risks` + `risk_assessments` tables, `risk_review_due` field, and entity_links wiring. Big enough to be its own phase — scope before starting.
 
 ### Onboarding + data import
 - [ ] **P3-OB1** **User onboarding flow** — first-login walkthrough, sample data toggle, role-tailored "what to do first".
 - [ ] **P3-OB2** **CSV import** — users, sites, assets, work_hours, etc. With dry-run + error report.
 - [ ] **P3-OB3** **Document versioning** — supersede a doc with a new file while keeping the audit trail of prior revisions.
+
+### Regulatory expansion
+- [ ] **P3-RG1** **Australian regulation** — third regulator alongside US OSHA (300/300A/301) and UK HSE/RIDDOR. Add `country='AU'` support on sites and integrate Safe Work Australia's notifiable-incident workflow. Each AU state has its own Work Health & Safety Act (e.g., NSW WHS s38, Vic OHS Act 2004 s37) with different categories (death, serious injury/illness, dangerous incident) and notification deadlines (immediately for death/serious; written follow-up within 48h–7d depending on state). Schema: likely `notifiable_incidents` table joining incident + state + category + phone_notified_at + written_submitted_at + reference_number; new report variant on the Reports page; per-state submission deadline tracking on the dashboard.
 
 ---
 
@@ -109,12 +128,15 @@ These came out of the post-Wave-4 review. The shared theme is **"the incident re
 - [x] **UX-A** **Post-report attachments** — add + delete with audit. Photos surface hours/days later; capturing them at submission only is a real gap. — commit `ba14826`
 - [x] **UX-B** **Inline notes on activity timeline** — `POST /incidents/:id/note` + composer + distinct amber styling for note rows + Cmd/Ctrl+Enter to post + optimistic prepend. Commit `31f8be7`.
 - [ ] **UX-C** **Editable description / area / department / body parts** on the detail page. PATCH already supports all of these BE-side; UI is what's missing. Use field-level edit affordances rather than a giant edit-mode toggle.
-- [ ] **UX-D** **Add/edit witnesses post-creation** — witnesses surface late. Currently captured at submission only. Small route + a witnesses card with add/edit/remove.
-- [ ] **UX-E** **Severity override UI** — BE already wires `severity_override` / `severity_override_by` / `severity_override_reason` and writes a `severity_overridden` activity_log entry. UI is missing — needs a small modal: new severity, required reason, confirm. Triage often needs to bump severity after seeing photos.
+  - **Done:** description (textarea in "What happened" card), area + department (input in Quick Facts; department added as new fact-row, both shown to elevated even when empty with "(not set)" placeholder). Inline `<DescEdit>` and `<FactEdit>` components in `IncidentDetail.jsx`; small `idet-edit-*` page-scoped CSS for trigger button + edit-row footer + empty-state styling. Edit gated to elevated roles (`canEdit`).
+  - **BE compliance gap closed:** PATCH `/incidents/:id` now writes an `incident_updated` activity_log row with field-level `{from, to}` diff in metadata for any change to title / description / area / specific_location / department / immediate_actions_taken. Severity continues to log `severity_overridden` separately. Closes the OSHA 1904.33 amendment-trail gap that previously made non-restricted edits silent. New action wired into `IncidentDetail` timeline icon/dot-class helpers.
+  - **Open:** body parts editing — needs BodyMap3D integration on the detail page (separate component surface from the wizard's flow).
+- [x] **UX-D** **Add/edit witnesses post-creation** — BE: three new routes on `incidents.js` (POST/PATCH/DELETE `/incidents/:id/witnesses[/:wid]`), all gated to elevated, all writing `witness_added` / `witness_updated` / `witness_removed` activity_log rows with full witness data (or field-level diff for updates) in metadata. FE: `WitnessModal.jsx` (dual-purpose add/edit, mirrors AssignModal's `idet-modal-*` pattern), Witnesses card placed in the sidebar between Reporter and Triage state, list of `<div className="idet-witness">` cards with name + contact + collapsed-style statement + edit/remove triggers (elevated only), empty state with prompt copy. Page-scoped `.idet-witness-*` CSS in `incidents.css` (~50 lines, all design-token references). New activity actions wired into `tlIcon`/`tlDotClass`. Worker role gets 403 surfaced as toast.
+- [x] **UX-E** **Severity override UI** — `SeverityOverrideModal` (new file, mirrors AssignModal's `idet-modal-*` pattern, zero new CSS), "Override severity" trigger button in IncidentDetail header-actions row (only visible to elevated roles, hidden when status=Closed). Sev `<select>` + required-reason textarea, confirm disabled until severity differs and reason is non-empty. Sends PATCH `/incidents/:id` with `severity` + `severity_override_reason`; BE writes `severity_overridden` activity-log row with old→new + reason in metadata. Worker role gets 403 surfaced as toast.
 
 ### Quick wins (independent, can land any time)
 
-- [ ] **UX-F** **Global search jump-to in TopBar** — wire to `/api/search`, keyboard-driven dropdown ("INC-…" / "INV-…" / "CAPA-…" → enter → navigate).
+- [x] **UX-F** **Global search jump-to in TopBar** — `globalSearch` API hits `/api/incidents|investigations|capas` with `search=` param; categorized dropdown in `SearchResults`; debounced 300ms; keyboard `/` focus, ↑/↓ navigate, Enter open, Esc close; click-to-navigate; loading + empty states; status chips; auto-closes on route change. Page-scoped `.sr-*` styles in `styles.css`. (Implemented earlier; roadmap entry was stale.)
 - [x] **UX-G** **CAPA due-date color coding** — pills on kanban + list (red ≤2d & overdue, amber ≤6d, muted else). Commit `48ca9b2`.
 - [x] **UX-H** **Cross-page stop-work banner** — slim pulsing red bar above TopBar in ProtectedLayout, polls every 30s, click → first active stop-work. Commit `48ca9b2`.
 
@@ -137,49 +159,81 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 
 ## State
 
-- **Branch**: `backend` — synced with `origin/backend`.
+- **Branch**: `backend` — pushed through `8b3359d` (P3-L1 follow-ups). All work this session committed and pushed. Working tree clean.
 - **Phase 2**: code complete. Only F6.2 (manual demo walkthrough) outstanding.
 - **Wave 7**: E7.1 done.
-- **Productionization backlog** (UX-A through UX-H): A, B, G, H done. C, D, E, F pending.
+- **Productionization backlog** (UX-A through UX-H): **A, B, D, E, F, G, H done. C done except body-parts editor (deferred — needs BodyMap3D integration outside the wizard).**
 - **BUG-001**: closed.
-- **Phase 3** (P3-* items): all open, captured 2026-05-06.
-- **Migrations applied**: 001–007.
-- **Running**: dev servers via `cd server && node index.js` (BE :3001) and `cd client && npm run dev` (FE :5173). Demo accounts in seed.
+- **Phase 3** (P3-* items): **N1, N2, N3, L1, L2, A1, OP2, OP3 all done.**
+  - **Open** (not started): O1, O2, AI1, AI2, AI3 (video intake), OP1, OP4, OP5 (risk register), OB1, OB2, OB3, RG1 (Australian regulation).
+- **Migrations applied**: 001–015 (008 templates+inspections + 009 template_versioning from main, 010 document_folders, 011 dashboard_layout from main, 012 template_cover_image from main, 013 activity_log_widen + 014 activity_log_admin_types from backend, 014a fixup that renames the legacy site_hierarchy entry, 015 site_hierarchy — renumbered from the original 012).
+- **Running**: dev servers via `cd server && node --watch index.js` (BE :3001) and `cd client && npm run dev` (FE :5173). Demo accounts in seed.
 
-## Most recent session — 2026-05-06
+## Most recent session — 2026-05-06 (evening) — P3-N1 + L1 prototype + A1 foundation + new roadmap items
 
-Session shipped 14 commits to `origin/backend`. Headline UI changes:
+Session shipped P3-N1 (site detail page + hierarchy) end-to-end, then prototyped P3-L1 back-tracking across four detail pages, then delivered the P3-A1 compliance audit-logging stack in four chunks (foundation, admin config + gaps, audit export, multi-select polish + role gate). Pulled `origin/main` mid-session bringing dashboard customisation + assets/incidents redesigns. Three new roadmap items added at the user's direction (P3-AI3 video intake, P3-OP5 risk register, P3-RG1 Australian regulation).
+
+| Area | What changed | Commit / status |
+|---|---|---|
+| P3-N1 site detail + hierarchy | Migration 015 (parent_id; originally 012, renumbered after this session's main merge), enriched `GET /api/sites/:id` (parent + ancestors + children + counts + recents), cycle/depth/cross-org validation. New `/admin/sites/:id` page with stacked-cards layout (`sd-*` page-scoped styles); list cards become clickable; "Sub-site of …" parent chip; parent-picker in modal that excludes self+descendants. Login demo grid gains Wendy (worker) for role-gate click-testing. | `25ad9af` (pushed to `origin/backend`) |
+| Merge from main | PR #6 merged earlier (`52479ba`); pulled main into backend (`d38cbc0`) bringing dashboard customisation (`8328863`), assets page redesign (`260584e`), incidents page redesign (`38597f4`). Migration 011 (`dashboard_layout`) auto-applied. | `d38cbc0` (pushed) |
+| P3-L1 back-tracking prototype | New `referencesFor()` service + `GET /api/links/references?type=X&id=Y`. Shared `<ReferencedByCard>` component dropped into AssetDetail / IncidentDetail / InvestigationDetail / CAPADetail (one import + one JSX line per page). Refby card groups by Incidents / Investigations / CAPAs / Documents; click-through navigates. Open follow-ups: inspections aren't in `LINKABLE_TYPES`; documents have no detail page. | uncommitted |
+| P3-A1 chunk 1 (foundation) | Migration 013 (CHECK widened), `services/activity_log.js` helper, sites + assets + documents + folders + links + auth all log compliance-relevant mutations with field-level diff metadata. | uncommitted |
+| P3-A1 chunk 2 (admin + gaps) | Migration 014 (asset_category + answer_set), asset_categories full CRUD + per-field operations logged, answer_sets (options before/after captured), filled investigation/template/inspection partial-coverage gaps. | uncommitted |
+| P3-A1 chunk 3 (export endpoint + UI) | `/api/reports/audit-log` + `/audit-log/export.csv` (UTF-8 BOM, RFC 4180), new "Audit Log" card on Reports (slate-gray `rt-audit`), filterable preview table + CSV download. Export logged → tamper-evident. | uncommitted |
+| P3-A1 chunk 4 (polish) | Entity-number resolver (INC-/INV-/CAPA-/AST-/DOC-/INS-), audit-role gate (ehs_officer/manager/admin only — supervisor blocked), multi-select pickers (actions grouped + select-all-per-group, entity types flat, actors flat), `MultiPicker` component portal'd to body to escape `.rpt-panel` `overflow:hidden` clip. | uncommitted |
+| Roadmap updates | Added **P3-AI3** (video intake), **P3-OP5** (risk register / risk assessment — distinct from the 5×5 incident-scoring matrix), **P3-RG1** (Australian regulation — Safe Work Australia notifiable-incident workflow alongside OSHA + RIDDOR). Updated P3-L1 description to call out the inspection + document-detail open follow-ups. Updated P3-A1 description with all four chunks + the deferred items (`#9` per-answer, `#10` verb-normalisation). | this commit |
+
+**Honest hallucination report at end of session** (per user-requested "what's your hallucination risk?" pattern):
+- **Low risk on BE**: every endpoint exercised via curl with multiple parameter combinations, every audit row inspected by id, role gates verified for Elena (ehs_manager) / Marcus (supervisor) / Wendy (worker), CSV format inspected.
+- **Medium-high risk on FE**: the `MultiPicker` component, the portal'd popover with computed `getBoundingClientRect` positioning, scroll-fix, indeterminate checkbox state, disabled state styling — none of these were click-tested in a browser. Build clean + HMR clean confirms parse correctness, not visual correctness.
+- **Stale-cache risk**: `ActionPicker` was renamed to `MultiPicker` mid-session; if the user has Reports open in a browser tab, hard-refresh before judging visuals.
+
+## Most recent session — 2026-05-06 (afternoon → evening)
+
+Session shipped the document folder system, fixed the demo seed's missing PDFs, repaired the broken investigation link-modal, then delivered P3-L2 (media on investigations) end-to-end. Multiple pulls from `origin/main` folded in the templates + inspections feature, the Drive-style documents redesign + preview, and the premium UI overhaul (auth/profile rewrites, animated nav icons, kanban hover-expand) — all without disturbing local work. Two PRs merged (#5, #6).
+
+| Area | What changed | Commit / PR |
+|---|---|---|
+| Document folder system (P3-N2) | Migration 010 + `/api/folders` CRUD + folder_id filter on docs; FE breadcrumb, site filter, "+ New folder", folder tiles in grid + list, kebab rename/delete with content-count warning, native HTML5 DnD doc → folder / folder → folder / either → breadcrumb; Drive-style global search at root, scoped inside folders; folder navigation in the link-from-library modal on investigations | `12862f8` (PR #5) |
+| Demo seed: real PDFs on disk | Seeded sample docs now write valid 1-page PDFs to `server/uploads/` and persist `stored_filename` so download/preview work on a fresh `SEED_FORCE=1` reseed (previously returned 404 because `stored_filename` was NULL) | bundled in `12862f8` |
+| Investigation link-modal repair | Switched the broken `docs-modal-*` classes (deleted upstream by `b27b352`) to the standard shared `.modal-*` shell so the modal actually renders | bundled in `12862f8` |
+| Folder system from main | Documents page Drive-inspired UI + inline preview (`1873bb2`), templates + inspections module (`918279a`), inspection redesign + template conditional logic (`9e34bfb`) | merged in `eeafa48` and `ee91f6b` |
+| Premium UI overhaul (from main) | Split-screen auth, tabbed profile, global polish (566-line `styles.css` rework), animated nav icons (`86c305f`), kanban hover-expand (`ac92b88`) | merged in `0b75795` |
+| Roadmap ticks | P3-N2, P3-N3, P3-OP2, P3-OP3 ticked | `189f942` |
+| P3-L2 media on investigations | Mirror of UX-A: "+ Add files" header button, hover-reveal red × delete, dashed CTA empty state, activity-log entries, role-gated delete (uploader OR elevated). Page-scoped `.invd-attach-*` CSS mirrors UX-A's `.idet-attach-*` design — explicitly authorized by user. Field-name bug fix (`a.original_name` → `a.filename`, `a.size` → `a.size_bytes`) folded in. | `e75e8ce` (PR #6) |
+| Search-input collapse fix | Search field in link-from-library modal was shrinking to intrinsic width; added `flex: 1; min-width: 0` so it spans the row left of the 160px type dropdown | `ab2313f` (PR #6) |
+| L2 worker-upload alignment | Removed the `canEdit &&` gates so workers can upload investigation attachments (matches UX-A behavior); per-row delete still gated on `canDeleteAttachment` (uploader OR elevated) | `77a2eab` (PR #6) |
+
+Two PRs merged into `main`: **#5** (folder system + seed fix + investigation link-modal repair, merged at `18940c7`) and **#6** (L2 media + search fix + worker-upload alignment, status open at end of session — merge if not already). After PR #6 lands, main = backend.
+
+## Most recent session — 2026-05-07 — UX backlog cleanup + P3-L1 closure
+
+Session shipped the entire remaining UX backlog (UX-C/D/E + ticked F) and closed P3-L1 with link/unlink + missing CSS. Pulled `origin/main` mid-session bringing investigations redesign + ComboBox/SmartTextarea components + accessibility passes.
 
 | Area | What changed | Commit |
 |---|---|---|
-| Asset types modal | 2-pane redesign + DEFAULT badges + field-count badges | `8096bbb` |
-| Default fields per type | Migration 006 — Vehicle/Machine/Building/Tool/Chemical come pre-loaded | `74f3557` |
-| Drop "Area" + Display ID | Migration 007 + system-fields banner with Display name + Unique identifier | `6ac9d51` `22b921f` |
-| Start-from picker | New asset type → Blank / From existing / From template (8 industry templates) | `dd5ee85` |
-| UX-A post-report attachments | Add + delete + audit on incident detail | `ba14826` |
-| UX-B inline notes | Amber composer + interleaved NOTE rows on activity timeline | `31f8be7` |
-| UX-G CAPA due-date colors | Red / amber / gray pills on kanban + list | `48ca9b2` |
-| UX-H cross-page stop-work | Pulsing red bar above TopBar on every page | `48ca9b2` |
-| BUG-001 | Verified fixed; no code change needed | `b4d4952` |
-| Phase 3 backlog | 16 P3-* items captured into roadmap | `9dc6a35` |
-
-Latest commit on `origin/backend` is the most recent roadmap update; run `git log -10` to see the chain.
+| Merge from main | 7 commits from main folded in (investigations redesign `0fb699c`, kanban hover-fix `79d66e9`, ComboBox + SmartTextarea `1782fa6`, accessibility `da194fd`, etc.). Used `-X theirs` so main's UI/UX wins on conflicting hunks; backend feature additions (ReferencedByCard mounts, audit-log card, site-detail page, `/admin/sites` page tip) survived as non-conflicting hunks. | `f313722` |
+| UX-E severity override modal | New `SeverityOverrideModal.jsx` mirrors AssignModal's `idet-modal-*` pattern (zero new CSS). "Override severity" trigger in incident detail header-actions row, gated to elevated. Sev `<select>` + required-reason textarea; BE already wired severity_override / _by / _reason and writes severity_overridden activity_log row. | `dffaf1f` |
+| UX-C inline-edit description / area / department | `<DescEdit>` + `<FactEdit>` components in IncidentDetail. Field-level edit affordance via small `idet-edit-trigger` pencil. Department added as a first-class fact-row. **Closed compliance gap**: PATCH /incidents/:id now writes incident_updated activity_log row with field-level diff metadata, so non-restricted edits aren't silent (OSHA 1904.33 amendment trail). New action wired into timeline icon helpers. Body-parts editor deferred. | `ff465d8` |
+| UX-D witnesses post-creation | BE: 3 new routes (POST/PATCH/DELETE `/incidents/:id/witnesses[/:wid]`), all gated to elevated, all logging witness_added / witness_updated / witness_removed with full data + diff in metadata. FE: dual-purpose `WitnessModal.jsx`, Witnesses card placed between Reporter and Triage state in the sidebar, hover-reveal × on rows for elevated. Page-scoped `.idet-witness-*` CSS. | `d87ea04` |
+| P3-L1 follow-ups | `inspection` added to `LINKABLE_TYPES` + `PARENT_TABLES`. New `inspectionsReferencing()` (poly-only) + `assetsReferencing()` (uses incidents.asset_id direct FK + poly). Six buckets total. Every row carries `link_id` (NULL on direct-FK). `<ReferencedByCard>` gains "+ Link" header button + hover-reveal × per poly row. New `<AddLinkModal>` (type chips + debounced search + click-to-link, sends both `search` and `q` params because endpoints are inconsistent — bug caught in testing). Mounted on InspectionReport.jsx and inside the document preview modal. Document rows deep-link to `/documents?folder=N` (DocumentsList consumes via `useSearchParams` and walks parent_id for breadcrumb). **Retro-added `.refby-*` CSS (~140 lines) — original P3-L1 ship had row classes referenced in JSX with zero CSS anywhere in the tree, making click affordances invisible.** New `.alm-*` (~155 lines) for the modal. | `8b3359d` |
+| Roadmap | Ticked UX-C, UX-D, UX-E, UX-F (already-implemented), P3-L1; itemized P3-L1 follow-up sub-chunks; updated `## State` section to reflect this session's pushes. | this entry |
 
 ## Quick re-orientation for a fresh session
 
 1. Read this `roadmap.md` first — full status with commit SHAs.
 2. Read `plan-phase-2.md` if you need design rationale for any Phase-2 wave.
 3. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System-project-ehs-incident-manager/memory/MEMORY.md` for user preferences and project context.
-4. `git fetch origin && git status` — should show `backend` in sync with `origin/backend`.
-5. Boot: `cd server && node index.js` and `cd client && npm run dev`. Login as `elena@sdsmanager.com / password123`.
+4. `git fetch origin && git status` — `backend` should be at `8b3359d`, working tree clean. `origin/backend == backend`.
+5. Boot: `cd server && node --watch index.js` and `cd client && npm run dev`. Login as `elena@sdsmanager.com / password123`.
 6. **What's likely next** (in user-priority order):
-   - **UX-C** editable description / area / dept / body_parts on incident detail (~1.5h) — BE PATCH already supports all of these
-   - **UX-E** severity override UI (~45min) — BE fully wired, just missing the modal
-   - **UX-D** witness add/edit (~1h) — small new route + card
-   - **UX-F** global search jump-to in TopBar (~1.5h)
-   - Then Phase 3 (P3-N1 site details / P3-OP2 inspection module / P3-AI1 investigation auto-fill, etc.) — these are bigger and the user will direct.
-7. **Operating norms** (per user feedback during Phase 2):
+   - **Body-parts editor** to fully close UX-C — needs BodyMap3D integration outside the wizard flow.
+   - **Remaining P3 themes**: org/multi-tenancy (O1/O2), AI assistance (AI1/AI2/AI3 video), ops (OP1 maintenance / OP4 scheduling / OP5 risk register), regulatory (RG1 Australia), onboarding (OB1/OB2/OB3).
+7. **Operating norms** (per user feedback during Phase 2 + Phase 3):
    - Treat as an actual app, not hackathon polish.
    - Each task = one focused commit + push to `origin/backend`.
    - Always leave dev servers running at the end so the user can click-test.
    - Don't claim FE success without actually exercising the UI; "Vite transforms cleanly" alone is not proof.
+   - **Never override or overdo UI/UX** — reuse existing classes/tokens; no new CSS or inline styles unless the feature genuinely needs new visual treatment, in which case **ask first**. If you do add page-scoped CSS, follow the prefix convention (`idet-` incident detail, `invd-` investigation detail, `dp-` documents page, `tp-` templates list, `ie-` inspection editor, etc.).
+   - **After every multi-step Edit on JSX/JS**, verify the file actually parses — run `cd client && npx vite build` or grep the Vite log for "SyntaxError"/"Failed to" lines, not just timestamp markers. Babel parse errors don't always abort HMR; the trailing log entry can be a stale "hmr update" while the file is silently broken.

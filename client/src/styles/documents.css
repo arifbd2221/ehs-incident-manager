@@ -963,6 +963,19 @@
   to { opacity: 1; transform: scale(1); }
 }
 
+/* References slot inside preview modal (P3-L1 follow-up) */
+.dpv-references {
+  flex-shrink: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 12px 20px;
+  border-top: 1px solid var(--sds-border);
+  background: var(--sds-bg-surface-alt);
+}
+.dpv-references .refby-card {
+  margin: 0;
+}
+
 /* Footer */
 .dpv-footer {
   display: flex;

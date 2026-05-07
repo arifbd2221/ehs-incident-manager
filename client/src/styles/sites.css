@@ -73,6 +73,15 @@
   align-items: center;
   gap: 6px;
 }
+.site-parent-row {
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-brand-primary-tint);
+  color: var(--sds-brand-primary);
+  font-weight: 600;
+}
+.site-parent-row strong { font-weight: 700; }
 
 .site-stats {
   display: grid;
@@ -558,4 +567,120 @@ select.sm-input {
 }
 @keyframes smSpin {
   to { transform: rotate(360deg); }
+}
+
+/* ================================================================
+ * SITE DETAIL PAGE (sd- prefix) — /admin/sites/:id
+ * ================================================================ */
+
+.sd-back { margin-bottom: 12px; }
+
+.sd-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.sd-hero-main { flex: 1; min-width: 0; }
+.sd-hero-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+/* Breadcrumb (root → immediate parent → current) */
+.sd-bread {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--sds-fg-tertiary);
+  margin-bottom: 6px;
+}
+.sd-bread-item { display: inline-flex; align-items: center; gap: 4px; }
+.sd-bread-link {
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: var(--sds-font-family);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sds-fg-secondary);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.sd-bread-link:hover { color: var(--sds-brand-primary); background: var(--sds-brand-primary-tint); }
+.sd-bread-sep { color: var(--sds-fg-tertiary); font-weight: 400; }
+.sd-bread-current { font-weight: 600; color: var(--sds-fg-secondary); padding: 2px 4px; }
+
+/* Inline chip in the hero subtitle, e.g. "Sub-site of X" */
+.sd-parent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-brand-primary-tint);
+  color: var(--sds-brand-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Count pill inside .card-h, e.g. "5 of 12" */
+.sd-count-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-bg-page);
+  color: var(--sds-fg-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+/* Empty-state line inside a card */
+.sd-empty {
+  padding: 18px 4px;
+  color: var(--sds-fg-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Clickable rows in detail-page tables */
+.sd-row { cursor: pointer; transition: background 120ms ease; }
+.sd-row:hover { background: var(--sds-bg-surface-alt); }
+
+/* 2-col grid for paired cards (compliance + workforce) */
+.sd-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* Key/value list inside detail cards */
+.sd-kv-list { display: flex; flex-direction: column; }
+.sd-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--sds-border);
+  font-size: 13px;
+}
+.sd-kv:last-child { border-bottom: none; }
+.sd-kv-k { color: var(--sds-fg-secondary); font-weight: 500; }
+.sd-kv-v { color: var(--sds-fg-heading); font-weight: 600; text-align: right; }
+
+/* Make the cards on the detail page space nicely */
+.sites-page .card { margin-bottom: 16px; }
+.sites-page .card:last-child { margin-bottom: 0; }
+.sites-page .sd-grid-2 .card { margin-bottom: 0; }
+.sites-page .stat-grid { margin-bottom: 16px; }
+
+/* Site card on the list page should look clickable now */
+.site-card[role="button"] { cursor: pointer; }
+.site-card[role="button"]:focus-visible {
+  outline: 2px solid var(--sds-brand-primary);
+  outline-offset: 2px;
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getIncident, assignIncident, escalateIncident, closeIncident, uploadAttachments, deleteAttachment, addIncidentNote } from '../../api/incidents';
+import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
@@ -10,6 +10,9 @@ import { timeAgo, formatDate } from '../../utils/time';
 import AssignModal from './modals/AssignModal';
 import EscalateModal from './modals/EscalateModal';
 import CloseModal from './modals/CloseModal';
+import SeverityOverrideModal from './modals/SeverityOverrideModal';
+import WitnessModal from './modals/WitnessModal';
+import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/incidents.css';
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -20,6 +23,10 @@ const tlDotClass = (action) => {
   if (action === 'closed') return 'tl-closed';
   if (action === 'assigned') return 'tl-assigned';
   if (action === 'note') return 'tl-note';
+  if (action === 'incident_updated' || action === 'severity_overridden') return 'tl-note';
+  if (action === 'witness_added') return 'tl-assigned';
+  if (action === 'witness_updated') return 'tl-note';
+  if (action === 'witness_removed') return 'tl-attach';
   if (action === 'recordability_verified') return 'tl-verified';
   if (action === 'attached' || action === 'attachment_deleted') return 'tl-attach';
   if (action === 'stop_work_submitted' || action === 'stop_work_acknowledged' || action === 'stop_work_resolved' || action === 'stop_work_cancelled') return 'tl-stopwork';
@@ -31,12 +38,98 @@ const tlIcon = (action) => {
   if (action === 'escalated') return 'investigation';
   if (action === 'closed') return 'check';
   if (action === 'note') return 'edit';
+  if (action === 'incident_updated') return 'edit';
+  if (action === 'severity_overridden') return 'warning';
+  if (action === 'witness_added') return 'person';
+  if (action === 'witness_updated') return 'edit';
+  if (action === 'witness_removed') return 'close';
   if (action === 'recordability_verified') return 'shield';
   if (action === 'attached') return 'file';
   if (action === 'attachment_deleted') return 'close';
   if (action === 'stop_work_submitted' || action === 'stop_work_acknowledged' || action === 'stop_work_resolved' || action === 'stop_work_cancelled') return 'warning';
   return 'capa';
 };
+
+// Inline-edit (UX-C): a fact-row that flips to a vertical edit form on click.
+// Used for area + department in the Quick Facts card.
+function FactEdit({ label, value, onSave, allowed, placeholder = '—' }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || '');
+  const [saving, setSaving] = useState(false);
+
+  const start = () => { setDraft(value || ''); setEditing(true); };
+  const cancel = () => setEditing(false);
+  const save = async () => {
+    setSaving(true);
+    try { await onSave(draft.trim()); setEditing(false); }
+    finally { setSaving(false); }
+  };
+
+  if (editing) return (
+    <div className="idet-fact is-editing">
+      <span className="idet-fact-label">{label}</span>
+      <input className="input" value={draft} autoFocus onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel(); }}/>
+      <div className="idet-edit-row">
+        <button className="btn btn-secondary btn-sm" onClick={cancel} disabled={saving}>Cancel</button>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || draft.trim() === (value || '')}>{saving ? 'Saving…' : 'Save'}</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="idet-fact">
+      <span className="idet-fact-label">{label}</span>
+      <span className="idet-fact-val">
+        {value || <span className="idet-edit-empty">{placeholder}</span>}
+        {allowed && (
+          <button className="idet-edit-trigger" onClick={start} title={`Edit ${label.toLowerCase()}`}>
+            <Icon name="edit" size={11}/>edit
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+// Inline-edit (UX-C): description in the "What happened" card.
+// `value` is the raw description (may be empty); `fallback` is the title shown
+// when description is empty so the card never reads as blank. Editor seeds the
+// draft from `value` only, so adding a description starts from an empty
+// textarea instead of the title.
+function DescEdit({ value, fallback, onSave, allowed }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || '');
+  const [saving, setSaving] = useState(false);
+
+  const start = () => { setDraft(value || ''); setEditing(true); };
+  const cancel = () => setEditing(false);
+  const save = async () => {
+    setSaving(true);
+    try { await onSave(draft.trim()); setEditing(false); }
+    finally { setSaving(false); }
+  };
+
+  if (editing) return (
+    <>
+      <textarea className="textarea" value={draft} autoFocus rows={5} placeholder="Describe what happened…" onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel(); }}/>
+      <div className="idet-edit-row">
+        <button className="btn btn-secondary btn-sm" onClick={cancel} disabled={saving}>Cancel</button>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || draft.trim() === (value || '')}>{saving ? 'Saving…' : 'Save'}</button>
+      </div>
+    </>
+  );
+
+  return (
+    <p className="idet-desc-text">
+      {value || fallback}
+      {allowed && (
+        <button className="idet-edit-trigger" onClick={start} title="Edit description">
+          <Icon name="edit" size={11}/>edit
+        </button>
+      )}
+    </p>
+  );
+}
 
 const fileTypeInfo = (a) => {
   const name = a.filename || '';
@@ -53,9 +146,11 @@ export default function IncidentDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canVerify = ELEVATED_ROLES.has(user?.role);
+  const canEdit = ELEVATED_ROLES.has(user?.role);
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
+  const [witnessModal, setWitnessModal] = useState(null); // null | 'add' | witness object
   const [toast, setToast] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, index: 0 });
   const [uploading, setUploading] = useState(false);
@@ -140,6 +235,63 @@ export default function IncidentDetail() {
       showToast('Incident closed.');
       load();
     } catch { showToast('Failed to close.'); }
+  };
+
+  const saveField = async (field, value) => {
+    try {
+      await updateIncident(r.id, { [field]: value });
+      showToast('Updated.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to update.');
+      throw err;
+    }
+  };
+
+  const handleAddWitness = async (form) => {
+    try {
+      await addWitness(r.id, form);
+      setWitnessModal(null);
+      showToast(`Witness ${form.name} added.`);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to add witness.');
+      throw err;
+    }
+  };
+
+  const handleUpdateWitness = async (form) => {
+    if (!witnessModal || witnessModal === 'add') return;
+    try {
+      await updateWitness(r.id, witnessModal.id, form);
+      setWitnessModal(null);
+      showToast('Witness updated.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to update witness.');
+      throw err;
+    }
+  };
+
+  const handleDeleteWitness = async (witness) => {
+    if (!window.confirm(`Remove witness ${witness.name}? This is logged for audit.`)) return;
+    try {
+      await deleteWitness(r.id, witness.id);
+      showToast('Witness removed.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to remove witness.');
+    }
+  };
+
+  const handleSeverityOverride = async (form) => {
+    try {
+      await updateIncident(r.id, form);
+      showToast(`Severity overridden to ${form.severity === 1 ? 'S1 Critical' : form.severity === 2 ? 'S2 Major' : form.severity === 3 ? 'S3 Moderate' : form.severity === 4 ? 'S4 Minor' : 'S5 Insignificant'}.`);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to override severity.');
+    }
   };
 
   const handleUpload = async (e) => {
@@ -234,19 +386,28 @@ export default function IncidentDetail() {
           <div className="idet-header-actions">
             {recommendedAction === 'closed' ? (
               <button className="idet-act-btn" disabled>Closed</button>
-            ) : recommendedAction === 'investigating' ? (
-              <button className="idet-act-btn primary" onClick={() => navigate('/investigations')}>
-                <Icon name="investigation" size={15}/>Open investigation
-              </button>
             ) : (
               <>
-                <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no action</button>
-                <button className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`} onClick={() => setModal('assign')}>
-                  <Icon name="person" size={15}/>Assign
-                </button>
-                <button className={`idet-act-btn ${recommendedAction === 'escalate' ? 'primary' : ''}`} onClick={() => setModal('escalate')}>
-                  <Icon name="investigation" size={15}/>Escalate
-                </button>
+                {ELEVATED_ROLES.has(user?.role) && (
+                  <button className="idet-act-btn" onClick={() => setModal('severity')} title="Override auto-classified severity (logged for audit)">
+                    <Icon name="warning" size={15}/>Override severity
+                  </button>
+                )}
+                {recommendedAction === 'investigating' ? (
+                  <button className="idet-act-btn primary" onClick={() => navigate('/investigations')}>
+                    <Icon name="investigation" size={15}/>Open investigation
+                  </button>
+                ) : (
+                  <>
+                    <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no action</button>
+                    <button className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`} onClick={() => setModal('assign')}>
+                      <Icon name="person" size={15}/>Assign
+                    </button>
+                    <button className={`idet-act-btn ${recommendedAction === 'escalate' ? 'primary' : ''}`} onClick={() => setModal('escalate')}>
+                      <Icon name="investigation" size={15}/>Escalate
+                    </button>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -295,7 +456,7 @@ export default function IncidentDetail() {
               What happened
             </div>
             <div className="idet-card-body">
-              <p className="idet-desc-text">{r.description || r.title}</p>
+              <DescEdit value={r.description} fallback={r.title} onSave={(v) => saveField('description', v)} allowed={canEdit}/>
               <div className="idet-desc-sub">
                 Reported by <b>{r.reporter_name}</b> at <b>{r.site_name}{r.area ? ` · ${r.area}` : ''}</b> on {formatDate(r.incident_datetime)}.
                 Type: <b>{t?.name}</b>. Auto-classified Sev {r.severity}, Track {r.track}.
@@ -486,6 +647,51 @@ export default function IncidentDetail() {
             </div>
           </div>
 
+          {/* Witnesses (UX-D) */}
+          <div className="idet-card">
+            <div className="idet-card-h">
+              <div className="hicon hi-person"><Icon name="person" size={16}/></div>
+              Witnesses
+              {(r.witnesses || []).length > 0 && <span className="idet-attach-count">{r.witnesses.length}</span>}
+              {canEdit && (
+                <button className="idet-attach-add" onClick={() => setWitnessModal('add')}>
+                  <Icon name="plus" size={12}/>Add witness
+                </button>
+              )}
+            </div>
+            <div className="idet-card-body">
+              {(r.witnesses || []).length === 0 ? (
+                <div className="idet-witness-empty">
+                  No witnesses recorded yet.{canEdit ? ' Add a statement when one is collected.' : ''}
+                </div>
+              ) : (
+                <div className="idet-witnesses">
+                  {r.witnesses.map(w => (
+                    <div key={w.id} className="idet-witness">
+                      <div className="idet-witness-head">
+                        <div className="idet-witness-info">
+                          <div className="idet-witness-name">{w.name}</div>
+                          {w.contact && <div className="idet-witness-contact">{w.contact}</div>}
+                        </div>
+                        {canEdit && (
+                          <div className="idet-witness-actions">
+                            <button className="idet-edit-trigger" onClick={() => setWitnessModal(w)} title="Edit witness">
+                              <Icon name="edit" size={11}/>edit
+                            </button>
+                            <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteWitness(w)} title="Remove witness">
+                              <Icon name="close" size={11}/>remove
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {w.statement && <div className="idet-witness-statement">{w.statement}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Triage state */}
           <div className="idet-card">
             <div className="idet-card-h">
@@ -553,11 +759,11 @@ export default function IncidentDetail() {
                   <span className="idet-fact-label">Site</span>
                   <span className="idet-fact-val">{r.site_name}</span>
                 </div>
-                {r.area && (
-                  <div className="idet-fact">
-                    <span className="idet-fact-label">Area</span>
-                    <span className="idet-fact-val">{r.area}</span>
-                  </div>
+                {(r.area || canEdit) && (
+                  <FactEdit label="Area" value={r.area} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('area', v)}/>
+                )}
+                {(r.department || canEdit) && (
+                  <FactEdit label="Department" value={r.department} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('department', v)}/>
                 )}
               </div>
             </div>
@@ -611,10 +817,15 @@ export default function IncidentDetail() {
         document.body
       )}
 
+      <ReferencedByCard entityType="incident" entityId={incident.id} />
+
       {/* Modals — portal to escape .page transform */}
       {modal === 'assign' && createPortal(<AssignModal incident={r} onCancel={() => setModal(null)} onConfirm={handleAssign}/>, document.body)}
       {modal === 'escalate' && createPortal(<EscalateModal incident={r} onCancel={() => setModal(null)} onConfirm={handleEscalate}/>, document.body)}
       {modal === 'close' && createPortal(<CloseModal incident={r} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
+      {modal === 'severity' && createPortal(<SeverityOverrideModal incident={r} onCancel={() => setModal(null)} onConfirm={handleSeverityOverride}/>, document.body)}
+      {witnessModal === 'add' && createPortal(<WitnessModal incident={r} onCancel={() => setWitnessModal(null)} onConfirm={handleAddWitness}/>, document.body)}
+      {witnessModal && witnessModal !== 'add' && createPortal(<WitnessModal incident={r} witness={witnessModal} onCancel={() => setWitnessModal(null)} onConfirm={handleUpdateWitness}/>, document.body)}
 
       {/* Toast */}
       {toast && createPortal(

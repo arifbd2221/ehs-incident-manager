@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/connection.js';
 import { nextInvestigationNumber, nextCapaNumber } from '../services/numbering.js';
 import { listLinksTouching } from '../services/entity_links.js';
+import { writeActivity } from '../services/activity_log.js';
 
 const router = Router();
 
@@ -180,8 +181,26 @@ router.delete('/:id/five-whys/:whyId', (req, res) => {
   const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
 
+  // Snapshot the row we're about to remove so the audit metadata preserves
+  // the exact text and level — deleting a root-cause finding is a
+  // compliance-relevant edit (someone can revert analysis).
+  const removed = db.prepare('SELECT * FROM five_whys WHERE id = ? AND investigation_id = ?').get(req.params.whyId, inv.id);
+
   db.prepare('DELETE FROM five_whys WHERE id = ? AND investigation_id = ?').run(req.params.whyId, inv.id);
   const whys = db.prepare('SELECT * FROM five_whys WHERE investigation_id = ? ORDER BY level').all(inv.id);
+
+  if (removed) {
+    writeActivity({
+      org_id: inv.org_id,
+      entity_type: 'investigation',
+      entity_id: inv.id,
+      action: 'five_why_removed',
+      description: `removed Why-${removed.level} from investigation ${inv.investigation_number}`,
+      user_id: req.user.id,
+      metadata: { level: removed.level, question: removed.question, answer: removed.answer },
+    });
+  }
+
   res.json(whys);
 });
 
@@ -191,6 +210,17 @@ router.post('/:id/team', (req, res) => {
 
   const { user_id, role } = req.body;
   db.prepare('INSERT INTO investigation_team (investigation_id, user_id, role) VALUES (?, ?, ?)').run(inv.id, user_id, role || 'member');
+
+  const addedUser = db.prepare('SELECT name, initials FROM users WHERE id = ?').get(user_id);
+  writeActivity({
+    org_id: inv.org_id,
+    entity_type: 'investigation',
+    entity_id: inv.id,
+    action: 'team_member_added',
+    description: `added ${addedUser?.name || `user ${user_id}`} to investigation ${inv.investigation_number}`,
+    user_id: req.user.id,
+    metadata: { added_user_id: user_id, role: role || 'member' },
+  });
 
   const team = db.prepare('SELECT it.*, u.name, u.initials FROM investigation_team it LEFT JOIN users u ON u.id = it.user_id WHERE it.investigation_id = ?').all(inv.id);
   res.status(201).json(team);

@@ -15,6 +15,7 @@
 
 import { Router } from 'express';
 import db from '../db/connection.js';
+import { writeActivity } from '../services/activity_log.js';
 
 const router = Router();
 
@@ -115,6 +116,17 @@ router.post('/', (req, res) => {
   `).run(req.user.org_id, Number(site_id), parent_id == null ? null : Number(parent_id), name.trim(), req.user.id);
 
   const folder = getFolder(result.lastInsertRowid, req.user.org_id);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'folder',
+    entity_id: folder.id,
+    action: 'folder_created',
+    description: `created folder ${folder.name}`,
+    user_id: req.user.id,
+    metadata: { site_id: folder.site_id, parent_id: folder.parent_id },
+  });
+
   res.status(201).json({ folder });
 });
 
@@ -166,6 +178,32 @@ router.patch('/:id', (req, res) => {
   db.prepare(`UPDATE document_folders SET ${sets.join(', ')} WHERE id = ?`).run(...args, id);
 
   const updated = getFolder(id, req.user.org_id);
+
+  // Two distinct actions for clarity in the audit trail.
+  const renamed = name !== undefined && name.trim() !== folder.name;
+  const moved = parent_id !== undefined && nextParentId !== folder.parent_id;
+  const meta = { changes: {} };
+  if (renamed) meta.changes.name = [folder.name, updated.name];
+  if (moved) meta.changes.parent_id = [folder.parent_id, updated.parent_id];
+
+  if (renamed || moved) {
+    const action = (renamed && moved) ? 'folder_updated'
+      : renamed ? 'folder_renamed'
+      : 'folder_moved';
+    const description = (renamed && moved) ? `renamed and moved folder ${updated.name}`
+      : renamed ? `renamed folder ${folder.name} → ${updated.name}`
+      : `moved folder ${updated.name}`;
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'folder',
+      entity_id: id,
+      action,
+      description,
+      user_id: req.user.id,
+      metadata: meta,
+    });
+  }
+
   res.json({ folder: updated, breadcrumb: breadcrumbOf(id, req.user.org_id) });
 });
 
@@ -184,6 +222,22 @@ router.delete('/:id', (req, res) => {
   // policy-level beyond that (e.g. soft-deleting orphaned docs) can be added
   // here later if the UX calls for it.
   db.prepare('DELETE FROM document_folders WHERE id = ?').run(id);
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'folder',
+    entity_id: id,
+    action: 'folder_deleted',
+    description: `deleted folder ${folder.name}`,
+    user_id: req.user.id,
+    metadata: {
+      name: folder.name,
+      site_id: folder.site_id,
+      parent_id: folder.parent_id,
+      cascaded_subfolders: childFolders,
+      orphaned_documents: docCount,
+    },
+  });
 
   res.json({ success: true, deleted_folder_id: id, sub_folder_count: childFolders, document_count: docCount });
 });
