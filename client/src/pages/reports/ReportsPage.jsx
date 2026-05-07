@@ -14,12 +14,16 @@ const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'adm
 // Mirrors AUDIT_ROLES on the BE; supervisors are intentionally excluded.
 const AUDIT_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 
+// `requiresFramework` gates a regulator-specific card on the org's
+// compliance_frameworks selection (set during P3-O1 sign-up). A RIDDOR-only
+// org shouldn't see OSHA cards. Cards without `requiresFramework` (Metrics,
+// Audit Log) are universal/internal and always visible.
 const REPORT_TYPES = [
-  { id: 'osha300', cls: 'rt-osha300', badge: 'OSHA · US', title: 'OSHA 300 Log', desc: 'Running log of recordable injuries & illnesses.' },
-  { id: 'osha300a', cls: 'rt-osha300a', badge: 'OSHA · US', title: 'OSHA 300A Summary', desc: 'Annual summary, posted Feb 1 – Apr 30.' },
-  { id: 'riddor', cls: 'rt-riddor', badge: 'HSE · UK', title: 'RIDDOR F2508', desc: 'Event-triggered to HSE. Sheffield site only.' },
-  { id: 'metrics', cls: 'rt-metrics', badge: 'Internal', title: 'Safety Metrics', desc: 'TRIR, DART, severity rate.' },
-  { id: 'audit', cls: 'rt-audit', badge: 'Internal · Audit', title: 'Audit Log', desc: 'Filterable trail of every change. Export for inspector requests.', requiresAudit: true },
+  { id: 'osha300',  cls: 'rt-osha300',  badge: 'OSHA · US',        title: 'OSHA 300 Log',       desc: 'Running log of recordable injuries & illnesses.', requiresFramework: 'osha_300' },
+  { id: 'osha300a', cls: 'rt-osha300a', badge: 'OSHA · US',        title: 'OSHA 300A Summary',  desc: 'Annual summary, posted Feb 1 – Apr 30.',          requiresFramework: 'osha_300a' },
+  { id: 'riddor',   cls: 'rt-riddor',   badge: 'HSE · UK',         title: 'RIDDOR F2508',       desc: 'Event-triggered to HSE. Sheffield site only.',    requiresFramework: 'riddor_f2508' },
+  { id: 'metrics',  cls: 'rt-metrics',  badge: 'Internal',         title: 'Safety Metrics',     desc: 'TRIR, DART, severity rate.' },
+  { id: 'audit',    cls: 'rt-audit',    badge: 'Internal · Audit', title: 'Audit Log',          desc: 'Filterable trail of every change. Export for inspector requests.', requiresAudit: true },
 ];
 
 function ReportLoading() {
@@ -36,15 +40,34 @@ function ReportLoading() {
 export default function ReportsPage() {
   const { user } = useAuth();
   const canSeeAudit = AUDIT_ROLES.has(user?.role);
-  const visibleReports = REPORT_TYPES.filter(r => !r.requiresAudit || canSeeAudit);
 
-  const [tab, setTab] = useState('osha300');
+  // Org's compliance frameworks gate which regulator-specific cards appear.
+  // Defensive fallback: if the field is missing (legacy users created before
+  // migration 017, or a JWT minted before the field was added), treat it as
+  // "no filter" so we don't accidentally hide every regulator card.
+  const frameworks = Array.isArray(user?.compliance_frameworks) ? user.compliance_frameworks : null;
+  const visibleReports = useMemo(() => REPORT_TYPES.filter(r => {
+    if (r.requiresAudit && !canSeeAudit) return false;
+    if (r.requiresFramework && frameworks && !frameworks.includes(r.requiresFramework)) return false;
+    return true;
+  }), [canSeeAudit, frameworks]);
+
+  const [tab, setTab] = useState(() => visibleReports[0]?.id || 'metrics');
   const [sites, setSites] = useState([]);
   const [siteId, setSiteId] = useState('');
 
   useEffect(() => {
     getSites().then(data => { setSites(data); if (data.length > 0) setSiteId(String(data[0].id)); });
   }, []);
+
+  // If the previously-selected tab is no longer in the visible set (org
+  // changed frameworks, role-gating flipped, etc.), fall back to the first
+  // visible card so the page never renders an empty content area.
+  useEffect(() => {
+    if (visibleReports.length > 0 && !visibleReports.some(r => r.id === tab)) {
+      setTab(visibleReports[0].id);
+    }
+  }, [visibleReports, tab]);
 
   const siteOpts = useMemo(() => sites.map(s => ({ value: String(s.id), label: s.name })), [sites]);
 
@@ -60,15 +83,23 @@ export default function ReportsPage() {
       </div>
 
       {/* Report type selector */}
-      <div className="rpt-type-grid">
-        {visibleReports.map(r => (
-          <div key={r.id} className={`rpt-type-card ${r.cls} ${tab === r.id ? 'active' : ''}`} onClick={() => setTab(r.id)}>
-            <div className="rpt-type-badge">{r.badge}</div>
-            <div className="rpt-type-title">{r.title}</div>
-            <div className="rpt-type-desc">{r.desc}</div>
+      {visibleReports.length > 0 ? (
+        <div className="rpt-type-grid">
+          {visibleReports.map(r => (
+            <div key={r.id} className={`rpt-type-card ${r.cls} ${tab === r.id ? 'active' : ''}`} onClick={() => setTab(r.id)}>
+              <div className="rpt-type-badge">{r.badge}</div>
+              <div className="rpt-type-title">{r.title}</div>
+              <div className="rpt-type-desc">{r.desc}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rpt-panel">
+          <div className="rpt-panel-body">
+            <div className="cell-empty">No reports available for your organization's selected compliance frameworks.</div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* Report content */}
       {tab === 'osha300' && <Osha300Report siteId={siteId}/>}
