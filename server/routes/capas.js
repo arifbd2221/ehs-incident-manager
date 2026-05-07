@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
 import { nextCapaNumber } from '../services/numbering.js';
+import { notifyUser } from '../services/notifications.js';
 
 const router = Router();
 
@@ -110,6 +111,13 @@ function createCapaRow({ orgId, sourceType, investigationId, incidentId, body, u
       : `created CAPA ${capaNumber} from ${sourceRef || sourceType}`,
     userId,
   );
+
+  notifyUser({
+    orgId, userId: Number(owner_id), type: 'capa_assigned',
+    title: `CAPA assigned to you — ${capaNumber}`,
+    body: `${title} · due ${due_date}`,
+    severity: 'warn',
+  });
 
   return capaId;
 }
@@ -271,6 +279,13 @@ router.post('/:id/complete', (req, res) => {
   db.prepare(`INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id) VALUES (?, 'capa', ?, 'completed', ?, ?)`)
     .run(capa.org_id, capa.id, `marked ${capa.capa_number} complete — submitted for verification`, req.user.id);
 
+  notifyUser({
+    orgId: capa.org_id, userId: capa.verifier_id, type: 'capa_completed',
+    title: `CAPA ready for verification — ${capa.capa_number}`,
+    body: `${capa.title} has been completed and needs your review.`,
+    severity: 'warn',
+  });
+
   const updated = db.prepare('SELECT * FROM capas WHERE id = ?').get(capa.id);
   res.json(updated);
 });
@@ -308,6 +323,13 @@ router.post('/:id/reject', (req, res) => {
 
   db.prepare(`INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id) VALUES (?, 'capa', ?, 'rejected', ?, ?)`)
     .run(capa.org_id, capa.id, `rejected ${capa.capa_number} — needs more work`, req.user.id);
+
+  notifyUser({
+    orgId: capa.org_id, userId: capa.owner_id, type: 'capa_rejected',
+    title: `CAPA rejected — ${capa.capa_number}`,
+    body: notes || 'Needs more work. Please review and resubmit.',
+    severity: 'err',
+  });
 
   const updated = db.prepare('SELECT * FROM capas WHERE id = ?').get(capa.id);
   res.json(updated);

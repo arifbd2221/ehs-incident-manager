@@ -8,6 +8,7 @@ import { parseBodyParts } from '../services/body_parts.js';
 import { extractFromTranscript } from '../services/voice_extract.js';
 import { injuryTypeForOsha300, descriptionForOsha300 } from '../services/osha_300_helpers.js';
 import { createCapaRow } from './capas.js';
+import { notifyUser, notifyElevatedAtSite, notifyRole } from '../services/notifications.js';
 
 const router = Router();
 
@@ -20,6 +21,7 @@ const RESTRICTED_FIELDS = new Set([
   'severity', 'track', 'status', 'assigned_to',
   'triage_due', 'triage_notes',
   'osha_recordable', 'osha_recordability_type', 'osha_days_away', 'osha_days_restricted',
+  'osha_privacy_case', 'osha_work_related', 'er_treated', 'hospitalized', 'hospitalization_date',
   'riddor_reportable',
 ]);
 
@@ -205,6 +207,11 @@ router.post('/', async (req, res, next) => {
   // scrubbed (user_id NULL, actor "Anonymous" in the description).
   const reportedBy = anonymous ? null : req.user.id;
 
+  const td = type_data || {};
+  const erTreated = td.er_treated ? 1 : 0;
+  const hospitalized = td.hospitalized ? 1 : 0;
+  const hospitalizationDate = td.hospitalization_date || null;
+
   const result = db.prepare(`
     INSERT INTO incidents (
       incident_number, org_id, site_id, title, type, description, incident_datetime,
@@ -212,19 +219,21 @@ router.post('/', async (req, res, next) => {
       severity, likelihood, consequence, track,
       status, reported_by, is_anonymous, body_parts_affected,
       osha_recordable, osha_recordability_type,
+      er_treated, hospitalized, hospitalization_date,
       riddor_reportable, riddor_category,
       type_data, immediate_actions_taken,
       voice_extraction_id,
       closed_at, closed_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     incidentNumber, orgId, site_id, title, type, description || '', incident_datetime,
     area || null, specific_location || null, department || null, shift || null, resolvedAssetId,
     severity, likelihood ?? null, consequence ?? null, track,
     status, reportedBy, anonymous ? 1 : 0, bodyPartsJson,
     osha.recordable ? 1 : 0, osha.type,
+    erTreated, hospitalized, hospitalizationDate,
     riddor.reportable ? 1 : 0, riddor.category || null,
-    JSON.stringify(type_data || {}), immediate_actions_taken || null,
+    JSON.stringify(td), immediate_actions_taken || null,
     resolvedVoiceExtractionId,
     autoClose ? new Date().toISOString() : null,
     autoClose ? 'Auto-closed (Track C)' : null
@@ -282,12 +291,11 @@ router.post('/', async (req, res, next) => {
     const year = new Date(incident_datetime).getFullYear();
     const maxCase = db.prepare('SELECT MAX(case_number) as m FROM osha_300_log WHERE site_id = ? AND calendar_year = ?').get(site_id, year);
     const caseNum = (maxCase?.m || 0) + 1;
-    const td = type_data || {};
 
     db.prepare(`
       INSERT INTO osha_300_log (org_id, site_id, incident_id, calendar_year, case_number, employee_name, job_title, injury_date, location, description,
-        classification_death, classification_days_away, classification_job_transfer, classification_other, injury_type)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        classification_death, classification_days_away, classification_job_transfer, classification_other, injury_type, is_privacy_case)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       orgId, site_id, incidentId, year, caseNum,
       td.injured_person?.name || td.affected_person?.name || 'Unknown',
@@ -299,6 +307,7 @@ router.post('/', async (req, res, next) => {
       osha.type === 'job_transfer' ? 1 : 0,
       osha.type === 'other_recordable' ? 1 : 0,
       injuryTypeForOsha300(type, type_data),
+      0,
     );
   }
 
@@ -321,6 +330,44 @@ router.post('/', async (req, res, next) => {
       `${title} classified as ${riddor.category}. ${riddor.phoneRequired ? 'Phone HSE without delay.' : `Written report due by ${deadline?.slice(0, 10)}.`}`,
       deadline
     );
+  }
+
+  // --- Notifications ---
+  notifyElevatedAtSite({
+    orgId, siteId: site_id, type: 'incident_created', incidentId,
+    title: `New incident reported — ${incidentNumber}`,
+    body: `${title} (${type} · S${severity} · Track ${track})`,
+    severity: severity <= 2 ? 'warn' : 'info',
+    actionUrl: `/incidents/${incidentId}`,
+  });
+
+  if (severity <= 2) {
+    notifyRole({
+      orgId, role: 'ehs_manager', type: 'high_severity', incidentId,
+      title: `High-severity incident — ${incidentNumber} (S${severity})`,
+      body: `${title} requires immediate attention.`,
+      severity: 'err',
+      actionUrl: `/incidents/${incidentId}`,
+    });
+    notifyRole({
+      orgId, role: 'admin', type: 'high_severity', incidentId,
+      title: `High-severity incident — ${incidentNumber} (S${severity})`,
+      body: `${title} requires immediate attention.`,
+      severity: 'err',
+      actionUrl: `/incidents/${incidentId}`,
+    });
+  }
+
+  if (osha.recordable) {
+    const oshaDeadline = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    notifyRole({
+      orgId, role: 'ehs_manager', type: 'osha_recordable', incidentId,
+      title: `OSHA recordable — ${incidentNumber}`,
+      body: `${title} classified as ${osha.type}. Ensure 300 log entry within 24 hours.`,
+      severity: 'err',
+      deadline: oshaDeadline,
+      actionUrl: `/incidents/${incidentId}`,
+    });
   }
 
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incidentId);
@@ -837,6 +884,7 @@ router.patch('/:id', (req, res) => {
 
   const updatable = ['title', 'description', 'severity', 'track', 'status', 'assigned_to', 'triage_due', 'triage_notes',
     'osha_recordable', 'osha_recordability_type', 'osha_days_away', 'osha_days_restricted',
+    'osha_privacy_case', 'osha_work_related', 'er_treated', 'hospitalized', 'hospitalization_date',
     'riddor_reportable', 'immediate_actions_taken', 'area', 'specific_location', 'department'];
 
   const requestedRestricted = updatable.filter(k => RESTRICTED_FIELDS.has(k) && req.body[k] !== undefined);
@@ -1037,6 +1085,14 @@ router.post('/:id/assign', (req, res) => {
     VALUES (?, 'incident', ?, 'assigned', ?, ?)
   `).run(incident.org_id, incident.id, `assigned ${assignee?.initials || '?'} as triage owner · due ${triage_due || 'TBD'}`, req.user.id);
 
+  notifyUser({
+    orgId: incident.org_id, userId: assigned_to, type: 'incident_assigned', incidentId: incident.id,
+    title: `You've been assigned ${incident.incident_number}`,
+    body: `${incident.title} — triage due ${triage_due || 'TBD'}`,
+    severity: 'warn',
+    actionUrl: `/incidents/${incident.id}`,
+  });
+
   const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
   updated.type_data = JSON.parse(updated.type_data || '{}');
   res.json(updated);
@@ -1075,6 +1131,16 @@ router.post('/:id/escalate', (req, res) => {
     VALUES (?, 'investigation', ?, 'created', ?, ?)
   `).run(incident.org_id, invResult.lastInsertRowid, `created from ${incident.incident_number}`, req.user.id);
 
+  if (lead_investigator) {
+    notifyUser({
+      orgId: incident.org_id, userId: lead_investigator, type: 'incident_escalated', incidentId: incident.id,
+      title: `Investigation assigned — ${invNumber}`,
+      body: `${incident.title} escalated to Track ${track || incident.track}. You are lead investigator.`,
+      severity: 'warn',
+      actionUrl: `/investigations/${invResult.lastInsertRowid}`,
+    });
+  }
+
   const investigation = db.prepare('SELECT * FROM investigations WHERE id = ?').get(invResult.lastInsertRowid);
   res.status(201).json({ incident_id: incident.id, investigation });
 });
@@ -1093,6 +1159,16 @@ router.post('/:id/close', (req, res) => {
     INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
     VALUES (?, 'incident', ?, 'closed', ?, ?)
   `).run(incident.org_id, incident.id, `closed ${incident.incident_number} — ${reason || 'no reason'}`, req.user.id);
+
+  if (incident.reported_by) {
+    notifyUser({
+      orgId: incident.org_id, userId: incident.reported_by, type: 'incident_closed', incidentId: incident.id,
+      title: `Your incident ${incident.incident_number} has been closed`,
+      body: reason || 'Closed by management.',
+      severity: 'info',
+      actionUrl: `/incidents/${incident.id}`,
+    });
+  }
 
   const updated = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incident.id);
   updated.type_data = JSON.parse(updated.type_data || '{}');

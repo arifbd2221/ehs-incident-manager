@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getOsha300, getOsha300A, getRiddor, getMetrics, getAuditLog, getAuditActions } from '../../api/reports';
+import { getOsha300, getOsha300A, getOsha301, getRiddor, getMetrics, getAuditLog, getAuditActions, createOsha300Entry } from '../../api/reports';
 import { getSites, getUsers } from '../../api/users';
+import { getIncidents } from '../../api/incidents';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
@@ -17,6 +18,7 @@ const AUDIT_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 const REPORT_TYPES = [
   { id: 'osha300', cls: 'rt-osha300', badge: 'OSHA · US', title: 'OSHA 300 Log', desc: 'Running log of recordable injuries & illnesses.' },
   { id: 'osha300a', cls: 'rt-osha300a', badge: 'OSHA · US', title: 'OSHA 300A Summary', desc: 'Annual summary, posted Feb 1 – Apr 30.' },
+  { id: 'osha301', cls: 'rt-osha301', badge: 'OSHA · US', title: 'OSHA 301 Form', desc: 'Individual incident report (per 29 CFR 1904.29).' },
   { id: 'riddor', cls: 'rt-riddor', badge: 'HSE · UK', title: 'RIDDOR F2508', desc: 'Event-triggered to HSE. Sheffield site only.' },
   { id: 'metrics', cls: 'rt-metrics', badge: 'Internal', title: 'Safety Metrics', desc: 'TRIR, DART, severity rate.' },
   { id: 'audit', cls: 'rt-audit', badge: 'Internal · Audit', title: 'Audit Log', desc: 'Filterable trail of every change. Export for inspector requests.', requiresAudit: true },
@@ -73,6 +75,7 @@ export default function ReportsPage() {
       {/* Report content */}
       {tab === 'osha300' && <Osha300Report siteId={siteId}/>}
       {tab === 'osha300a' && <Osha300AReport siteId={siteId}/>}
+      {tab === 'osha301' && <Osha301Report siteId={siteId}/>}
       {tab === 'riddor' && <RiddorReport siteId={siteId}/>}
       {tab === 'metrics' && <MetricsReport siteId={siteId}/>}
       {tab === 'audit' && <AuditLogReport/>}
@@ -502,10 +505,15 @@ function AuditLogReport() {
 }
 
 function Osha300Report({ siteId }) {
+  const { user } = useAuth();
+  const canAdd = ELEVATED_ROLES.has(user?.role);
   const [data, setData] = useState(null);
-  useEffect(() => {
+  const [showManual, setShowManual] = useState(false);
+
+  const load = () => {
     if (siteId) { setData(null); getOsha300({ site_id: siteId }).then(setData).catch(() => {}); }
-  }, [siteId]);
+  };
+  useEffect(load, [siteId]);
 
   if (!data) return <ReportLoading/>;
 
@@ -516,19 +524,22 @@ function Osha300Report({ siteId }) {
           <div className="rpt-panel-title">OSHA 300 Log · Live Preview</div>
           <div className="rpt-panel-sub">{data.site?.name} · YTD {data.year}</div>
         </div>
-        <span className="rpt-auto-badge"><span className="auto-dot"/>Auto-updates</span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {canAdd && <button className="btn btn-secondary btn-sm" onClick={() => setShowManual(true)}><Icon name="plus" size={14}/>Manual entry</button>}
+          <span className="rpt-auto-badge"><span className="auto-dot"/>Auto-updates</span>
+        </div>
       </div>
       <div style={{ overflowX: 'auto' }}>
-        <table className="rpt-table" style={{ minWidth: 1000 }}>
+        <table className="rpt-table" style={{ minWidth: 1100 }}>
           <thead>
             <tr>
               <th>Case #</th><th>Employee</th><th>Date</th><th>Where</th><th>Description</th>
-              <th>Death</th><th>Days away</th><th>Restrict.</th><th>Other</th><th>Type</th>
+              <th>Death</th><th>Days away</th><th>Restrict.</th><th>Other</th><th>Days away</th><th>Days restr.</th><th>Type</th>
             </tr>
           </thead>
           <tbody>
             {(data.entries || []).map(e => (
-              <tr key={e.id}>
+              <tr key={e.id} className={e.is_privacy_case ? 'privacy-row' : ''}>
                 <td className="cell-ref">{e.case_number}</td>
                 <td>
                   <div className="cell-name">{e.employee_name}</div>
@@ -541,11 +552,13 @@ function Osha300Report({ siteId }) {
                 <td className="cell-check">{e.classification_days_away ? <span className="check-mark">✓</span> : ''}</td>
                 <td className="cell-check">{e.classification_job_transfer ? <span className="check-mark">✓</span> : ''}</td>
                 <td className="cell-check">{e.classification_other ? <span className="check-mark">✓</span> : ''}</td>
+                <td className="cell-num">{e.days_away_count || ''}</td>
+                <td className="cell-num">{e.days_restricted_count || ''}</td>
                 <td>{e.injury_type}</td>
               </tr>
             ))}
             {data.entries?.length === 0 && (
-              <tr><td colSpan={10} className="cell-empty">No recordable entries this year</td></tr>
+              <tr><td colSpan={12} className="cell-empty">No recordable entries this year</td></tr>
             )}
           </tbody>
         </table>
@@ -553,6 +566,198 @@ function Osha300Report({ siteId }) {
       <div className="rpt-panel-footer">
         <span className="foot-item">Total cases<b>{data.entries?.length || 0}</b></span>
       </div>
+      {showManual && <Manual300Modal siteId={siteId} onClose={() => setShowManual(false)} onSaved={load}/>}
+    </div>
+  );
+}
+
+const CLASSIFICATION_OPTIONS = [
+  { value: 'death', label: 'Death' },
+  { value: 'days_away', label: 'Days away from work' },
+  { value: 'job_transfer', label: 'Job transfer or restriction' },
+  { value: 'other_recordable', label: 'Other recordable case' },
+];
+
+function Manual300Modal({ siteId, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    site_id: siteId, employee_name: '', job_title: '', injury_date: '',
+    location: '', description: '', classification: 'other_recordable',
+    days_away_count: 0, days_restricted_count: 0, injury_type: '', is_privacy_case: false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    if (!form.employee_name || !form.injury_date) { setError('Employee name and injury date are required.'); return; }
+    setSaving(true);
+    try {
+      await createOsha300Entry({ ...form, site_id: siteId });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to save.');
+    } finally { setSaving(false); }
+  };
+
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+        <div className="modal-h">
+          <div>
+            <div className="modal-title">Manual OSHA 300 Entry</div>
+            <div className="modal-sub">Add a recordable case not linked to an incident in the system.</div>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Icon name="close" size={18}/></button>
+        </div>
+        <div className="modal-body">
+          {error && <div style={{ color: 'var(--sds-error)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+          <div className="field-row">
+            <div className="field"><label className="label">Employee name <span className="req">*</span></label><input className="input" value={form.employee_name} onChange={e => upd('employee_name', e.target.value)}/></div>
+            <div className="field"><label className="label">Job title</label><input className="input" value={form.job_title} onChange={e => upd('job_title', e.target.value)}/></div>
+          </div>
+          <div className="field-row">
+            <div className="field"><label className="label">Injury / illness date <span className="req">*</span></label><input className="input" type="date" value={form.injury_date} onChange={e => upd('injury_date', e.target.value)}/></div>
+            <div className="field"><label className="label">Where event occurred</label><input className="input" value={form.location} onChange={e => upd('location', e.target.value)}/></div>
+          </div>
+          <div className="field"><label className="label">Description</label><textarea className="textarea" value={form.description} onChange={e => upd('description', e.target.value)} rows={2}/></div>
+          <div className="field-row">
+            <div className="field">
+              <label className="label">Classification</label>
+              <select className="select" value={form.classification} onChange={e => upd('classification', e.target.value)}>
+                {CLASSIFICATION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div className="field"><label className="label">Injury / illness type</label><input className="input" value={form.injury_type} onChange={e => upd('injury_type', e.target.value)} placeholder="e.g. Fracture, Laceration"/></div>
+          </div>
+          <div className="field-row-3">
+            <div className="field"><label className="label">Days away from work</label><input className="input" type="number" min="0" value={form.days_away_count} onChange={e => upd('days_away_count', Number(e.target.value))}/></div>
+            <div className="field"><label className="label">Days on restriction</label><input className="input" type="number" min="0" value={form.days_restricted_count} onChange={e => upd('days_restricted_count', Number(e.target.value))}/></div>
+            <div className="field">
+              <label className="label">Privacy case</label>
+              <select className="select" value={form.is_privacy_case ? '1' : '0'} onChange={e => upd('is_privacy_case', e.target.value === '1')}>
+                <option value="0">No</option>
+                <option value="1">Yes — suppress name on log</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div className="modal-f">
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Add entry'}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function Osha301Report({ siteId }) {
+  const [incidents, setIncidents] = useState([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (siteId) {
+      getIncidents({ site_id: siteId, limit: 200 }).then(r => {
+        const recordable = (r.incidents || []).filter(i => i.osha_recordable);
+        setIncidents(recordable);
+        setSelectedId('');
+        setData(null);
+      }).catch(() => {});
+    }
+  }, [siteId]);
+
+  useEffect(() => {
+    if (selectedId) {
+      setLoading(true);
+      getOsha301(selectedId).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+    } else { setData(null); }
+  }, [selectedId]);
+
+  const incidentOpts = incidents.map(i => ({ value: String(i.id), label: `${i.incident_number} — ${i.title}` }));
+
+  return (
+    <div className="rpt-panel">
+      <div className="rpt-panel-header">
+        <div>
+          <div className="rpt-panel-title">OSHA 301 · Injury and Illness Incident Report</div>
+          <div className="rpt-panel-sub">Individual incident form per 29 CFR 1904.29</div>
+        </div>
+      </div>
+      <div style={{ padding: '16px 20px' }}>
+        <div className="field" style={{ maxWidth: 480 }}>
+          <label className="label">Select a recordable incident</label>
+          <ComboBox options={incidentOpts} value={selectedId} onChange={setSelectedId} placeholder="Search by incident number or title…"/>
+        </div>
+      </div>
+      {loading && <ReportLoading/>}
+      {data && !loading && (
+        <div className="rpt-301-form">
+          <div className="rpt-301-section">
+            <div className="rpt-301-section-title">Case Information</div>
+            <div className="rpt-301-grid">
+              <div className="rpt-301-field"><span className="rpt-301-label">Case number</span><span className="rpt-301-val">{data.case_number || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Incident number</span><span className="rpt-301-val">{data.incident_number}</span></div>
+            </div>
+          </div>
+          <div className="rpt-301-section">
+            <div className="rpt-301-section-title">Employee</div>
+            <div className="rpt-301-grid">
+              <div className="rpt-301-field"><span className="rpt-301-label">Full name</span><span className="rpt-301-val">{data.employee?.name || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Job title</span><span className="rpt-301-val">{data.employee?.job_title || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Department</span><span className="rpt-301-val">{data.employee?.department || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Date hired</span><span className="rpt-301-val">{data.employee?.hire_date ? formatDateShort(data.employee.hire_date) : '—'}</span></div>
+            </div>
+          </div>
+          <div className="rpt-301-section">
+            <div className="rpt-301-section-title">Incident</div>
+            <div className="rpt-301-grid">
+              <div className="rpt-301-field"><span className="rpt-301-label">Date of injury/illness</span><span className="rpt-301-val">{data.incident?.date ? formatDateShort(data.incident.date) : '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Time</span><span className="rpt-301-val">{data.incident?.date?.slice(11, 16) || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Location</span><span className="rpt-301-val">{data.incident?.location || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Establishment</span><span className="rpt-301-val">{data.incident?.site || '—'}</span></div>
+            </div>
+            <div className="rpt-301-field rpt-301-wide"><span className="rpt-301-label">Describe the injury/illness, parts of body affected, and object/substance</span><span className="rpt-301-val">{data.incident?.description || '—'}</span></div>
+          </div>
+          <div className="rpt-301-section">
+            <div className="rpt-301-section-title">Injury / Illness Details</div>
+            <div className="rpt-301-grid">
+              <div className="rpt-301-field"><span className="rpt-301-label">Type</span><span className="rpt-301-val">{data.injury?.type || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Body part</span><span className="rpt-301-val">{data.injury?.body_part || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Object / substance</span><span className="rpt-301-val">{data.injury?.object_substance || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Mechanism</span><span className="rpt-301-val">{data.injury?.mechanism || '—'}</span></div>
+            </div>
+          </div>
+          <div className="rpt-301-section">
+            <div className="rpt-301-section-title">Physician / Healthcare Provider</div>
+            <div className="rpt-301-grid">
+              <div className="rpt-301-field"><span className="rpt-301-label">Name</span><span className="rpt-301-val">{data.physician?.name || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Phone</span><span className="rpt-301-val">{data.physician?.phone || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Facility</span><span className="rpt-301-val">{data.physician?.facility_name || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Facility address</span><span className="rpt-301-val">{data.physician?.facility_address || '—'}</span></div>
+            </div>
+          </div>
+          <div className="rpt-301-section">
+            <div className="rpt-301-section-title">Treatment & Classification</div>
+            <div className="rpt-301-grid">
+              <div className="rpt-301-field"><span className="rpt-301-label">ER treatment</span><span className="rpt-301-val">{data.er_treated ? 'Yes' : 'No'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Hospitalized overnight</span><span className="rpt-301-val">{data.hospitalized ? 'Yes' : 'No'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Classification</span><span className="rpt-301-val">{data.classification?.type?.replace(/_/g, ' ') || '—'}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Days away</span><span className="rpt-301-val">{data.classification?.days_away || 0}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Days restricted</span><span className="rpt-301-val">{data.classification?.days_restricted || 0}</span></div>
+              <div className="rpt-301-field"><span className="rpt-301-label">Work-related determination</span><span className="rpt-301-val">{data.work_related || '—'}</span></div>
+            </div>
+          </div>
+        </div>
+      )}
+      {!data && !loading && !selectedId && (
+        <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--sds-fg-tertiary)', fontSize: 13 }}>
+          Select an OSHA-recordable incident above to view its 301 form.
+        </div>
+      )}
     </div>
   );
 }

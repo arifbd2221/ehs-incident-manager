@@ -188,10 +188,15 @@ export default function TopBar() {
   }, [setWizardOpen]);
 
   useEffect(() => {
-    getNotifications({ unread: 1 }).then(data => {
-      setNotifications(data.notifications || []);
-      setUnreadCount(data.unreadCount || 0);
-    }).catch(() => {});
+    const fetchNotifs = () => {
+      getNotifications({ unread: 1 }).then(data => {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+      }).catch(() => {});
+    };
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 30000);
+    return () => clearInterval(interval);
   }, [location.pathname]);
 
   useEffect(() => {

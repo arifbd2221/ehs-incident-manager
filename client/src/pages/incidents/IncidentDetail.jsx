@@ -731,6 +731,34 @@ export default function IncidentDetail() {
                     <span className="st-dot"/>{r.osha_recordable ? 'Yes' : 'No'}
                   </span>
                 </div>
+                {r.osha_recordable === 1 && (
+                  <>
+                    {r.osha_privacy_case === 1 && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">Privacy case</span>
+                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
+                      </div>
+                    )}
+                    {r.er_treated === 1 && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">ER treatment</span>
+                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
+                      </div>
+                    )}
+                    {r.hospitalized === 1 && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">Hospitalized</span>
+                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
+                      </div>
+                    )}
+                    {r.osha_work_related && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">Work-related</span>
+                        <span style={{ fontSize: 12, color: 'var(--sds-fg-secondary)' }}>{r.osha_work_related}</span>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
