@@ -398,26 +398,41 @@ export default function Dashboard() {
           <div className="dash-card">
             <div className="dash-card-h">
               <div className="title"><span className="dot-accent" />Track routing</div>
-              <span style={{ fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 600 }}>{totalOpen} open</span>
+              <span className="link" onClick={() => navigate('/incidents')}>View all <Icon name="arrow" size={14} /></span>
             </div>
-            <div className="track-pipeline">
-              <div className="track-lane t-a">
+            <div className="track-list">
+              <div className="track-row t-a" onClick={() => navigate('/incidents?track=A')}>
                 <div className="track-letter">A</div>
+                <div className="track-info">
+                  <div className="track-name">Full investigation</div>
+                  <div className="track-desc">Severity 1–2 &middot; Critical &amp; major incidents</div>
+                </div>
+                <div className="track-bar-wrap">
+                  <div className="track-bar" style={{ width: `${totalOpen ? ((tc.A || 0) / totalOpen) * 100 : 0}%` }} />
+                </div>
                 <div className="track-count">{tc.A || 0}</div>
-                <div className="track-name">Full investigation</div>
-                <div className="track-desc">Sev 1-2 &middot; Critical &amp; major</div>
               </div>
-              <div className="track-lane t-b">
+              <div className="track-row t-b" onClick={() => navigate('/incidents?track=B')}>
                 <div className="track-letter">B</div>
+                <div className="track-info">
+                  <div className="track-name">Light investigation</div>
+                  <div className="track-desc">Severity 3 &middot; Moderate risk</div>
+                </div>
+                <div className="track-bar-wrap">
+                  <div className="track-bar" style={{ width: `${totalOpen ? ((tc.B || 0) / totalOpen) * 100 : 0}%` }} />
+                </div>
                 <div className="track-count">{tc.B || 0}</div>
-                <div className="track-name">Light investigation</div>
-                <div className="track-desc">Sev 3 &middot; Moderate risk</div>
               </div>
-              <div className="track-lane t-c">
+              <div className="track-row t-c" onClick={() => navigate('/incidents?track=C')}>
                 <div className="track-letter">C</div>
+                <div className="track-info">
+                  <div className="track-name">Log &amp; close</div>
+                  <div className="track-desc">Severity 4–5 &middot; Minor / observation</div>
+                </div>
+                <div className="track-bar-wrap">
+                  <div className="track-bar" style={{ width: `${totalOpen ? ((tc.C || 0) / totalOpen) * 100 : 0}%` }} />
+                </div>
                 <div className="track-count">{tc.C || 0}</div>
-                <div className="track-name">Log &amp; close</div>
-                <div className="track-desc">Sev 4-5 &middot; Minor / obs.</div>
               </div>
             </div>
             {(oshaCount > 0 || riddorCount > 0) && (
