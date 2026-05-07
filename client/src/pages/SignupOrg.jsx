@@ -54,14 +54,26 @@ const SIZE_OPTS = [
   { value: '1000+', label: '1,000+ employees' },
 ];
 
-const REGULATOR_OPTS = [
-  { value: 'OSHA', label: 'OSHA — US Occupational Safety & Health Administration' },
-  { value: 'HSE', label: 'HSE — UK Health & Safety Executive' },
-  { value: 'SafeWorkAU', label: 'Safe Work Australia' },
-  { value: 'Other', label: 'Other / TBD' },
+// Compliance frameworks the org commits to. Multi-select — real multinationals
+// run several at once. Codes mirror the BE whitelist in routes/auth.js.
+const FRAMEWORKS = [
+  { code: 'osha_300',     label: 'OSHA 300 Log',                      sub: 'US — recordable injury/illness log' },
+  { code: 'osha_300a',    label: 'OSHA 300A Annual Summary',          sub: 'US — yearly summary, posted Feb–Apr' },
+  { code: 'osha_301',     label: 'OSHA 301 Incident Report',          sub: 'US — per-incident detailed report' },
+  { code: 'riddor_f2508', label: 'RIDDOR F2508',                      sub: 'UK — HSE notifiable injury/disease form' },
+  { code: 'safework_nsw', label: 'SafeWork NSW Incident Notification', sub: 'Australia — NSW WHS Act notifiable incident' },
+  { code: 'generic',      label: 'Generic Incident Report',           sub: 'Universal fallback — works anywhere' },
 ];
 
-const REGULATOR_DEFAULT = { US: 'OSHA', UK: 'HSE', AU: 'SafeWorkAU' };
+// What gets pre-checked when the user picks a country in step 1. Editable.
+const FRAMEWORK_DEFAULTS = {
+  US: ['osha_300', 'osha_300a', 'osha_301'],
+  UK: ['riddor_f2508'],
+  AU: ['safework_nsw'],
+  CA: ['generic'],
+  IE: ['generic'],
+  OTHER: ['generic'],
+};
 
 export default function SignupOrg() {
   const { user, signupOrg } = useAuth();
@@ -75,7 +87,7 @@ export default function SignupOrg() {
 
   const [form, setForm] = useState({
     org_name: '', country: '', industry_sector: '', company_size: '',
-    primary_regulator: '', naics_code: '',
+    compliance_frameworks: [], naics_code: '',
     name: '', job_title: '', department: '',
     email: '', password: '', confirm: '',
   });
@@ -84,8 +96,18 @@ export default function SignupOrg() {
   const setCountry = (v) => setForm(f => ({
     ...f,
     country: v,
-    primary_regulator: f.primary_regulator || REGULATOR_DEFAULT[v] || 'Other',
+    // Auto-fill frameworks only the first time a country is picked. If the
+    // user has already touched the framework list, keep their selection.
+    compliance_frameworks: f.compliance_frameworks.length > 0
+      ? f.compliance_frameworks
+      : (FRAMEWORK_DEFAULTS[v] || ['generic']),
     naics_code: v === 'US' ? f.naics_code : '',
+  }));
+  const toggleFramework = (code) => setForm(f => ({
+    ...f,
+    compliance_frameworks: f.compliance_frameworks.includes(code)
+      ? f.compliance_frameworks.filter(c => c !== code)
+      : [...f.compliance_frameworks, code],
   }));
 
   const strength = getStrength(form.password);
@@ -103,7 +125,7 @@ export default function SignupOrg() {
 
   const goStep3 = () => {
     setError('');
-    if (!form.primary_regulator) return setError('Primary regulator is required');
+    if (form.compliance_frameworks.length === 0) return setError('Select at least one compliance framework');
     setDir('fwd');
     setStep(3);
   };
@@ -233,13 +255,40 @@ export default function SignupOrg() {
               </button>
             </div>
 
-            {/* Step 2: Compliance */}
+            {/* Step 2: Compliance — multi-select frameworks */}
             <div className={`reg-panel ${step === 2 ? 'visible' : 'hidden'} ${dir}`}>
               <div className="auth-field">
-                <label>Primary regulator <span className="req">*</span></label>
-                <ComboBox options={REGULATOR_OPTS} value={form.primary_regulator} onChange={v => set('primary_regulator', v)} searchable={false} />
-                <div style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)', marginTop: 6 }}>
-                  This sets your default reporting framework. You can adjust per site later.
+                <label>Compliance frameworks <span className="req">*</span></label>
+                <div style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)', marginBottom: 'var(--sds-space-sm)' }}>
+                  Select every framework you report against. Multinationals often run several at once.
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sds-space-xs)' }}>
+                  {FRAMEWORKS.map(fw => {
+                    const checked = form.compliance_frameworks.includes(fw.code);
+                    return (
+                      <label
+                        key={fw.code}
+                        style={{
+                          display: 'flex', alignItems: 'flex-start', gap: 'var(--sds-space-sm)',
+                          padding: 'var(--sds-space-sm) var(--sds-space-md)',
+                          border: `1px solid ${checked ? 'var(--sds-brand-primary)' : 'var(--sds-border)'}`,
+                          background: checked ? 'var(--sds-brand-primary-tint)' : 'var(--sds-bg-surface)',
+                          borderRadius: 'var(--sds-radius-md)', cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleFramework(fw.code)}
+                          style={{ marginTop: 3, accentColor: 'var(--sds-brand-primary)' }}
+                        />
+                        <span style={{ flex: 1 }}>
+                          <span style={{ display: 'block', fontWeight: 600, fontSize: 13, color: 'var(--sds-fg-heading)' }}>{fw.label}</span>
+                          <span style={{ display: 'block', fontSize: 12, color: 'var(--sds-fg-tertiary)', marginTop: 2 }}>{fw.sub}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
               {showNaics && (

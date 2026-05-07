@@ -110,9 +110,13 @@ console.log('Seeding database...');
 db.transaction(() => {
   // ----- Organization (with onboarding-showcase fields backfilled) -----
   const orgId = db.prepare(
-    `INSERT INTO organizations (name, country, industry_sector, naics_code, primary_regulator, company_size)
+    `INSERT INTO organizations (name, country, industry_sector, naics_code, compliance_frameworks, company_size)
      VALUES (?, ?, ?, ?, ?, ?)`
-  ).run('SDS Manager Inc.', 'US', 'Manufacturing', '325199', 'OSHA', '201-1000').lastInsertRowid;
+  ).run(
+    'SDS Manager Inc.', 'US', 'Manufacturing', '325199',
+    JSON.stringify(['osha_300', 'osha_300a', 'osha_301', 'riddor_f2508']),
+    '201-1000',
+  ).lastInsertRowid;
 
   // ----- Sites — three so the dashboard has multi-site rollup -----
   const clevelandId = db.prepare(
@@ -496,9 +500,13 @@ db.transaction(() => {
 // =====================================================================
 db.transaction(() => {
   const acmeOrgId = db.prepare(
-    `INSERT INTO organizations (name, country, industry_sector, naics_code, primary_regulator, company_size)
+    `INSERT INTO organizations (name, country, industry_sector, naics_code, compliance_frameworks, company_size)
      VALUES (?, ?, ?, ?, ?, ?)`
-  ).run('Acme Manufacturing', 'US', 'Construction', null, 'OSHA', '51-200').lastInsertRowid;
+  ).run(
+    'Acme Manufacturing', 'US', 'Construction', null,
+    JSON.stringify(['osha_300', 'osha_300a', 'osha_301']),
+    '51-200',
+  ).lastInsertRowid;
 
   const acmePw = bcrypt.hashSync('password123', 10);
   const acmeFounderId = db.prepare(

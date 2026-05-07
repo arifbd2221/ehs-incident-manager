@@ -6,7 +6,8 @@ export function generateToken(user) {
   return jwt.sign(
     {
       id: user.id, email: user.email, role: user.role,
-      org_id: user.org_id, org_name: user.org_name, primary_regulator: user.primary_regulator,
+      org_id: user.org_id, org_name: user.org_name,
+      compliance_frameworks: user.compliance_frameworks || [],
       name: user.name, initials: user.initials,
     },
     JWT_SECRET,
