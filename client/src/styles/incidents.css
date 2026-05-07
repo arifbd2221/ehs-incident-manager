@@ -810,7 +810,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
-  padding: 22px 26px;
+  padding: 22px 26px 0;
 }
 .idet-hero-left {
   flex: 1;
@@ -819,6 +819,55 @@
 .idet-meta-sep {
   color: var(--sds-fg-tertiary);
   font-size: 12px;
+}
+
+/* People strip in hero */
+.idet-hero-people {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 26px 18px;
+  border-top: 1px solid #f3f4f6;
+  margin-top: 16px;
+}
+.idet-hero-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.idet-hero-person-av {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #e0e7ff, #ede9fe);
+  color: #626DF9;
+}
+.idet-hero-person-av.av-owner {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #d97706;
+}
+.idet-hero-person-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sds-fg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.idet-hero-person-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sds-fg-heading);
+  margin-top: 1px;
+}
+.idet-hero-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--sds-border);
 }
 
 /* Cascade entrance */
@@ -1267,6 +1316,11 @@
 .idet-triage-label {
   color: var(--sds-fg-tertiary);
   font-weight: 500;
+}
+.idet-triage-divider {
+  height: 1px;
+  background: #f3f4f6;
+  margin: 2px 0;
 }
 
 /* Activity timeline */
@@ -1930,6 +1984,13 @@
   }
   .idet-header-actions {
     width: 100%;
+  }
+  .idet-hero-people {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .idet-hero-divider {
+    display: none;
   }
   .inc-hero {
     flex-direction: column;

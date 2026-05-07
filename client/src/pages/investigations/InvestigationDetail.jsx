@@ -573,6 +573,8 @@ export default function InvestigationDetail() {
             </div>
           </div>
 
+          <ReferencedByCard entityType="investigation" entityId={inv.id} />
+
           {/* Team */}
           <div className="invd-card">
             <div className="invd-card-h">
@@ -728,8 +730,6 @@ export default function InvestigationDetail() {
         </div>,
         document.body
       )}
-
-      <ReferencedByCard entityType="investigation" entityId={inv.id} />
 
       {/* Toast */}
       {toast && createPortal(

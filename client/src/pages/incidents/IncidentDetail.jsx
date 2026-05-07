@@ -480,6 +480,29 @@ export default function IncidentDetail() {
             )}
           </div>
         </div>
+
+        {/* Reporter strip */}
+        <div className="idet-hero-people">
+          <div className="idet-hero-person">
+            <div className="idet-hero-person-av">{r.reporter_initials || '??'}</div>
+            <div>
+              <div className="idet-hero-person-label">Reporter</div>
+              <div className="idet-hero-person-name">{r.reporter_name}</div>
+            </div>
+          </div>
+          {r.assignee_name && (
+            <>
+              <div className="idet-hero-divider"/>
+              <div className="idet-hero-person">
+                <div className="idet-hero-person-av av-owner">{r.assignee_initials}</div>
+                <div>
+                  <div className="idet-hero-person-label">Owner</div>
+                  <div className="idet-hero-person-name">{r.assignee_name}</div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Pending closure request banner */}
@@ -715,24 +738,86 @@ export default function IncidentDetail() {
 
         {/* Sidebar */}
         <div className="idet-side">
-          {/* Reporter */}
+          {/* Details — merged triage + quick facts */}
           <div className="idet-card">
             <div className="idet-card-h">
-              <div className="hicon hi-person"><Icon name="person" size={16}/></div>
-              Reporter
+              <div className="hicon hi-triage"><Icon name="incidents" size={16}/></div>
+              Details
             </div>
             <div className="idet-card-body">
-              <div className="idet-person">
-                <div className="idet-person-av">{r.reporter_initials || '??'}</div>
-                <div>
-                  <div className="idet-person-name">{r.reporter_name}</div>
-                  <div className="idet-person-sub">Reported {timeAgo(r.created_at)}</div>
+              <div className="idet-triage-rows">
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Status</span>
+                  <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
+                    <span className="st-dot"/>{r.status}
+                  </span>
                 </div>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Severity</span>
+                  <SevBadge s={r.severity}/>
+                </div>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Track</span>
+                  <TrackBadge t={r.track}/>
+                </div>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">OSHA recordable</span>
+                  <span className={`inc-card-status ${r.osha_recordable ? 'st-capa' : 'st-closed'}`}>
+                    <span className="st-dot"/>{r.osha_recordable ? 'Yes' : 'No'}
+                  </span>
+                </div>
+                {r.osha_recordable === 1 && (
+                  <>
+                    {r.osha_privacy_case === 1 && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">Privacy case</span>
+                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
+                      </div>
+                    )}
+                    {r.er_treated === 1 && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">ER treatment</span>
+                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
+                      </div>
+                    )}
+                    {r.hospitalized === 1 && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">Hospitalized</span>
+                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
+                      </div>
+                    )}
+                    {r.osha_work_related && (
+                      <div className="idet-triage-row">
+                        <span className="idet-triage-label">Work-related</span>
+                        <span style={{ fontSize: 12, color: 'var(--sds-fg-secondary)' }}>{r.osha_work_related}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div className="idet-triage-divider"/>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Incident date</span>
+                  <span className="idet-fact-val">{formatDate(r.incident_datetime)}</span>
+                </div>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Days open</span>
+                  <span className="idet-fact-val">{r.status === 'Closed' ? '—' : `${daysOpen}d`}</span>
+                </div>
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Site</span>
+                  <span className="idet-fact-val">{r.site_name}</span>
+                </div>
+                {(r.area || canEdit) && (
+                  <FactEdit label="Area" value={r.area} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('area', v)}/>
+                )}
+                {(r.department || canEdit) && (
+                  <FactEdit label="Department" value={r.department} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('department', v)}/>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Witnesses (UX-D) */}
+          {/* Witnesses */}
           <div className="idet-card">
             <div className="idet-card-h">
               <div className="hicon hi-person"><Icon name="person" size={16}/></div>
@@ -777,114 +862,11 @@ export default function IncidentDetail() {
             </div>
           </div>
 
-          {/* Triage state */}
-          <div className="idet-card">
-            <div className="idet-card-h">
-              <div className="hicon hi-triage"><Icon name="incidents" size={16}/></div>
-              Triage state
-            </div>
-            <div className="idet-card-body">
-              <div className="idet-triage-rows">
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">Status</span>
-                  <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
-                    <span className="st-dot"/>{r.status}
-                  </span>
-                </div>
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">Severity</span>
-                  <SevBadge s={r.severity}/>
-                </div>
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">Track</span>
-                  <TrackBadge t={r.track}/>
-                </div>
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">Owner</span>
-                  {r.assignee_initials ? (
-                    <div className="idet-person" style={{ gap: 8 }}>
-                      <div className="inc-card-avatar">{r.assignee_initials}</div>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--sds-fg-heading)' }}>{r.assignee_name}</span>
-                    </div>
-                  ) : (
-                    <span style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>Unassigned</span>
-                  )}
-                </div>
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">OSHA recordable</span>
-                  <span className={`inc-card-status ${r.osha_recordable ? 'st-capa' : 'st-closed'}`}>
-                    <span className="st-dot"/>{r.osha_recordable ? 'Yes' : 'No'}
-                  </span>
-                </div>
-                {r.osha_recordable === 1 && (
-                  <>
-                    {r.osha_privacy_case === 1 && (
-                      <div className="idet-triage-row">
-                        <span className="idet-triage-label">Privacy case</span>
-                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
-                      </div>
-                    )}
-                    {r.er_treated === 1 && (
-                      <div className="idet-triage-row">
-                        <span className="idet-triage-label">ER treatment</span>
-                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
-                      </div>
-                    )}
-                    {r.hospitalized === 1 && (
-                      <div className="idet-triage-row">
-                        <span className="idet-triage-label">Hospitalized</span>
-                        <span className="inc-card-status st-triage"><span className="st-dot"/>Yes</span>
-                      </div>
-                    )}
-                    {r.osha_work_related && (
-                      <div className="idet-triage-row">
-                        <span className="idet-triage-label">Work-related</span>
-                        <span style={{ fontSize: 12, color: 'var(--sds-fg-secondary)' }}>{r.osha_work_related}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Quick facts */}
-          <div className="idet-card">
-            <div className="idet-card-h">
-              <div className="hicon hi-facts"><Icon name="info" size={16}/></div>
-              Quick facts
-            </div>
-            <div className="idet-card-body">
-              <div className="idet-facts">
-                <div className="idet-fact">
-                  <span className="idet-fact-label">Created</span>
-                  <span className="idet-fact-val">{formatDate(r.created_at)}</span>
-                </div>
-                <div className="idet-fact">
-                  <span className="idet-fact-label">Incident date</span>
-                  <span className="idet-fact-val">{formatDate(r.incident_datetime)}</span>
-                </div>
-                <div className="idet-fact">
-                  <span className="idet-fact-label">Days open</span>
-                  <span className="idet-fact-val">{r.status === 'Closed' ? '—' : `${daysOpen}d`}</span>
-                </div>
-                <div className="idet-fact">
-                  <span className="idet-fact-label">Site</span>
-                  <span className="idet-fact-val">{r.site_name}</span>
-                </div>
-                {(r.area || canEdit) && (
-                  <FactEdit label="Area" value={r.area} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('area', v)}/>
-                )}
-                {(r.department || canEdit) && (
-                  <FactEdit label="Department" value={r.department} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('department', v)}/>
-                )}
-              </div>
-            </div>
-          </div>
-
           {canVerify && (r.type === 'injury' || r.type === 'illness') && (
             <RecordabilityVerifyCard incident={r} onVerified={load}/>
           )}
+
+          <ReferencedByCard entityType="incident" entityId={incident.id} />
         </div>
       </div>
 
@@ -929,8 +911,6 @@ export default function IncidentDetail() {
         </div>,
         document.body
       )}
-
-      <ReferencedByCard entityType="incident" entityId={incident.id} />
 
       {/* Modals — portal to escape .page transform */}
       {modal === 'assign' && createPortal(<AssignModal incident={r} onCancel={() => setModal(null)} onConfirm={handleAssign}/>, document.body)}
