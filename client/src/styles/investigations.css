@@ -1132,6 +1132,11 @@
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
 }
+.invd-summary-divider {
+  height: 1px;
+  background: #f3f4f6;
+  margin: 2px 0;
+}
 
 /* Team members */
 .invd-team-list {

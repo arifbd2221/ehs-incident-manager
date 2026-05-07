@@ -813,6 +813,8 @@ export default function IncidentDetail() {
                 {(r.department || canEdit) && (
                   <FactEdit label="Department" value={r.department} allowed={canEdit} placeholder="(not set)" onSave={(v) => saveField('department', v)}/>
                 )}
+                <div className="idet-triage-divider"/>
+                <ReferencedByCard entityType="incident" entityId={incident.id} compact />
               </div>
             </div>
           </div>
@@ -865,8 +867,6 @@ export default function IncidentDetail() {
           {canVerify && (r.type === 'injury' || r.type === 'illness') && (
             <RecordabilityVerifyCard incident={r} onVerified={load}/>
           )}
-
-          <ReferencedByCard entityType="incident" entityId={incident.id} />
         </div>
       </div>
 

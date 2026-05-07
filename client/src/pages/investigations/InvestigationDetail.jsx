@@ -569,6 +569,8 @@ export default function InvestigationDetail() {
                     <span className="inv-kflag kf-riddor"><span className="kf-dot"/>Reportable</span>
                   </div>
                 )}
+                <div className="invd-summary-divider"/>
+                <ReferencedByCard entityType="investigation" entityId={inv.id} compact />
               </div>
             </div>
           </div>
@@ -625,7 +627,6 @@ export default function InvestigationDetail() {
             </div>
           </div>
 
-          <ReferencedByCard entityType="investigation" entityId={inv.id} />
         </div>
       </div>
 

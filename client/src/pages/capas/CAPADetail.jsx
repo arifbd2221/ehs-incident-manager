@@ -307,10 +307,11 @@ export default function CAPADetail() {
                   <span className="capd-detail-label">Progress</span>
                   <span className="capd-detail-val">{progressPct}%</span>
                 </div>
+                <div className="capd-detail-divider"/>
+                <ReferencedByCard entityType="capa" entityId={capa.id} compact />
               </div>
             </div>
           </div>
-          <ReferencedByCard entityType="capa" entityId={capa.id} />
         </div>
       </div>
 

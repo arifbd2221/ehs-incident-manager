@@ -7,6 +7,7 @@
 // a single empty-state line. Any error from the BE collapses to a
 // non-fatal empty card so a missing link doesn't break the page.
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import { getReferences, deleteLink } from '../../api/links';
@@ -30,7 +31,7 @@ const labelFor = {
 
 const INSPECTION_STATUS_PILL = { in_progress: 'pill-info', completed: 'pill-success', abandoned: 'pill-gray' };
 
-export default function ReferencedByCard({ entityType, entityId }) {
+export default function ReferencedByCard({ entityType, entityId, compact = false }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canEdit = ELEVATED_ROLES.has(user?.role);
@@ -38,6 +39,7 @@ export default function ReferencedByCard({ entityType, entityId }) {
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     if (!entityType || !entityId) return;
@@ -62,11 +64,9 @@ export default function ReferencedByCard({ entityType, entityId }) {
     }
   };
 
-  if (loading) return null;
+  if (loading) return compact ? null : null;
   if (!refs) return null;
 
-  // Inline helper so it sees `canEdit` + `unlink` from closure. Renders a
-  // small × on polymorphic rows (link_id present); no-op on direct-FK rows.
   const Unlink = ({ linkId }) => (canEdit && linkId ? (
     <button className="refby-unlink" onClick={(e) => unlink(linkId, e)} title="Remove link">
       <Icon name="close" size={11}/>
@@ -82,18 +82,8 @@ export default function ReferencedByCard({ entityType, entityId }) {
     (refs.assets?.length || 0)
   );
 
-  return (
-    <div className="card card-pad refby-card">
-      <div className="card-h refby-card-h">
-        <Icon name="pulse" size={16} /> Referenced by
-        <span className="refby-count">{total}</span>
-        {canEdit && (
-          <button className="refby-add" onClick={() => setAddOpen(true)} title="Link to another record">
-            <Icon name="plus" size={12}/>Link
-          </button>
-        )}
-      </div>
-
+  const fullContent = (
+    <>
       {total === 0 && (
         <div className="refby-empty">
           Nothing references this {labelFor[entityType] || entityType} yet.{canEdit ? ' Use "+ Link" to attach one.' : ''}
@@ -269,6 +259,67 @@ export default function ReferencedByCard({ entityType, entityId }) {
           onCreated={() => { setAddOpen(false); refresh(); }}
         />
       )}
+    </>
+  );
+
+  if (compact) {
+    return (
+      <>
+        <div className="refby-compact" onClick={() => setModalOpen(true)}>
+          <span className="refby-compact-label">
+            <Icon name="pulse" size={13}/>Referenced by
+          </span>
+          <span className="refby-compact-right">
+            {total > 0 && <span className="refby-compact-count">{total}</span>}
+            {canEdit && (
+              <button className="refby-compact-add" onClick={(e) => { e.stopPropagation(); setAddOpen(true); }} title="Link to another record">
+                <Icon name="plus" size={11}/>
+              </button>
+            )}
+            <Icon name="arrow" size={12} color="var(--sds-fg-tertiary)"/>
+          </span>
+        </div>
+        {modalOpen && createPortal(
+          <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
+            <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
+              <div className="modal-h">
+                <div>
+                  <div className="modal-title">Referenced by</div>
+                  <div className="modal-sub">{total} linked record{total !== 1 ? 's' : ''}</div>
+                </div>
+                <button className="icon-btn" onClick={() => setModalOpen(false)}><Icon name="close" size={18}/></button>
+              </div>
+              <div className="modal-body refby-modal-body">
+                {fullContent}
+              </div>
+              <div className="modal-f">
+                {canEdit && (
+                  <button className="btn btn-secondary" onClick={() => setAddOpen(true)}>
+                    <Icon name="plus" size={12}/> Link record
+                  </button>
+                )}
+                <button className="btn btn-primary" onClick={() => setModalOpen(false)}>Done</button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div className="card card-pad refby-card">
+      <div className="card-h refby-card-h">
+        <Icon name="pulse" size={16} /> Referenced by
+        <span className="refby-count">{total}</span>
+        {canEdit && (
+          <button className="refby-add" onClick={() => setAddOpen(true)} title="Link to another record">
+            <Icon name="plus" size={12}/>Link
+          </button>
+        )}
+      </div>
+      {fullContent}
     </div>
   );
 }

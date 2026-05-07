@@ -977,6 +977,11 @@
   color: var(--sds-fg-heading);
   font-weight: 600;
 }
+.capd-detail-divider {
+  height: 1px;
+  background: #f3f4f6;
+  margin: 2px 0;
+}
 
 /* Activity timeline */
 .capd-timeline {
