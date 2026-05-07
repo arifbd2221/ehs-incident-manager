@@ -357,12 +357,7 @@ export default function Members() {
 
       <div className="card card-pad">
         {loading && <div style={{ padding: 'var(--sds-space-lg)', textAlign: 'center', color: 'var(--sds-fg-tertiary)' }}>Loading…</div>}
-        {!loading && users.length === 0 && (
-          <div style={{ padding: 'var(--sds-space-lg)', textAlign: 'center', color: 'var(--sds-fg-tertiary)' }}>
-            No members yet.
-          </div>
-        )}
-        {!loading && users.length > 0 && (
+        {!loading && (
           <table className="tbl">
             <thead>
               <tr>
@@ -408,19 +403,21 @@ export default function Members() {
                     </td>
                     {isAdmin && (
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button className="btn btn-tertiary btn-sm" onClick={() => openEdit(u)}>
-                          <Icon name="edit" size={14} />Edit
-                        </button>
-                        {!isSelf && (
-                          <>
-                            <button className="btn btn-tertiary btn-sm" onClick={() => setPwTarget(u)}>
-                              <Icon name="shield" size={14} />Reset PW
-                            </button>
-                            <button className="btn btn-tertiary btn-sm" onClick={() => toggleActive(u)}>
-                              {u.is_active ? 'Deactivate' : 'Reactivate'}
-                            </button>
-                          </>
-                        )}
+                        <div style={{ display: 'inline-flex', gap: 'var(--sds-space-xs)' }}>
+                          <button className="btn btn-tertiary btn-sm" onClick={() => openEdit(u)}>
+                            <Icon name="edit" size={14} />Edit
+                          </button>
+                          {!isSelf && (
+                            <>
+                              <button className="btn btn-tertiary btn-sm" onClick={() => setPwTarget(u)}>
+                                <Icon name="shield" size={14} />Reset PW
+                              </button>
+                              <button className="btn btn-tertiary btn-sm" onClick={() => toggleActive(u)}>
+                                {u.is_active ? 'Deactivate' : 'Reactivate'}
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>

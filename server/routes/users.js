@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import db from '../db/connection.js';
 import { writeActivity, diffFields } from '../services/activity_log.js';
+import { validEmail, checkLen, checkPassword, NAME_MAX } from '../services/validators.js';
 
 const router = Router();
 
@@ -47,8 +48,16 @@ router.post('/', (req, res) => {
   if (!email || !password || !name || !role) {
     return res.status(400).json({ error: 'email, password, name, and role are required' });
   }
+  if (!validEmail(email)) return res.status(400).json({ error: 'Email format is invalid' });
   if (!VALID_ROLES.has(role)) return res.status(400).json({ error: 'Invalid role' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  const pwErr = checkPassword(password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
+  for (const [val, label] of [
+    [name, 'Name'], [department, 'Department'], [job_title, 'Job title'],
+  ]) {
+    const e = checkLen(val, NAME_MAX, label);
+    if (e) return res.status(400).json({ error: e });
+  }
 
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (existing) return res.status(409).json({ error: 'Email already registered' });
@@ -127,6 +136,14 @@ router.patch('/:id', (req, res) => {
   if (role !== undefined && !VALID_ROLES.has(role)) {
     return res.status(400).json({ error: 'Invalid role' });
   }
+  for (const [val, label] of [
+    [name, 'Name'], [department, 'Department'], [job_title, 'Job title'],
+  ]) {
+    if (val !== undefined) {
+      const e = checkLen(val, NAME_MAX, label);
+      if (e) return res.status(400).json({ error: e });
+    }
+  }
   if (site_id !== null && site_id !== undefined && site_id !== '') {
     const ok = db.prepare('SELECT 1 FROM sites WHERE id = ? AND org_id = ?').get(site_id, req.user.org_id);
     if (!ok) return res.status(400).json({ error: 'Site not in your organization' });
@@ -183,9 +200,8 @@ router.post('/:id/password', (req, res) => {
   }
 
   const { new_password } = req.body;
-  if (!new_password || new_password.length < 8) {
-    return res.status(400).json({ error: 'New password must be at least 8 characters' });
-  }
+  const pwErr = checkPassword(new_password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
 
   const target = db.prepare(
     'SELECT id, name, email FROM users WHERE id = ? AND org_id = ?'

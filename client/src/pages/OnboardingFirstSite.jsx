@@ -1,12 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { createSite } from '../api/sites';
+import { createSite, listSites } from '../api/sites';
 import Icon from '../components/shared/Icon';
+import ComboBox from '../components/shared/ComboBox';
+
+const COUNTRY_OPTS = [
+  { value: 'US', label: 'United States' },
+  { value: 'UK', label: 'United Kingdom' },
+  { value: 'AU', label: 'Australia' },
+  { value: 'CA', label: 'Canada' },
+  { value: 'IE', label: 'Ireland' },
+  { value: 'OTHER', label: 'Other' },
+];
 
 export default function OnboardingFirstSite() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [redirecting, setRedirecting] = useState(true);
+
+  // If the org already has sites, this onboarding wizard is no longer the
+  // right surface — send the user to the standard /admin/sites page.
+  useEffect(() => {
+    listSites()
+      .then(sites => {
+        if (Array.isArray(sites) && sites.length > 0) {
+          navigate('/admin/sites', { replace: true });
+        } else {
+          setRedirecting(false);
+        }
+      })
+      .catch(() => setRedirecting(false));
+  }, [navigate]);
 
   const [form, setForm] = useState({
     name: '',
@@ -40,6 +65,10 @@ export default function OnboardingFirstSite() {
     }
   };
 
+  if (redirecting) {
+    return <div className="page" style={{ padding: 'var(--sds-space-lg)', color: 'var(--sds-fg-tertiary)' }}>Loading…</div>;
+  }
+
   return (
     <div className="page">
       <div className="card card-pad" style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -69,7 +98,7 @@ export default function OnboardingFirstSite() {
           <div className="field-row">
             <div className="field">
               <label className="label">Country</label>
-              <input className="input" value={form.country} onChange={e => set('country', e.target.value)} placeholder="US, UK, AU…" />
+              <ComboBox options={COUNTRY_OPTS} value={form.country} onChange={v => set('country', v)} searchable={false} />
             </div>
             <div className="field">
               <label className="label">NAICS code</label>

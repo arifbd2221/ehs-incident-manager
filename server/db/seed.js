@@ -21,6 +21,7 @@
 import db from './connection.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { writeActivity } from '../services/activity_log.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -513,8 +514,23 @@ db.transaction(() => {
     'INSERT INTO users (org_id, site_id, email, password_hash, name, initials, role, department, job_title) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)'
   ).run(acmeOrgId, 'acme@sdsmanager.com', acmePw, 'Aisha Carter', 'AC', 'admin', 'Leadership', 'Founder').lastInsertRowid;
 
-  db.prepare('INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(acmeOrgId, 'organization', acmeOrgId, 'org_created', 'created organization Acme Manufacturing', acmeFounderId);
+  writeActivity({
+    org_id: acmeOrgId,
+    entity_type: 'organization',
+    entity_id: acmeOrgId,
+    action: 'org_created',
+    description: 'created organization Acme Manufacturing',
+    user_id: acmeFounderId,
+    metadata: {
+      org_name: 'Acme Manufacturing',
+      country: 'US',
+      industry_sector: 'Construction',
+      naics_code: null,
+      compliance_frameworks: ['osha_300', 'osha_300a', 'osha_301'],
+      company_size: '51-200',
+      founder_email: 'acme@sdsmanager.com',
+    },
+  });
 })();
 
 console.log('Seed complete.');

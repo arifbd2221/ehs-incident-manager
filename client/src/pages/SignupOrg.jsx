@@ -96,11 +96,11 @@ export default function SignupOrg() {
   const setCountry = (v) => setForm(f => ({
     ...f,
     country: v,
-    // Auto-fill frameworks only the first time a country is picked. If the
-    // user has already touched the framework list, keep their selection.
-    compliance_frameworks: f.compliance_frameworks.length > 0
-      ? f.compliance_frameworks
-      : (FRAMEWORK_DEFAULTS[v] || ['generic']),
+    // Always replace frameworks with the new country's defaults. Keeping a
+    // previous selection across a country switch led to confusing states
+    // (UK org showing OSHA pre-checked because the user had been on US
+    // earlier). The user can still customize after.
+    compliance_frameworks: FRAMEWORK_DEFAULTS[v] || ['generic'],
     naics_code: v === 'US' ? f.naics_code : '',
   }));
   const toggleFramework = (code) => setForm(f => ({
@@ -130,7 +130,7 @@ export default function SignupOrg() {
     setStep(3);
   };
 
-  const goBack = (s) => { setDir('back'); setStep(s); };
+  const goBack = (s) => { setError(''); setDir('back'); setStep(s); };
 
   const handleSubmit = async (e) => {
     e.preventDefault();

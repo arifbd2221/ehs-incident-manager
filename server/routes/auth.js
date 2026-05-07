@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import db from '../db/connection.js';
 import { generateToken, authMiddleware } from '../middleware/auth.js';
 import { writeActivity, diffFields } from '../services/activity_log.js';
+import { validEmail, checkLen, checkPassword, NAME_MAX, NAICS_MAX } from '../services/validators.js';
 
 const router = Router();
 
@@ -34,7 +35,19 @@ router.post('/signup-org', (req, res) => {
   }
   if (!company_size) return res.status(400).json({ error: 'Company size is required' });
   if (!email || !password || !name) return res.status(400).json({ error: 'Email, password, and name are required' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!validEmail(email)) return res.status(400).json({ error: 'Email format is invalid' });
+  const pwErr = checkPassword(password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
+  for (const [val, label] of [
+    [org_name, 'Organization name'], [name, 'Name'],
+    [department, 'Department'], [job_title, 'Job title'],
+  ]) {
+    const e = checkLen(val, NAME_MAX, label);
+    if (e) return res.status(400).json({ error: e });
+  }
+  if (naics_code && checkLen(naics_code, NAICS_MAX, 'NAICS code')) {
+    return res.status(400).json({ error: `NAICS code is too long (max ${NAICS_MAX} characters)` });
+  }
 
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (existing) return res.status(409).json({ error: 'Email already registered' });
@@ -201,7 +214,8 @@ router.put('/dashboard-layout', authMiddleware, (req, res) => {
 router.post('/password', authMiddleware, (req, res) => {
   const { current_password, new_password } = req.body;
   if (!current_password || !new_password) return res.status(400).json({ error: 'Current and new password are required' });
-  if (new_password.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  const pwErr = checkPassword(new_password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
 
   const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
   if (!row || !bcrypt.compareSync(current_password, row.password_hash)) {
