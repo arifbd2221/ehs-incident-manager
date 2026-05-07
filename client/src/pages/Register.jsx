@@ -26,8 +26,6 @@ function getStrength(pw) {
 export default function Register() {
   const { user, register } = useAuth();
   const navigate = useNavigate();
-
-  if (user) return <Navigate to="/" replace />;
   const [step, setStep] = useState(1);
   const [sites, setSites] = useState([]);
   const [error, setError] = useState('');
@@ -44,6 +42,8 @@ export default function Register() {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const roleOpts = [{ value: 'worker', label: 'Worker' }, { value: 'supervisor', label: 'Supervisor' }, { value: 'ehs_lead', label: 'EHS Lead' }, { value: 'manager', label: 'Manager' }];
   const siteOpts = useMemo(() => [{ value: '', label: 'Select site…' }, ...sites.map(s => ({ value: String(s.id), label: s.name }))], [sites]);
+
+  if (user) return <Navigate to="/" replace />;
   const strength = getStrength(form.password);
   const sl = STRENGTH_LEVELS[strength];
 

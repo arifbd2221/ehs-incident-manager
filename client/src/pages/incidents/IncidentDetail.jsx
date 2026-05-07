@@ -463,7 +463,7 @@ export default function IncidentDetail() {
                   <button className="idet-act-btn primary" onClick={() => navigate('/investigations')}>
                     <Icon name="investigation" size={15}/>Open investigation
                   </button>
-                ) : (
+                ) : ELEVATED_ROLES.has(user?.role) && (
                   <>
                     <button className="idet-act-btn" onClick={() => setModal('close')}>
                       {r.track === 'C' ? 'Close — no action' : 'Close incident'}
