@@ -145,7 +145,7 @@ export default function Login() {
           </div>
 
           <div className="auth-footer">
-            Don't have an account? <Link to="/register">Create one</Link>
+            New here? <Link to="/signup">Create your organization</Link>
           </div>
         </div>
       </div>

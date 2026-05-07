@@ -201,6 +201,21 @@ export default function Profile() {
               </div>
             )}
           </section>
+
+          <section className="prof-section" style={{ animationDelay: '100ms' }}>
+            <div className="prof-sec-h">
+              <Icon name="factory" size={18} color="var(--sds-brand-primary)" />
+              <span>Organization</span>
+            </div>
+            <div className="prof-info">
+              <div className="prof-row"><span className="prof-lbl">Name</span><span className="prof-val">{user.org_name || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Country</span><span className="prof-val">{user.country || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Industry</span><span className="prof-val">{user.industry_sector || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Regulator</span><span className="prof-val">{user.primary_regulator || '—'}</span></div>
+              <div className="prof-row"><span className="prof-lbl">Company size</span><span className="prof-val">{user.company_size || '—'}</span></div>
+              {user.naics_code && <div className="prof-row"><span className="prof-lbl">NAICS</span><span className="prof-val">{user.naics_code}</span></div>}
+            </div>
+          </section>
         </div>
       )}
 

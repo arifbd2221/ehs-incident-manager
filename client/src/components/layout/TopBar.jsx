@@ -390,7 +390,7 @@ export default function TopBar() {
       )}
 
       <div className="page-strip">
-        <div className="crumbs">SDS Manager / EHS / <b>{crumb()}</b></div>
+        <div className="crumbs">{user?.org_name || 'SDS Manager'} / EHS / <b>{crumb()}</b></div>
         <div className="grow" />
       </div>
 

@@ -4,7 +4,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'sds-incident-mgmt-secret';
 
 export function generateToken(user) {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role, org_id: user.org_id, name: user.name, initials: user.initials },
+    {
+      id: user.id, email: user.email, role: user.role,
+      org_id: user.org_id, org_name: user.org_name, primary_regulator: user.primary_regulator,
+      name: user.name, initials: user.initials,
+    },
     JWT_SECRET,
     { expiresIn: '24h' }
   );
