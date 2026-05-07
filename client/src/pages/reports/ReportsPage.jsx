@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getOsha300, getOsha300A, getRiddor, getMetrics, getAuditLog, getAuditActions } from '../../api/reports';
 import { getSites, getUsers } from '../../api/users';
