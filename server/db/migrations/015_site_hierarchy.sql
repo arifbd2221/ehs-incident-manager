@@ -1,4 +1,4 @@
--- 012_site_hierarchy.sql — Add parent_id to sites for hierarchical org structure.
+-- 015_site_hierarchy.sql — Add parent_id to sites for hierarchical org structure.
 --
 -- Sites can have a parent site (e.g., Region → Plant → Building). Top-level
 -- sites have parent_id = NULL. Same-org-only is enforced at the route layer
@@ -11,9 +11,12 @@
 -- ON DELETE on the FK would silently re-parent or null children without an
 -- audit trail, which we don't want.
 --
--- Note: numbered 012 (not 011) because origin/main reserves 011 for the
--- dashboard_layout column on users. Skipping 011 keeps the migration runner
--- happy when the merge lands — files apply in lexical order, gaps are fine.
+-- Numbering note: this file was originally 012_site_hierarchy.sql. Renamed to
+-- 015 after main merged 012_template_cover_image.sql in parallel — the dual
+-- 012 prefix was confusing even though the runner tracks by full filename.
+-- The fixup migration 014a_normalize_site_hierarchy_name.sql renames the
+-- _schema_migrations row in any DB that already applied the old name, so
+-- renaming this file is safe across fresh and migrated environments.
 
 ALTER TABLE sites ADD COLUMN parent_id INTEGER REFERENCES sites(id);
 CREATE INDEX IF NOT EXISTS idx_sites_parent ON sites(parent_id);

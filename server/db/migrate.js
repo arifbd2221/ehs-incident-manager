@@ -27,20 +27,22 @@ export function runMigrations(db) {
     .filter(f => f.endsWith('.sql'))
     .sort();
 
-  const appliedRows = db.prepare('SELECT name FROM _schema_migrations').all();
-  const appliedSet = new Set(appliedRows.map(r => r.name));
-
   const applied = [];
   const skipped = [];
+  const insertStmt = db.prepare('INSERT INTO _schema_migrations (name) VALUES (?)');
+  const queryApplied = db.prepare('SELECT 1 FROM _schema_migrations WHERE name = ?');
 
+  // Re-check the applied set per file rather than caching once. Some fixup
+  // migrations rewrite rows in _schema_migrations (e.g., renaming a legacy
+  // entry after a file rename), and a downstream file in the same boot may
+  // depend on that change being visible.
   for (const file of files) {
-    if (appliedSet.has(file)) {
+    if (queryApplied.get(file)) {
       skipped.push(file);
       continue;
     }
 
     const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8');
-    const insertStmt = db.prepare('INSERT INTO _schema_migrations (name) VALUES (?)');
 
     const apply = db.transaction(() => {
       db.exec(sql);
