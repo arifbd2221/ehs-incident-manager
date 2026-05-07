@@ -8,3 +8,9 @@ export const updateTemplate = (id, data) => api.patch(`/templates/${id}`, data).
 export const archiveTemplate = (id) => api.delete(`/templates/${id}`).then(r => r.data);
 export const publishTemplate = (id) => api.post(`/templates/${id}/publish`).then(r => r.data);
 export const updateTemplateItems = (id, data) => api.patch(`/templates/${id}/items`, data).then(r => r.data);
+export const uploadTemplateCover = (id, file) => {
+  const fd = new FormData();
+  fd.append('cover_image', file);
+  return api.post(`/templates/${id}/cover-image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+};
+export const removeTemplateCover = (id) => api.delete(`/templates/${id}/cover-image`).then(r => r.data);

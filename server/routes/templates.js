@@ -12,8 +12,10 @@
 // GET    /api/templates/:id/versions/:versionId — get specific version with items
 
 import { Router } from 'express';
+import { basename } from 'path';
+import { unlinkSync } from 'fs';
 import db from '../db/connection.js';
-import { writeActivity, diffFields } from '../services/activity_log.js';
+import { upload, uploadDir } from '../middleware/upload.js';
 
 const router = Router();
 
@@ -249,6 +251,48 @@ router.patch('/:id', (req, res) => {
   }
 
   res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// POST /:id/cover-image — upload or replace cover image
+// ---------------------------------------------------------------------------
+router.post('/:id/cover-image', upload.single('cover_image'), (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Forbidden' });
+
+  const template = db.prepare('SELECT * FROM templates WHERE id = ? AND org_id = ?')
+    .get(req.params.id, req.user.org_id);
+  if (!template) return res.status(404).json({ error: 'Template not found' });
+  if (!req.file) return res.status(400).json({ error: 'No image provided' });
+
+  if (template.cover_image) {
+    try { unlinkSync(`${uploadDir}/${basename(template.cover_image)}`); } catch {}
+  }
+
+  const coverPath = `/uploads/${req.file.filename}`;
+  db.prepare("UPDATE templates SET cover_image = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(coverPath, template.id);
+
+  res.json(db.prepare('SELECT * FROM templates WHERE id = ?').get(template.id));
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /:id/cover-image — remove cover image
+// ---------------------------------------------------------------------------
+router.delete('/:id/cover-image', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Forbidden' });
+
+  const template = db.prepare('SELECT * FROM templates WHERE id = ? AND org_id = ?')
+    .get(req.params.id, req.user.org_id);
+  if (!template) return res.status(404).json({ error: 'Template not found' });
+
+  if (template.cover_image) {
+    try { unlinkSync(`${uploadDir}/${basename(template.cover_image)}`); } catch {}
+  }
+
+  db.prepare("UPDATE templates SET cover_image = NULL, updated_at = datetime('now') WHERE id = ?")
+    .run(template.id);
+
+  res.json(db.prepare('SELECT * FROM templates WHERE id = ?').get(template.id));
 });
 
 // ---------------------------------------------------------------------------

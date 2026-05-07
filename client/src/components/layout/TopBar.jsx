@@ -263,6 +263,11 @@ export default function TopBar() {
     if (p.startsWith('/investigations')) return 'Investigations';
     if (p.startsWith('/capas')) return 'CAPA';
     if (p.startsWith('/reports')) return 'Reports';
+    if (p.startsWith('/templates')) return 'Templates';
+    if (p.startsWith('/inspections')) return 'Inspections';
+    if (p.startsWith('/documents')) return 'Documents';
+    if (p.startsWith('/assets')) return 'Assets';
+    if (p.startsWith('/sites')) return 'Sites';
     if (p.startsWith('/profile')) return 'Profile';
     return 'Page';
   };
