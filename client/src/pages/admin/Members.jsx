@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getUsers, getSites, createUser, updateUser, resetUserPassword, importUsers, userImportTemplateUrl } from '../../api/users';
@@ -288,6 +288,11 @@ function ImportUsersModal({ onClose, onImported }) {
   const [report, setReport] = useState(null);   // dry-run result
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
+
+  // Don't let admin close mid-commit — BE finishes either way, but the list
+  // wouldn't auto-refresh. We pin the close handlers behind !busy.
+  const safeClose = () => { if (!busy) onClose(); };
 
   const downloadTemplate = async () => {
     try {
@@ -312,6 +317,9 @@ function ImportUsersModal({ onClose, onImported }) {
     setFilename(f.name);
     const text = await f.text();
     setCsvText(text);
+    // Clear the input value so picking the same file twice still fires onChange
+    // (browsers skip the change event when the value didn't actually change).
+    e.target.value = '';
     setBusy(true);
     try {
       const r = await importUsers(text, 'dry_run');
@@ -342,19 +350,20 @@ function ImportUsersModal({ onClose, onImported }) {
 
   const reset = () => {
     setCsvText(''); setFilename(''); setReport(null); setError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const canCommit = report && report.valid_count > 0 && report.error_count === 0;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={safeClose}>
       <div className="modal modal-lg" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="modal-h">
           <div>
             <div className="modal-title">Import users from CSV</div>
             <div className="modal-sub">Bulk-onboard your team. Strict template — headers must match exactly.</div>
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
+          <button className="icon-btn" onClick={safeClose} disabled={busy} aria-label="Close">
             <Icon name="close" size={18} />
           </button>
         </div>
@@ -376,7 +385,7 @@ function ImportUsersModal({ onClose, onImported }) {
 
               <div className="field">
                 <label className="label">2. Upload your filled CSV</label>
-                <input type="file" accept=".csv,text/csv" onChange={onFile} disabled={busy} />
+                <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={onFile} disabled={busy} />
                 {filename && <span className="helper">Selected: {filename}</span>}
               </div>
 
@@ -431,7 +440,7 @@ function ImportUsersModal({ onClose, onImported }) {
         </div>
 
         <div className="modal-f">
-          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>Close</button>
+          <button type="button" className="btn btn-secondary" onClick={safeClose} disabled={busy}>Close</button>
           <button type="button" className="btn btn-primary" onClick={commit} disabled={!canCommit || busy}>
             {busy ? 'Importing…' : canCommit ? `Import ${report.valid_count} ${report.valid_count === 1 ? 'user' : 'users'}` : 'Import'}
           </button>
