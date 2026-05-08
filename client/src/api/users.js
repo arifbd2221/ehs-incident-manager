@@ -6,3 +6,8 @@ export const createUser = (data) => api.post('/users', data).then(r => r.data);
 export const updateUser = (id, data) => api.patch(`/users/${id}`, data).then(r => r.data);
 export const resetUserPassword = (id, new_password) =>
   api.post(`/users/${id}/password`, { new_password }).then(r => r.data);
+
+export const importUsers = (csv_text, mode) =>
+  api.post('/users/import', { csv_text, mode }).then(r => r.data);
+
+export const userImportTemplateUrl = '/api/users/import/template.csv';

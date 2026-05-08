@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
-import { getUsers, getSites, createUser, updateUser, resetUserPassword } from '../../api/users';
+import { getUsers, getSites, createUser, updateUser, resetUserPassword, importUsers, userImportTemplateUrl } from '../../api/users';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
 import { TeamIllustration } from '../../components/shared/OnboardingIllustrations';
@@ -293,6 +293,174 @@ function PasswordResetModal({ member, onClose, onSaved }) {
   );
 }
 
+function ImportUsersModal({ onClose, onImported }) {
+  const [csvText, setCsvText] = useState('');
+  const [filename, setFilename] = useState('');
+  const [report, setReport] = useState(null);   // dry-run result
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
+
+  // Don't let admin close mid-commit — BE finishes either way, but the list
+  // wouldn't auto-refresh. We pin the close handlers behind !busy.
+  const safeClose = () => { if (!busy) onClose(); };
+
+  const downloadTemplate = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(userImportTemplateUrl, { headers: { Authorization: `Bearer ${token}` } });
+      if (!resp.ok) throw new Error('Template download failed');
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'users_template.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e.message || 'Template download failed');
+    }
+  };
+
+  const onFile = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setError(''); setReport(null);
+    setFilename(f.name);
+    const text = await f.text();
+    setCsvText(text);
+    // Clear the input value so picking the same file twice still fires onChange
+    // (browsers skip the change event when the value didn't actually change).
+    e.target.value = '';
+    setBusy(true);
+    try {
+      const r = await importUsers(text, 'dry_run');
+      setReport(r);
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Could not parse CSV');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const commit = async () => {
+    setBusy(true); setError('');
+    try {
+      const r = await importUsers(csvText, 'commit');
+      if (r.error_count > 0) {
+        setReport(r);
+        setError('Some rows failed during commit. Nothing was saved.');
+      } else {
+        onImported(r.inserted_ids?.length || r.valid_count);
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Import failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reset = () => {
+    setCsvText(''); setFilename(''); setReport(null); setError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const canCommit = report && report.valid_count > 0 && report.error_count === 0;
+
+  return (
+    <div className="modal-backdrop" onClick={safeClose}>
+      <div className="modal modal-lg" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="modal-h">
+          <div>
+            <div className="modal-title">Import users from CSV</div>
+            <div className="modal-sub">Bulk-onboard your team. Strict template — headers must match exactly.</div>
+          </div>
+          <button className="icon-btn" onClick={safeClose} disabled={busy} aria-label="Close">
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          {!report && (
+            <>
+              <div className="field">
+                <label className="label">1. Download the template</label>
+                <button type="button" className="btn btn-tertiary" onClick={downloadTemplate}>
+                  <Icon name="download" size={14} />Download users_template.csv
+                </button>
+                <span className="helper">
+                  Columns: email, name, role, department, job_title, site_name, password.
+                  <br/>Roles: worker · supervisor · ehs_officer · ehs_manager · admin.
+                  Leave department / job_title / site_name blank if not applicable.
+                </span>
+              </div>
+
+              <div className="field">
+                <label className="label">2. Upload your filled CSV</label>
+                <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={onFile} disabled={busy} />
+                {filename && <span className="helper">Selected: {filename}</span>}
+              </div>
+
+              {busy && <div style={{ color: 'var(--sds-fg-tertiary)', fontSize: 13 }}>Validating…</div>}
+            </>
+          )}
+
+          {report && (
+            <>
+              <div style={{ display: 'flex', gap: 'var(--sds-space-md)', marginBottom: 'var(--sds-space-md)' }}>
+                <span className="pill pill-success"><span className="dot"/>{report.valid_count} valid</span>
+                {report.error_count > 0 && <span className="pill pill-err">{report.error_count} {report.error_count === 1 ? 'error' : 'errors'}</span>}
+                <span className="pill pill-gray">{report.total} {report.total === 1 ? 'row' : 'rows'} total</span>
+                <button type="button" className="btn btn-tertiary btn-sm" onClick={reset} style={{ marginLeft: 'auto' }}>
+                  <Icon name="upload" size={13} />Choose another file
+                </button>
+              </div>
+
+              {report.error_count > 0 && (
+                <>
+                  <div className="label">Errors — fix in your CSV and re-upload</div>
+                  <table className="tbl" style={{ marginTop: 'var(--sds-space-xs)' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 60 }}>Row</th>
+                        <th style={{ width: 140 }}>Column</th>
+                        <th>Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.errors.map((e, i) => (
+                        <tr key={i}>
+                          <td className="id">{e.row || '—'}</td>
+                          <td>{e.column || <span style={{ color: 'var(--sds-fg-tertiary)' }}>—</span>}</td>
+                          <td>{e.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {canCommit && (
+                <div className="helper" style={{ marginTop: 'var(--sds-space-md)' }}>
+                  Ready to import. This is atomic — all {report.valid_count} users are created in one transaction. An audit trail row is written for each plus a summary row.
+                </div>
+              )}
+            </>
+          )}
+
+          {error && <div style={{ color: 'var(--sds-error)', fontSize: 13, marginTop: 'var(--sds-space-sm)' }}>{error}</div>}
+        </div>
+
+        <div className="modal-f">
+          <button type="button" className="btn btn-secondary" onClick={safeClose} disabled={busy}>Close</button>
+          <button type="button" className="btn btn-primary" onClick={commit} disabled={!canCommit || busy}>
+            {busy ? 'Importing…' : canCommit ? `Import ${report.valid_count} ${report.valid_count === 1 ? 'user' : 'users'}` : 'Import'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Members() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -303,6 +471,7 @@ export default function Members() {
   const [modalMode, setModalMode] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
   const [pwTarget, setPwTarget] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -385,9 +554,14 @@ export default function Members() {
           </div>
         </div>
         {isAdmin && (
-          <button className="btn btn-primary" onClick={openCreate}>
-            <Icon name="plus" size={16} />Add member
-          </button>
+          <div style={{ display: 'inline-flex', gap: 'var(--sds-space-sm)' }}>
+            <button className="btn btn-secondary" onClick={() => setImportOpen(true)}>
+              <Icon name="upload" size={16} />Import CSV
+            </button>
+            <button className="btn btn-primary" onClick={openCreate}>
+              <Icon name="plus" size={16} />Add member
+            </button>
+          </div>
         )}
       </div>
 
@@ -572,6 +746,18 @@ export default function Members() {
           member={pwTarget}
           onClose={closePwModal}
           onSaved={onPwSaved}
+        />,
+        document.body,
+      )}
+
+      {importOpen && createPortal(
+        <ImportUsersModal
+          onClose={() => setImportOpen(false)}
+          onImported={(n) => {
+            setImportOpen(false);
+            flashToast(`Imported ${n} ${n === 1 ? 'user' : 'users'}`);
+            refresh();
+          }}
         />,
         document.body,
       )}

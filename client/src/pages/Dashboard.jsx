@@ -8,6 +8,7 @@ import { useApp } from '../context/AppContext';
 import Icon from '../components/shared/Icon';
 import { TYPES, typeOf } from '../components/shared/Badges';
 import { timeAgo, formatDate } from '../utils/time';
+import { frameworkVisibility } from '../utils/frameworks';
 import '../styles/dashboard.css';
 
 /* ================================================================
@@ -224,6 +225,7 @@ function CustomizeDrawer({ widgets, onChange, onSave, onClose, saving }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, saveDashLayout } = useAuth();
+  const { showOsha, showRiddor } = frameworkVisibility(user);
   const { setWizardOpen, refreshKey } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -304,8 +306,8 @@ export default function Dashboard() {
   const trirTarget = 2.5;
   const trirOk = (kpis.trir || 0) <= trirTarget;
 
-  const oshaCount = (recentIncidents || []).filter(r => r.osha_recordable).length;
-  const riddorCount = (recentIncidents || []).filter(r => r.riddor_reportable).length;
+  const oshaCount = showOsha ? (recentIncidents || []).filter(r => r.osha_recordable).length : 0;
+  const riddorCount = showRiddor ? (recentIncidents || []).filter(r => r.riddor_reportable).length : 0;
 
   const kpiWidgets = widgets.filter(w => w.zone === 'kpi' && w.visible);
   const leftWidgets = widgets.filter(w => w.zone === 'left' && w.visible);

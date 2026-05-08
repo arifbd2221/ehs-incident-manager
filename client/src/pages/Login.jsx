@@ -4,7 +4,7 @@ import { Navigate, useNavigate, Link } from 'react-router-dom';
 import Icon from '../components/shared/Icon';
 
 const DEMO = [
-  { email: 'admin@sdsmanager.com', label: 'Arif (Admin)', icon: 'gear', pw: 'Admin@123' },
+  { email: 'priya@sdsmanager.com', label: 'Priya (Admin)', icon: 'gear' },
   { email: 'elena@sdsmanager.com', label: 'Elena (EHS Lead)', icon: 'shield' },
   { email: 'marcus@sdsmanager.com', label: 'Marcus (Supervisor)', icon: 'person' },
   { email: 'james@sdsmanager.com', label: 'James (EHS Manager)', icon: 'settings' },

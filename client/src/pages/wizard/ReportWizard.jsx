@@ -9,6 +9,8 @@ import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import { TYPES, typeOf } from '../../components/shared/Badges';
+import { useAuth } from '../../context/AuthContext';
+import { frameworkVisibility } from '../../utils/frameworks';
 import InjuryForm from './types/InjuryForm';
 import IllnessForm from './types/IllnessForm';
 import NearMissForm from './types/NearMissForm';
@@ -160,6 +162,8 @@ const fileTypeInfo = (file) => {
 };
 
 export default function ReportWizard({ onClose, onSubmit }) {
+  const { user } = useAuth();
+  const { showOsha, showRiddor } = frameworkVisibility(user);
   const [step, setStep] = useState(0);
   const [type, setType] = useState('injury');
   const [title, setTitle] = useState('');
@@ -827,24 +831,30 @@ export default function ReportWizard({ onClose, onSubmit }) {
                         </span>
                       </div>
                     </div>
-                    <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 8, paddingTop: 8 }}>
-                      <div className="wiz-review-row">
-                        <span className="lbl">OSHA recordable</span>
-                        <span className="val">
-                          {(type === 'injury' || type === 'illness')
-                            ? <span className="pill pill-success" style={{ fontSize: 10 }}><span className="dot" />Likely</span>
-                            : <span className="pill pill-gray" style={{ fontSize: 10 }}><span className="dot" />No</span>}
-                        </span>
+                    {(showOsha || showRiddor) && (
+                      <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 8, paddingTop: 8 }}>
+                        {showOsha && (
+                          <div className="wiz-review-row">
+                            <span className="lbl">OSHA recordable</span>
+                            <span className="val">
+                              {(type === 'injury' || type === 'illness')
+                                ? <span className="pill pill-success" style={{ fontSize: 10 }}><span className="dot" />Likely</span>
+                                : <span className="pill pill-gray" style={{ fontSize: 10 }}><span className="dot" />No</span>}
+                            </span>
+                          </div>
+                        )}
+                        {showRiddor && (
+                          <div className="wiz-review-row">
+                            <span className="lbl">RIDDOR reportable</span>
+                            <span className="val">
+                              {type === 'dangerous'
+                                ? <span className="pill pill-err" style={{ fontSize: 10 }}><span className="dot" />Yes</span>
+                                : <span className="pill pill-gray" style={{ fontSize: 10 }}><span className="dot" />No</span>}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      <div className="wiz-review-row">
-                        <span className="lbl">RIDDOR reportable</span>
-                        <span className="val">
-                          {type === 'dangerous'
-                            ? <span className="pill pill-err" style={{ fontSize: 10 }}><span className="dot" />Yes</span>
-                            : <span className="pill pill-gray" style={{ fontSize: 10 }}><span className="dot" />No</span>}
-                        </span>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
                   <div className="wiz-review-card">
@@ -878,7 +888,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                           </div>
                         </div>
                       </div>
-                      {type === 'dangerous' && (
+                      {showRiddor && type === 'dangerous' && (
                         <div className="wiz-next-item">
                           <div className="wiz-next-dot" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}><Icon name="phone" size={14} /></div>
                           <div className="wiz-next-body">
