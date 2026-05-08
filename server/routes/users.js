@@ -261,6 +261,12 @@ function buildUserImportDefinition() {
         errors.push({ column: 'email', reason: 'Email is already registered' });
       }
 
+      // Track even if other validation failed, so duplicates surface
+      // on the first dry-run regardless of other errors on the same row.
+      if (email && validEmail(email) && email.length <= EMAIL_MAX && !ctx.seen.has(email)) {
+        ctx.seen.set(email, raw.__rowNumber);
+      }
+
       if (!name) errors.push({ column: 'name', reason: 'Name is required' });
       else {
         const nameErr = checkLen(name, NAME_MAX, 'Name');
@@ -289,7 +295,6 @@ function buildUserImportDefinition() {
       if (pwErr) errors.push({ column: 'password', reason: pwErr });
 
       if (errors.length === 0) {
-        ctx.seen.set(email, raw.__rowNumber);
         return {
           parsed: {
             email, name, role,
