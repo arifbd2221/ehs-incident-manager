@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { getUsers, getSites, createUser, updateUser, resetUserPassword, importUsers, userImportTemplateUrl } from '../../api/users';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
+import { TeamIllustration } from '../../components/shared/OnboardingIllustrations';
+import '../../styles/members.css';
 
 const ROLE_OPTS = [
   { value: 'worker', label: 'Worker' },
@@ -14,11 +16,20 @@ const ROLE_OPTS = [
 ];
 
 const ROLE_LABELS = Object.fromEntries(ROLE_OPTS.map(r => [r.value, r.label]));
+const ROLE_COLORS = {
+  admin: { bg: 'rgba(98,109,249,0.08)', color: '#626DF9', border: 'rgba(98,109,249,0.2)' },
+  ehs_manager: { bg: 'rgba(13,180,240,0.08)', color: '#0DB4F0', border: 'rgba(13,180,240,0.2)' },
+  ehs_officer: { bg: 'rgba(13,180,240,0.08)', color: '#0DB4F0', border: 'rgba(13,180,240,0.2)' },
+  supervisor: { bg: 'rgba(249,115,22,0.08)', color: '#f97316', border: 'rgba(249,115,22,0.2)' },
+  worker: { bg: 'var(--sds-bg-surface-alt)', color: 'var(--sds-fg-secondary)', border: 'var(--sds-border)' },
+};
 
-function rolePillClass(role) {
-  if (role === 'admin') return 'pill pill-purple';
-  if (role === 'ehs_manager' || role === 'ehs_officer') return 'pill pill-info';
-  return 'pill pill-gray';
+const AVATAR_COLORS = ['#626DF9', '#4338ca', '#0DB4F0', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
+function avatarColor(name) {
+  let h = 0;
+  for (let i = 0; i < (name || '').length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
 function MemberModal({ mode, member, sites, onClose, onSaved, currentUserId }) {
@@ -103,7 +114,7 @@ function MemberModal({ mode, member, sites, onClose, onSaved, currentUserId }) {
         </div>
 
         <div className="modal-body">
-          {error && <div className="auth-error"><Icon name="warning" size={14} />{error}</div>}
+          {error && <div className="auth-error" role="alert"><Icon name="warning" size={14} />{error}</div>}
 
           <div className="field">
             <label className="label">Full name <span className="req">*</span></label>
@@ -241,7 +252,7 @@ function PasswordResetModal({ member, onClose, onSaved }) {
         </div>
 
         <div className="modal-body">
-          {error && <div className="auth-error"><Icon name="warning" size={14} />{error}</div>}
+          {error && <div className="auth-error" role="alert"><Icon name="warning" size={14} />{error}</div>}
           <div className="field">
             <label className="label">New password <span className="req">*</span></label>
             <div style={{ display: 'flex', gap: 'var(--sds-space-sm)' }}>
@@ -457,11 +468,13 @@ export default function Members() {
   const [users, setUsers] = useState([]);
   const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modalMode, setModalMode] = useState(null);    // 'create' | 'edit' | null
+  const [modalMode, setModalMode] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
   const [pwTarget, setPwTarget] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [toast, setToast] = useState('');
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
 
   const refresh = async () => {
     setLoading(true);
@@ -501,19 +514,44 @@ export default function Members() {
     }
   };
 
+  const filtered = useMemo(() => {
+    let list = users;
+    if (roleFilter !== 'all') list = list.filter(u => u.role === roleFilter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(u =>
+        u.name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q) ||
+        u.department?.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [users, roleFilter, search]);
+
   const activeCount = users.filter(u => u.is_active).length;
+  const inactiveCount = users.length - activeCount;
+
+  const roleCounts = useMemo(() => {
+    const c = {};
+    users.forEach(u => { c[u.role] = (c[u.role] || 0) + 1; });
+    return c;
+  }, [users]);
 
   return (
-    <div className="page">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--sds-space-lg)' }}>
-        <div>
-          <h1 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 'var(--sds-space-sm)' }}>
-            <Icon name="person" size={26} />Members
-          </h1>
-          <p style={{ margin: 'var(--sds-space-xs) 0 0', color: 'var(--sds-fg-secondary)' }}>
-            {activeCount} active {activeCount === 1 ? 'member' : 'members'} in {user?.org_name || 'your organization'}
-            {users.length > activeCount ? ` · ${users.length - activeCount} inactive` : ''}
-          </p>
+    <div className="page mbr-page">
+      {/* Header */}
+      <div className="mbr-header">
+        <div className="mbr-header-left">
+          <div className="mbr-header-icon">
+            <Icon name="person" size={20} />
+          </div>
+          <div>
+            <h1 className="mbr-title">Members</h1>
+            <p className="mbr-subtitle">
+              {activeCount} active member{activeCount !== 1 ? 's' : ''} in {user?.org_name || 'your organization'}
+              {inactiveCount > 0 && <span className="mbr-inactive-tag"> · {inactiveCount} inactive</span>}
+            </p>
+          </div>
         </div>
         {isAdmin && (
           <div style={{ display: 'inline-flex', gap: 'var(--sds-space-sm)' }}>
@@ -527,15 +565,100 @@ export default function Members() {
         )}
       </div>
 
-      {toast && <div className="toast"><Icon name="check" size={16} />{toast}</div>}
+      {/* Stat cards */}
+      <div className="mbr-stats">
+        <div className="mbr-stat" style={{ animationDelay: '50ms' }}>
+          <div className="mbr-stat-icon" style={{ background: 'rgba(98,109,249,0.1)', color: '#626DF9' }}>
+            <Icon name="person" size={16} />
+          </div>
+          <div className="mbr-stat-val">{users.length}</div>
+          <div className="mbr-stat-lbl">Total</div>
+        </div>
+        <div className="mbr-stat" style={{ animationDelay: '100ms' }}>
+          <div className="mbr-stat-icon" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+            <Icon name="check" size={16} />
+          </div>
+          <div className="mbr-stat-val">{activeCount}</div>
+          <div className="mbr-stat-lbl">Active</div>
+        </div>
+        <div className="mbr-stat" style={{ animationDelay: '150ms' }}>
+          <div className="mbr-stat-icon" style={{ background: 'rgba(98,109,249,0.1)', color: '#626DF9' }}>
+            <Icon name="shield" size={16} />
+          </div>
+          <div className="mbr-stat-val">{(roleCounts.admin || 0) + (roleCounts.ehs_manager || 0) + (roleCounts.ehs_officer || 0)}</div>
+          <div className="mbr-stat-lbl">Elevated</div>
+        </div>
+        <div className="mbr-stat" style={{ animationDelay: '200ms' }}>
+          <div className="mbr-stat-icon" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316' }}>
+            <Icon name="factory" size={16} />
+          </div>
+          <div className="mbr-stat-val">{sites.length}</div>
+          <div className="mbr-stat-lbl">Sites</div>
+        </div>
+      </div>
 
-      <div className="card card-pad">
-        {loading && <div style={{ padding: 'var(--sds-space-lg)', textAlign: 'center', color: 'var(--sds-fg-tertiary)' }}>Loading…</div>}
-        {!loading && (
-          <table className="tbl">
+      {/* Search + filter bar */}
+      <div className="mbr-toolbar">
+        <div className="mbr-search">
+          <Icon name="search" size={15} />
+          <input
+            className="mbr-search-input"
+            placeholder="Search by name, email, or department…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className="mbr-search-clear" onClick={() => setSearch('')}>
+              <Icon name="close" size={12} />
+            </button>
+          )}
+        </div>
+        <div className="mbr-filters">
+          <button className={`mbr-filter-chip ${roleFilter === 'all' ? 'active' : ''}`} onClick={() => setRoleFilter('all')}>
+            All <span className="mbr-chip-count">{users.length}</span>
+          </button>
+          {ROLE_OPTS.slice().reverse().map(r => (
+            roleCounts[r.value] > 0 && (
+              <button key={r.value} className={`mbr-filter-chip ${roleFilter === r.value ? 'active' : ''}`} onClick={() => setRoleFilter(r.value)}>
+                {r.label} <span className="mbr-chip-count">{roleCounts[r.value]}</span>
+              </button>
+            )
+          ))}
+        </div>
+      </div>
+
+      {/* Members table/list */}
+      <div className="card card-pad mbr-table-card">
+        {loading && (
+          <div className="mbr-skeleton">
+            {[1,2,3,4].map(i => <div key={i} className="mbr-skeleton-row" style={{ animationDelay: `${i * 80}ms` }} />)}
+          </div>
+        )}
+
+        {!loading && filtered.length === 0 && (
+          <div className="mbr-empty">
+            <TeamIllustration className="mbr-empty-illus" />
+            <h3 className="mbr-empty-title">
+              {search || roleFilter !== 'all' ? 'No members found' : 'No team members yet'}
+            </h3>
+            <p className="mbr-empty-sub">
+              {search || roleFilter !== 'all'
+                ? 'Try adjusting your search or filters.'
+                : 'Add your first team member to get started.'}
+            </p>
+            {isAdmin && !search && roleFilter === 'all' && (
+              <button className="btn btn-primary" onClick={openCreate}>
+                <Icon name="plus" size={16} />Add first member
+              </button>
+            )}
+          </div>
+        )}
+
+        {!loading && filtered.length > 0 && (
+          <table className="tbl mbr-tbl">
             <thead>
               <tr>
-                <th>Name</th>
+                <th>Member</th>
                 <th>Role</th>
                 <th>Site</th>
                 <th>Department</th>
@@ -544,50 +667,52 @@ export default function Members() {
               </tr>
             </thead>
             <tbody>
-              {users.map(u => {
+              {filtered.map((u, i) => {
                 const isSelf = u.id === user?.id;
                 const inactive = !u.is_active;
+                const rc = ROLE_COLORS[u.role] || ROLE_COLORS.worker;
+                const ac = avatarColor(u.name);
                 return (
-                  <tr key={u.id} style={inactive ? { opacity: 0.55 } : null}>
+                  <tr key={u.id} className={`mbr-row ${inactive ? 'mbr-inactive' : ''}`} style={{ animationDelay: `${i * 30}ms` }}>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sds-space-sm)' }}>
-                        <div style={{
-                          width: 32, height: 32, borderRadius: '50%',
-                          background: 'var(--sds-brand-primary-tint)',
-                          color: 'var(--sds-brand-primary)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontWeight: 600, fontSize: 12, flexShrink: 0,
-                        }}>{u.initials || '??'}</div>
-                        <div>
-                          <div style={{ fontWeight: 600 }}>
+                      <div className="mbr-member-cell">
+                        <div className="mbr-avatar" style={{ background: inactive ? 'var(--sds-bg-surface-alt)' : ac, color: inactive ? 'var(--sds-fg-muted)' : '#fff' }}>
+                          {u.initials || '??'}
+                        </div>
+                        <div className="mbr-member-info">
+                          <div className="mbr-member-name">
                             {u.name}
-                            {isSelf && <span style={{ marginLeft: 'var(--sds-space-xs)', fontSize: 11, color: 'var(--sds-fg-tertiary)', fontWeight: 400 }}>(you)</span>}
+                            {isSelf && <span className="mbr-you-tag">you</span>}
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>{u.email}</div>
+                          <div className="mbr-member-email">{u.email}</div>
                         </div>
                       </div>
                     </td>
-                    <td><span className={rolePillClass(u.role)}>{ROLE_LABELS[u.role] || u.role}</span></td>
-                    <td>{u.site_name || <span style={{ color: 'var(--sds-fg-tertiary)' }}>—</span>}</td>
-                    <td>{u.department || <span style={{ color: 'var(--sds-fg-tertiary)' }}>—</span>}</td>
+                    <td>
+                      <span className="mbr-role-badge" style={{ background: rc.bg, color: rc.color, borderColor: rc.border }}>
+                        {ROLE_LABELS[u.role] || u.role}
+                      </span>
+                    </td>
+                    <td className="mbr-site-cell">{u.site_name || <span className="mbr-dash">—</span>}</td>
+                    <td className="mbr-dept-cell">{u.department || <span className="mbr-dash">—</span>}</td>
                     <td>
                       {u.is_active
-                        ? <span className="pill pill-success"><span className="dot" />Active</span>
-                        : <span className="pill pill-gray">Inactive</span>}
+                        ? <span className="mbr-status-active"><span className="mbr-status-dot" />Active</span>
+                        : <span className="mbr-status-inactive">Inactive</span>}
                     </td>
                     {isAdmin && (
-                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'inline-flex', gap: 'var(--sds-space-xs)' }}>
-                          <button className="btn btn-tertiary btn-sm" onClick={() => openEdit(u)}>
-                            <Icon name="edit" size={14} />Edit
+                      <td className="mbr-actions-cell">
+                        <div className="mbr-actions">
+                          <button className="mbr-act-btn" onClick={() => openEdit(u)} title="Edit member">
+                            <Icon name="edit" size={14} />
                           </button>
                           {!isSelf && (
                             <>
-                              <button className="btn btn-tertiary btn-sm" onClick={() => setPwTarget(u)}>
-                                <Icon name="shield" size={14} />Reset PW
+                              <button className="mbr-act-btn" onClick={() => setPwTarget(u)} title="Reset password">
+                                <Icon name="shield" size={14} />
                               </button>
-                              <button className="btn btn-tertiary btn-sm" onClick={() => toggleActive(u)}>
-                                {u.is_active ? 'Deactivate' : 'Reactivate'}
+                              <button className={`mbr-act-btn ${u.is_active ? 'mbr-act-danger' : 'mbr-act-success'}`} onClick={() => toggleActive(u)} title={u.is_active ? 'Deactivate' : 'Reactivate'}>
+                                <Icon name={u.is_active ? 'close' : 'check'} size={14} />
                               </button>
                             </>
                           )}
@@ -601,6 +726,8 @@ export default function Members() {
           </table>
         )}
       </div>
+
+      {toast && <div className="toast"><Icon name="check" size={16} />{toast}</div>}
 
       {modalMode && createPortal(
         <MemberModal
