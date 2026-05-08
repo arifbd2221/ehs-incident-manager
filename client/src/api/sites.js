@@ -10,3 +10,8 @@ export const importSites = (csv_text, mode) =>
   api.post('/sites/import', { csv_text, mode }).then(r => r.data);
 
 export const siteImportTemplateUrl = '/api/sites/import/template.csv';
+
+export const importWorkHours = (csv_text, mode) =>
+  api.post('/work-hours/import', { csv_text, mode }).then(r => r.data);
+
+export const workHoursImportTemplateUrl = '/api/work-hours/import/template.csv';

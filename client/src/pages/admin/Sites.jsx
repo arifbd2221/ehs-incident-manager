@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { listSites, createSite, updateSite, deleteSite, importSites, siteImportTemplateUrl } from '../../api/sites';
+import { listSites, createSite, updateSite, deleteSite, importSites, siteImportTemplateUrl, importWorkHours, workHoursImportTemplateUrl } from '../../api/sites';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
 import ImportModal from '../../components/shared/ImportModal';
@@ -65,6 +65,7 @@ export default function Sites() {
   const [activeSection, setActiveSection] = useState('general');
   const [success, setSuccess] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [whImportOpen, setWhImportOpen] = useState(false);
   const [toast, setToast] = useState('');
   const nameRef = useRef(null);
 
@@ -200,7 +201,10 @@ export default function Sites() {
         {canEdit && (
           <div style={{ display: 'inline-flex', gap: 'var(--sds-space-sm)' }}>
             <button className="btn btn-secondary" onClick={() => setImportOpen(true)}>
-              <Icon name="upload" size={16} /> Import CSV
+              <Icon name="upload" size={16} /> Import sites
+            </button>
+            <button className="btn btn-secondary" onClick={() => setWhImportOpen(true)}>
+              <Icon name="upload" size={16} /> Import work hours
             </button>
             <button className="btn btn-primary" onClick={openNew}>
               <Icon name="plus" size={16} /> New site
@@ -508,6 +512,25 @@ export default function Sites() {
             setToast(`Imported ${n} ${n === 1 ? 'site' : 'sites'}`);
             setTimeout(() => setToast(''), 2500);
             refresh();
+          }}
+        />,
+        document.body,
+      )}
+
+      {whImportOpen && createPortal(
+        <ImportModal
+          title="Import work hours from CSV"
+          subtitle="Bulk-upload per-site, per-period work hours. Used for OSHA 300A incidence-rate calc."
+          helperText="Columns: site_name, period_start, period_end, hours_worked, avg_employees, notes. Required: site_name, period_start, period_end, hours_worked. Dates as YYYY-MM-DD. UNIQUE on (site_name + period_start) — one entry per site per period start."
+          templateUrl={workHoursImportTemplateUrl}
+          templateFilename="work_hours_template.csv"
+          importFn={importWorkHours}
+          entityNoun={{ singular: 'work hours record', plural: 'work hours records' }}
+          onClose={() => setWhImportOpen(false)}
+          onImported={(n) => {
+            setWhImportOpen(false);
+            setToast(`Imported ${n} work hours record${n === 1 ? '' : 's'}`);
+            setTimeout(() => setToast(''), 2500);
           }}
         />,
         document.body,
