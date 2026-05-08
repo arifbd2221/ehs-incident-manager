@@ -98,7 +98,8 @@ here ships without explicit go-ahead.
   - **Slice 1 — sign-up + onboarding** (commit `b72bd6c`): migration `016_org_onboarding_fields` adds `country / industry_sector / naics_code / primary_regulator / company_size` to `organizations` and widens `activity_log` CHECK to accept `entity_type='organization'`. New `POST /auth/signup-org` (atomic org+founder insert + `org_created` activity row), `/register` locked to 403, `/auth/sites` locked to authMiddleware + org-scoped. JWT carries `org_name` for first-paint UI. New FE `/signup` (3-step) + `/onboarding/site` (1-step). Register stub. Login footer CTA. TopBar breadcrumb dynamic (`user.org_name` instead of hardcoded "SDS Manager"). Settings shows read-only Organization section. Seed adds Acme Manufacturing demo org (`acme@sdsmanager.com / password123`) with no sites — empty new-tenant showcase.
   - **Compliance frameworks → multi-select** (commit `650a2e8`): migration `017_compliance_frameworks` adds `compliance_frameworks TEXT` (JSON array). `primary_regulator` column kept in schema unused (cheaper than SQLite DROP COLUMN; harmless). 6 framework codes: `osha_300 / osha_300a / osha_301 / riddor_f2508 / safework_nsw / generic`. Country auto-pre-selects defaults (US→3 OSHA, UK→RIDDOR, AU→SafeWork NSW, else→generic), then country switch *always* overwrites with new defaults. SignupOrg step 2 renders 6 framework cards with checked-state border tint. Settings shows comma-separated framework names via `FRAMEWORK_LABELS` map.
   - **Audit fixes** (commit `8f3b01c`, bundled with O2): see below.
-  - **Open follow-ups (deferred):** `/reports` page should hide cards for frameworks the org didn't select (so a RIDDOR-only org doesn't see OSHA cards). Real invitation/email flow. Org rename / archive UI. AU-state-specific forms beyond NSW.
+  - **Reports filter follow-up** (commit `37e6826`): closed. Each regulator-specific card on `/reports` now declares the `requiresFramework` code that gates it (`osha_300 / osha_300a / osha_301 / riddor_f2508`). Cards without `requiresFramework` (Metrics, Audit Log) are universal/internal and stay visible. RIDDOR-only org no longer sees OSHA cards; OSHA-only org no longer sees RIDDOR card. Auto-falls-back to first-visible tab if currently-selected tab gets filtered out. Empty-state copy when no cards visible (e.g., a `safework_nsw`-only org since no SafeWork report card exists yet — see P3-RG1). Defensive fallback: empty/missing `compliance_frameworks` shows everything (legacy users from before migration 019 / stale JWTs aren't locked out).
+  - **Open follow-ups (deferred):** Real invitation/email flow. Org rename / archive UI. AU-state-specific forms beyond NSW.
 - [x] **P3-O2** **Org + site members management** — admin-gated CRUD on `/admin/members` with audit. Admin types email + initial password, hands off out-of-band (no email service yet). Mutation routes admin-only; read view open to anyone in the org.
   - **Direct-create + members CRUD** (commit `7aafa99`): rewrite of `server/routes/users.js` with `GET /` (JOIN sites, active+inactive sorted active-first), `POST /` (admin only, validates email + role + cross-org site_id), `PATCH /:id` (admin only, **self-edit block** on role + is_active, **last-admin lockout** as defense-in-depth, field-level diff in `user_updated` activity rows), `POST /:id/password` (admin reset for another user; self goes through `/auth/password`). New `/admin/members` page: table with avatar circle + role pill (`admin`→`pill-purple`, `ehs_*`→`pill-info`, others→`pill-gray`) + status pill (`pill-success` w/ animated dot for active, `pill-gray` for inactive) + per-row actions. Dual-purpose `MemberModal` (create/edit) and separate `PasswordResetModal`. Role select `disabled` when editing self. Inactive rows greyed via `opacity: 0.55`. Sidebar nav link, TopBar PAGE_TIPS, App.jsx route.
   - **Audit fixes** (commit `8f3b01c`): authMiddleware now re-checks `users.is_active` per request via cached prepared statement — deactivation revokes existing JWT instantly (was: 24h grace until token expired). New `services/validators.js` with `validEmail()` regex + `checkLen()` + `checkPassword()` + caps (`NAME_MAX=100, EMAIL_MAX=254, PASSWORD_MIN=8, PASSWORD_MAX=72, NAICS_MAX=32`). Wired into `/signup-org` + `POST /users` + `PATCH /users` + `POST /users/:id/password` + `/auth/password`. Acme seed `org_created` row now uses `writeActivity` with full metadata (was: hand-rolled INSERT, metadata=`{}`). FE polish: new `'people'` icon for Members nav (resolves collision with bottom-anchored Profile `'person'`), Members action buttons wrapped in inline-flex with `gap` (was: flush), SignupOrg country switch always resets frameworks (was: preserved stale OSHA when switching to UK), SignupOrg Back clears stale error, OnboardingFirstSite country becomes ComboBox (was: free-text), OnboardingFirstSite redirects to `/admin/sites` if org already has sites (was: re-creating duplicates by re-visiting URL), Members empty-state dead branch removed.
@@ -166,16 +167,59 @@ The following Wave 2 FE files were authored before the new `CLAUDE.md` design sy
 
 ## State
 
-- **Branch**: `backend` — pushed through `8f3b01c` (P3-O1/O2 audit fixes). All work this session committed and pushed. Working tree clean. `origin/main` was at `39a73d3` (PR #7 merge of backend → main, snapshot at start of this session); `backend` is now ahead by 4 commits.
+- **Branch**: `backend` — at `36a564f` (PR #8 merge of backend → main, fast-forward-pulled into backend). `origin/backend` and `origin/main` are both at `36a564f` — fully in sync. Working tree clean.
 - **Phase 2**: code complete. Only F6.2 (manual demo walkthrough) outstanding.
 - **Wave 7**: E7.1 done.
 - **Productionization backlog** (UX-A through UX-H): **A, B, D, E, F, G, H done. C done except body-parts editor (deferred — needs BodyMap3D integration outside the wizard).**
 - **BUG-001**: closed.
-- **Phase 3** (P3-* items): **N1, N2, N3, L1, L2, A1, O1, O2, OP2, OP3 all done.** O1/O2 ship without invitations (deferred — would need email service) and without org switching (explicit user decision: each user belongs to one org forever, `users.email` stays globally unique).
+- **Phase 3** (P3-* items): **N1, N2, N3, L1, L2, A1, O1, O2, OP2, OP3 all done.** O1/O2 ship without invitations (deferred — would need email service) and without org switching (explicit user decision: each user belongs to one org forever, `users.email` stays globally unique). **Reports filter follow-up of O1**: closed (commit `37e6826`).
   - **Open** (not started): AI1, AI2, AI3 (video intake), OP1, OP4, OP5 (risk register), OB1, OB2, OB3, RG1 (Australian regulation).
-- **Migrations applied**: 001–017. New this session: `016_org_onboarding_fields` (org demographic columns + activity_log entity_type='organization') and `017_compliance_frameworks` (JSON-array column on organizations). `primary_regulator` column from 016 lives on as dead schema — kept only because SQLite DROP COLUMN is expensive and harmless.
-- **Demo accounts** (all `password123`): 5 SDS Manager Inc. users (elena/marcus/james/mehta/wendy) plus `acme@sdsmanager.com` (Aisha Carter, role=admin, Acme Manufacturing — empty new-tenant onboarding showcase, no sites/assets/incidents).
+- **Migrations applied**: 001–019 (numbered) plus three letter-suffixed fixups (014a, 017a) and the `017_closure_workflow.sql` from main. Final lexical order is 001 → 014 → 014a → 015 → 016_osha_compliance_fields (main) → 017_closure_workflow (main) → **017a_rename_legacy_org_migrations** (this session — aliases backend's old 016/017 names) → 018_org_onboarding_fields (renamed from backend's 016) → 019_compliance_frameworks (renamed from backend's 017). `primary_regulator` column lives on as dead schema. The 017a fixup is idempotent on fresh DBs.
+- **Schema landed from main this session**: `incidents` gains `er_treated`, `hospitalized`, `hospitalization_date`, `osha_privacy_case`, `osha_work_related`, `closure_type`, `reopened_at`, `reopened_by`, `reopened_reason`, `reopen_count`. New table `closure_requests` (incident_id, requested_by, closure_summary, lessons_learned, gate_snapshot JSON, status pending/approved/rejected, reviewed_by, reviewed_at, review_notes). `osha_300_log` rebuilt with `is_privacy_case` column + nullable `incident_id` (allows manual entries).
+- **New BE services from main this session**: `server/services/closure_gates.js` (ISO 45001 / OSHA / ANSI Z10 closure-readiness gates, used by the tiered closure workflow); `server/services/notifications.js`. Neither has been read top-to-bottom in this session — re-read before extending.
+- **New FE modals from main**: `ClosureChecklistModal.jsx`, `ClosureApprovalModal.jsx`, `ReopenModal.jsx` (all under `client/src/pages/incidents/modals/`); `UpdateProgressModal.jsx` (under `client/src/pages/capas/`). None click-tested in this session.
+- **Demo accounts** (all `password123`): 5 SDS Manager Inc. users (elena/marcus/james/mehta/wendy) plus `acme@sdsmanager.com` (Aisha Carter, role=admin, Acme Manufacturing — OSHA-only US org, empty onboarding showcase). Two test orgs created during this session and left in the dev DB: `riddor-test@example.com` (RIDDOR-only UK org, "RIDDOR Test Co", no sites) and `sydney-test@example.com` (SafeWork-NSW-only AU org, "Sydney Smelters Pty", no sites). These exist solely to exercise the Reports framework filter — feel free to delete or reseed.
 - **Running**: dev servers via `cd server && node --watch index.js` (BE :3001) and `cd client && npm run dev` (FE :5173).
+
+## Most recent session — 2026-05-08 — Reports framework filter + merge-from-main + PR #8
+
+Short, tightly-scoped session. Two pieces of work shipped, one PR merged round-trip, and the rest of the time was thorough verification.
+
+| Area | What changed | Commit |
+|---|---|---|
+| Reports cards filter by `compliance_frameworks` | Closes the open follow-up from P3-O1 / P3-O2: a RIDDOR-only org no longer sees OSHA cards on `/reports`. Each regulator card declares the framework code that gates it (`requiresFramework: 'osha_300' / 'osha_300a' / 'osha_301' / 'riddor_f2508'`). Cards without a `requiresFramework` field (Metrics, Audit Log) are universal/internal — Audit retains its existing role gating. New `useMemo`-based `visibleReports` + a follow-up effect that resets the active tab if the previously-selected card gets filtered out (so the page never renders an empty content area). Empty-state copy in `.rpt-panel` / `.cell-empty` if the visible set is empty (e.g., a `safework_nsw`-only org until P3-RG1 ships a card). Defensive fallback: empty/missing `compliance_frameworks` shows everything (legacy users / stale JWTs aren't locked out). No new CSS — reused existing classes. | `37e6826` |
+| Merge from `origin/main` | 8 commits brought in: `8da2b28` OSHA compliance fields + 301 form + notifications, `a1649f4` tiered closure workflow with ISO 45001 gates, `ab51f86` React-hooks fix on Login/Register, `d3f06cb` animated 3D logo + notification nav + badge positioning, `6a17319` CAPA detail hero card redesign, `a4a0356` consolidated incident detail cards + sidebar UX, `193a606` ReferencedByCard at bottom of investigation sidebar, `003d1be` ReferencedByCard inline trigger + modal. Resolution rules: UI/UX wins on conflicting hunks; server logic + schema preserve backend's functionality. | `8c9ac40` |
+| Migration collision resolved | Both sides shipped 016 + 017 in parallel. Main's `016_osha_compliance_fields` + `017_closure_workflow` keep their numbers. Backend's were renumbered: `016_org_onboarding_fields` → `018_org_onboarding_fields`, `017_compliance_frameworks` → `019_compliance_frameworks`. New `017a_rename_legacy_org_migrations.sql` aliases the legacy filenames in `_schema_migrations` for existing dev DBs (mirrors the established `014a_normalize_site_hierarchy_name.sql` pattern). Idempotent — no-op on fresh DBs. Verified: dev DB rebooted clean, all 21 migrations recorded under their final names, no duplicate-column errors. | `8c9ac40` |
+| PR #8 (backend → main) | Opened, merged, fast-forward-pulled back into backend. `origin/backend` == `origin/main` == `36a564f`. | merge commit `36a564f` on main |
+
+**Two manual conflicts resolved during the merge:**
+- `client/src/pages/Register.jsx` — kept backend's invite-only stub (`{ user } = useAuth(); if (user) <Navigate />`). Discarded main's reintroduced full register form because main's branch never knew `/signup-org` existed.
+- `client/src/pages/reports/ReportsPage.jsx` — merged main's new `osha301` card with backend's `requiresFramework` gate. The 301 card now sits between 300A and RIDDOR with `requiresFramework: 'osha_301'` so a RIDDOR-only org doesn't see it either.
+
+**Files where main heavily refactored — auto-merged but NOT click-tested this session** (the highest-risk surface for the next session):
+- `client/src/pages/incidents/IncidentDetail.jsx` — main's "consolidate cards + sidebar UX" refactor auto-merged with backend's witnesses card + edit affordances. Sidebar layout / witnesses card placement need visual sanity check.
+- `client/src/pages/capas/CAPADetail.jsx` — main's hero-card redesign + `UpdateProgressModal.jsx`. New layout never opened.
+- `client/src/pages/incidents/modals/ClosureChecklistModal.jsx`, `ClosureApprovalModal.jsx`, `ReopenModal.jsx` — entirely new from main, never exercised in this session.
+- `client/src/components/layout/TopBar.jsx` — main's notification redesign auto-merged with backend's dynamic `org_name` breadcrumb + `/admin/members` PAGE_TIPS. Build-clean but UI not loaded.
+- `client/src/pages/reports/ReportsPage.jsx` — the merged page rendering with osha301 card + framework filter has never been opened in a browser.
+- `server/services/closure_gates.js`, `server/services/notifications.js` — new from main, neither read top-to-bottom this session. Don't extend without re-reading.
+
+**What was verified this session:**
+- BE smoke test on every list endpoint and every detail endpoint as elena/wendy/marcus/acme/RIDDOR-test/Sydney-test users. All 200 / 4xx as expected, no 500s, BE logs clean.
+- Witnesses CRUD post-merge: 201/200/204, audit log captured.
+- Backend routes alive co-existing with main's: `/signup-org`, `/users` (members management), `/reports/audit-log`, `/incidents/:id/witnesses`, `/incidents/:id/closure-checklist`, `/incidents/:id/closure-request[/approve|/reject]`, `/incidents/:id/reopen`.
+- Schema verified: `incidents` carries main's new 9 columns + `closure_requests` table exists. `organizations` carries backend's 6 columns including `compliance_frameworks`. `activity_log` CHECK still includes `'organization'`.
+- Vite production build clean post-merge: 183 modules (was 179 pre-merge), 777 KB bundle.
+- All merge-touched JSX files have hook usage matching imports (the `useRef`-drop pattern from the prior `-X theirs` merge did not recur).
+- No stale conflict markers anywhere in the tree.
+- Sign-up of brand-new AU/SafeWork-NSW org end-to-end OK; `/me` returns the correct framework set.
+
+**Honest hallucination report at end of session:**
+- **Backend: low risk.** All routes curl-tested with multiple user/org combinations.
+- **Frontend: medium-high risk.** Build clean ≠ visually correct. The merge involved heavy main-side refactors (CAPA hero, incident detail consolidation, notification UX) that I never opened in a browser. Anything visual could be subtly broken.
+- **Stale-cache risk:** browser tabs open before the deploy will have a JWT minted before main's session. Hard-refresh (Cmd+Shift+R) recommended for first paint.
+
+**Operating note for next session:** the user explicitly raised the "fresh session vs. continue" question at the end of this one. The agreed split: this session pushed `36a564f`, prepped roadmap.md + memory files for handoff, then closes. Any non-trivial work in the merge-touched files (especially `IncidentDetail.jsx`, `CAPADetail.jsx`, the new closure modals, or the new closure_gates / notifications services) should re-read those files cold — don't trust this session's grep-based inferences.
 
 ## Most recent session — 2026-05-07 (later evening) — P3-O1 + P3-O2 (multi-tenancy onboarding showcase + members management)
 
@@ -253,20 +297,34 @@ Session shipped the entire remaining UX backlog (UX-C/D/E + ticked F) and closed
 
 ## Quick re-orientation for a fresh session
 
-1. Read this `roadmap.md` first — full status with commit SHAs.
+1. Read this `roadmap.md` first — full status with commit SHAs. Most recent session entry is dated 2026-05-08.
 2. Read `plan-phase-2.md` if you need design rationale for any Phase-2 wave.
-3. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System-project-ehs-incident-manager/memory/MEMORY.md` for user preferences and project context.
-4. `git fetch origin && git status` — `backend` should be at `8f3b01c`, working tree clean. `origin/backend == backend`.
-5. Boot: `cd server && node --watch index.js` and `cd client && npm run dev`. Existing-tenant login: `elena@sdsmanager.com / password123` (ehs_manager). Empty new-tenant onboarding showcase: `acme@sdsmanager.com / password123` (admin, no sites/data — ideal for showing the "fresh org" UX). Or sign up a brand-new org via `/signup`.
-6. **What's likely next** (user-priority order, taken from open P3 items):
-   - **`/reports` filtering by org's `compliance_frameworks`** — natural follow-up to P3-O1; right now a RIDDOR-only org still sees OSHA report cards.
+3. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System-project-ehs-incident-manager/memory/MEMORY.md` for user preferences and project context. Pay particular attention to `feedback_migration_collision.md` and `feedback_merge_x_theirs.md` if any merge work is on deck.
+4. `git fetch origin && git status` — `backend` should be at `36a564f`, working tree clean. `origin/backend == origin/main == backend`.
+5. Boot: `cd server && node --watch index.js` (port 3001) and `cd client && npm run dev` (port 5173). Existing-tenant login: `elena@sdsmanager.com / password123` (ehs_manager). Empty new-tenant onboarding showcase: `acme@sdsmanager.com / password123` (admin, no sites/data — OSHA-only US org; good for the "fresh OSHA tenant" UX). For exercising the Reports framework filter: `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU). Or sign up a brand-new org via `/signup`.
+6. **First-priority click-tests** (from the 2026-05-08 session's "not click-tested" list — closing this gap is the cheapest hallucination-reduction move):
+   - `/reports` rendering for elena (multi-framework — should see all OSHA cards + RIDDOR + Metrics + Audit), acme (OSHA-only — RIDDOR card hidden), riddor-test (RIDDOR-only — OSHA cards hidden), sydney-test (SafeWork-NSW-only — only Metrics + Audit visible plus the "no reports available" empty state, since RG1 hasn't shipped a SafeWork card yet).
+   - `/incidents/:id` detail page — main consolidated cards + sidebar UX; backend's witnesses card and edit affordances need to render alongside main's tiered closure UI.
+   - `/capas/:id` detail — main's hero-card redesign + new `UpdateProgressModal`.
+   - Tiered closure flow: open an incident → request closure (`ClosureChecklistModal`) → as elevated user, approve/reject via `ClosureApprovalModal` → re-open via `ReopenModal`.
+   - Notification nav UX from main's `d3f06cb` — animated 3D logo, badge positioning.
+7. **Files to re-read cold before extending** (this session inferred their behavior from grep, not full reads):
+   - `server/services/closure_gates.js` (main's ISO 45001 gates)
+   - `server/services/notifications.js` (main's notifications service)
+   - `server/routes/incidents.js` (auto-merged: backend's witnesses + recordability-verify + stop-work, alongside main's closure_request / approve / reject / reopen + OSHA fields)
+   - `client/src/pages/incidents/IncidentDetail.jsx` (auto-merged: backend's edit affordances + witnesses card, alongside main's consolidated card layout)
+   - `client/src/pages/capas/CAPADetail.jsx` (main's hero redesign)
+8. **What's likely next** (user-priority order, taken from open P3 items):
+   - **Click-test the merge** (item 6 above) — closes hallucination risk before any new feature.
    - **Body-parts editor** to fully close UX-C — needs BodyMap3D integration outside the wizard flow.
    - **Real invitation/email flow** — slice 2 of P3-O1; needs `invitations` table + token + email service.
-   - **Remaining P3 themes**: AI assistance (AI1/AI2/AI3 video), ops (OP1 maintenance / OP4 scheduling / OP5 risk register), regulatory (RG1 Australia), onboarding (OB1/OB2/OB3).
-7. **Operating norms** (per user feedback during Phase 2 + Phase 3):
+   - **Remaining P3 themes**: AI assistance (AI1/AI2/AI3 video), ops (OP1 maintenance / OP4 scheduling / OP5 risk register), regulatory (RG1 Australia — also closes the loop on the `safework_nsw` framework code that has no Reports card yet), onboarding (OB1/OB2/OB3).
+9. **Operating norms** (per user feedback during Phase 2 + Phase 3):
    - Treat as an actual app, not hackathon polish.
    - Each task = one focused commit + push to `origin/backend`.
    - Always leave dev servers running at the end so the user can click-test.
    - Don't claim FE success without actually exercising the UI; "Vite transforms cleanly" alone is not proof.
    - **Never override or overdo UI/UX** — reuse existing classes/tokens; no new CSS or inline styles unless the feature genuinely needs new visual treatment, in which case **ask first**. If you do add page-scoped CSS, follow the prefix convention (`idet-` incident detail, `invd-` investigation detail, `dp-` documents page, `tp-` templates list, `ie-` inspection editor, etc.).
    - **After every multi-step Edit on JSX/JS**, verify the file actually parses — run `cd client && npx vite build` or grep the Vite log for "SyntaxError"/"Failed to" lines, not just timestamp markers. Babel parse errors don't always abort HMR; the trailing log entry can be a stale "hmr update" while the file is silently broken.
+   - **For migration collisions** (both branches numbered the same migration in parallel): renumber yours upward and add a letter-suffixed fixup (e.g. `017a_…`) that aliases the legacy filename in `_schema_migrations`. Mirrors the existing `014a_normalize_site_hierarchy_name.sql` and `017a_rename_legacy_org_migrations.sql` pattern. Idempotent on fresh DBs.
+   - **For merges from main with both backend + UI/UX changes:** prefer default merge strategy with manual resolution over `-X theirs`. The 2026-05-08 merge succeeded with default strategy + 2 manual resolutions; the prior `-X theirs` merge silently dropped a `useRef` import. Default merge surfaces real conflicts so you can choose per-file.
