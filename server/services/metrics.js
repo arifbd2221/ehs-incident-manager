@@ -116,3 +116,74 @@ export function calculateMetrics(siteId, year) {
     workHoursPeriods: hoursAgg?.period_count || 0,
   };
 }
+
+// Org-wide rollup of TRIR / DART / LTIR / Severity Rate. Sums raw inputs
+// (hours + cases) across every site in the org, then applies the OSHA
+// 200,000-hour denominator once. Averaging per-site rates would weight
+// small sites equally with large sites — wrong; the OSHA convention is
+// company-wide totals divided by company-wide hours.
+export function calculateOrgMetrics(orgId, year) {
+  const currentYear = year || new Date().getFullYear();
+  const yearStart = `${currentYear}-01-01`;
+  const yearEnd = `${currentYear + 1}-01-01`;
+
+  const sites = db.prepare('SELECT id FROM sites WHERE org_id = ?').all(orgId);
+  if (sites.length === 0) {
+    return {
+      year: currentYear, trir: 0, dart: 0, ltir: 0, severityRate: 0,
+      totalRecordableCases: 0, dartCases: 0, daysAwayCases: 0, totalDaysAway: 0,
+      totalHoursWorked: 0, contractorHoursWorked: 0,
+      siteCount: 0, sitesWithData: 0,
+    };
+  }
+  const ids = sites.map(s => s.id);
+  const placeholders = ids.map(() => '?').join(',');
+
+  const hoursAgg = db.prepare(`
+    SELECT
+      COALESCE(SUM(hours_worked), 0) AS employee_hours,
+      COALESCE(SUM(contractor_hours_worked), 0) AS contractor_hours,
+      COUNT(DISTINCT site_id) AS sites_with_data
+    FROM work_hours
+    WHERE site_id IN (${placeholders}) AND period_start >= ? AND period_start < ?
+  `).get(...ids, yearStart, yearEnd);
+
+  const cases = db.prepare(`
+    SELECT
+      COUNT(*) AS total_recordable,
+      COALESCE(SUM(classification_days_away), 0) AS days_away_cases,
+      COALESCE(SUM(classification_job_transfer), 0) AS transfer_cases,
+      COALESCE(SUM(days_away_count), 0) AS total_days_away,
+      COALESCE(SUM(days_restricted_count), 0) AS total_days_restricted
+    FROM osha_300_log
+    WHERE site_id IN (${placeholders}) AND calendar_year = ?
+  `).get(...ids, currentYear);
+
+  const totalHours = Number(hoursAgg?.employee_hours || 0);
+  const totalRecordable = cases?.total_recordable || 0;
+  const daysAwayCases = cases?.days_away_cases || 0;
+  const dartCases = daysAwayCases + (cases?.transfer_cases || 0);
+  const totalDaysAway = cases?.total_days_away || 0;
+
+  const rate = (numerator, hours) => {
+    if (!hours || hours <= 0) return 0;
+    return parseFloat(((numerator * 200000) / hours).toFixed(2));
+  };
+
+  return {
+    year: currentYear,
+    trir: rate(totalRecordable, totalHours),
+    dart: rate(dartCases, totalHours),
+    ltir: rate(daysAwayCases, totalHours),
+    severityRate: rate(totalDaysAway, totalHours),
+    totalRecordableCases: totalRecordable,
+    dartCases,
+    daysAwayCases,
+    totalDaysAway,
+    totalDaysRestricted: cases?.total_days_restricted || 0,
+    totalHoursWorked: totalHours,
+    contractorHoursWorked: Number(hoursAgg?.contractor_hours || 0),
+    siteCount: sites.length,
+    sitesWithData: hoursAgg?.sites_with_data || 0,
+  };
+}

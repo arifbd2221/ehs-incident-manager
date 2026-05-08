@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
-import { calculateMetrics } from '../services/metrics.js';
+import { calculateOrgMetrics } from '../services/metrics.js';
 
 const router = Router();
 
 router.get('/', (req, res) => {
   const orgId = req.user.org_id;
-  const { site_id } = req.query;
 
   const openIncidents = db.prepare("SELECT COUNT(*) as c FROM incidents WHERE org_id = ? AND status != 'Closed'").get(orgId).c;
 
@@ -43,18 +42,26 @@ router.get('/', (req, res) => {
     ORDER BY al.created_at DESC LIMIT 10
   `).all(orgId);
 
-  let metrics = { trir: 0, dart: 0 };
-  if (site_id) {
-    metrics = calculateMetrics(Number(site_id));
-  } else {
-    const firstSite = db.prepare('SELECT id FROM sites WHERE org_id = ? LIMIT 1').get(orgId);
-    if (firstSite) metrics = calculateMetrics(firstSite.id);
-  }
+  // Org-wide TRIR/DART/LTIR/Severity Rate for the current calendar year.
+  // Aggregated from work_hours + osha_300_log across every site the org
+  // owns, divided by the OSHA 200,000-hour denominator once at the org
+  // level (averaging per-site rates would weight small sites equally
+  // with large sites and is not what OSHA 1904 measures).
+  const metrics = calculateOrgMetrics(orgId);
 
   res.json({
     kpis: {
       trir: metrics.trir,
       dart: metrics.dart,
+      ltir: metrics.ltir,
+      severityRate: metrics.severityRate,
+      totalRecordableCases: metrics.totalRecordableCases,
+      dartCases: metrics.dartCases,
+      daysAwayCases: metrics.daysAwayCases,
+      totalDaysAway: metrics.totalDaysAway,
+      totalHoursWorked: metrics.totalHoursWorked,
+      sitesWithData: metrics.sitesWithData,
+      siteCount: metrics.siteCount,
       openIncidents,
       overdueCAPAs,
       trackCounts: Object.fromEntries(trackCounts.map(r => [r.track, r.count])),

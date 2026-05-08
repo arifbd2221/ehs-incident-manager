@@ -19,6 +19,8 @@ import '../styles/dashboard.css';
 const DEFAULT_WIDGETS = [
   { id: 'kpi_trir',      label: 'TRIR',                icon: 'reports',       visible: true, zone: 'kpi' },
   { id: 'kpi_dart',      label: 'DART',                icon: 'person',        visible: true, zone: 'kpi' },
+  { id: 'kpi_ltir',      label: 'LTIR',                icon: 'clock',         visible: true, zone: 'kpi' },
+  { id: 'kpi_severity',  label: 'Severity Rate',       icon: 'pulse',         visible: true, zone: 'kpi' },
   { id: 'kpi_open',      label: 'Open Incidents',      icon: 'incidents',     visible: true, zone: 'kpi' },
   { id: 'kpi_overdue',   label: 'Overdue CAPAs',       icon: 'warning',       visible: true, zone: 'kpi' },
   { id: 'by_type',       label: 'Incidents by Type',   icon: 'dashboard',     visible: true, zone: 'left' },
@@ -338,7 +340,29 @@ export default function Dashboard() {
               <div className="kpi-icon"><Icon name="person" size={18} /></div>
             </div>
             <div className="kpi-val"><KpiValue value={kpis.dart || 0} decimals={2} /></div>
-            <div className="kpi-foot">Days away / restricted / transfer</div>
+            <div className="kpi-foot">{kpis.dartCases || 0} {kpis.dartCases === 1 ? 'DART case' : 'DART cases'}</div>
+          </div>
+        );
+      case 'kpi_ltir':
+        return (
+          <div className="kpi-card kpi-dart kpi-clickable" onClick={() => navigate('/reports')}>
+            <div className="kpi-top">
+              <div className="kpi-label">LTIR &middot; YTD</div>
+              <div className="kpi-icon"><Icon name="clock" size={18} /></div>
+            </div>
+            <div className="kpi-val"><KpiValue value={kpis.ltir || 0} decimals={2} /></div>
+            <div className="kpi-foot">{kpis.daysAwayCases || 0} days-away {kpis.daysAwayCases === 1 ? 'case' : 'cases'}</div>
+          </div>
+        );
+      case 'kpi_severity':
+        return (
+          <div className="kpi-card kpi-overdue kpi-clickable" onClick={() => navigate('/reports')}>
+            <div className="kpi-top">
+              <div className="kpi-label">Severity Rate &middot; YTD</div>
+              <div className="kpi-icon"><Icon name="pulse" size={18} /></div>
+            </div>
+            <div className="kpi-val"><KpiValue value={kpis.severityRate || 0} decimals={2} /></div>
+            <div className="kpi-foot">{kpis.totalDaysAway || 0} {kpis.totalDaysAway === 1 ? 'day' : 'days'} away</div>
           </div>
         );
       case 'kpi_open':
