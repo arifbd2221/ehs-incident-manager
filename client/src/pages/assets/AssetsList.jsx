@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { listAssets, createAsset, updateAsset, deleteAsset } from '../../api/assets';
+import { listAssets, createAsset, updateAsset, deleteAsset, importAssets, assetImportTemplateUrl } from '../../api/assets';
+import ImportModal from '../../components/shared/ImportModal';
 import { listSites } from '../../api/sites';
 import { listAssetCategories, createAssetCategory, listCategoryFields } from '../../api/asset_categories';
 import Icon from '../../components/shared/Icon';
@@ -57,6 +58,8 @@ export default function AssetsList() {
   const [section, setSection] = useState('identity');
 
   const [newCatOpen, setNewCatOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importToast, setImportToast] = useState('');
   const [newCatName, setNewCatName] = useState('');
   const [newCatSaving, setNewCatSaving] = useState(false);
 
@@ -294,6 +297,11 @@ export default function AssetsList() {
                 title="Define asset types and their custom fields"
               >
                 <Icon name="settings" size={14} /> Asset types
+              </button>
+            )}
+            {canEdit && (
+              <button className="btn btn-secondary" onClick={() => setImportOpen(true)}>
+                <Icon name="upload" size={14} /> Import CSV
               </button>
             )}
             {canEdit && (
@@ -902,6 +910,28 @@ export default function AssetsList() {
         />,
         document.body
       )}
+
+      {importOpen && createPortal(
+        <ImportModal
+          title="Import assets from CSV"
+          subtitle="Bulk-import an equipment register. Strict template — headers must match exactly."
+          helperText="Columns: name, display_id, site_name, asset_type, location_description, serial_number, description. Required: name, display_id, site_name, asset_type. asset_type matches an existing asset type if the name lines up; otherwise it's stored as a free-text type. Custom fields per asset type aren't imported in v1 — fill those in via Edit after import."
+          templateUrl={assetImportTemplateUrl}
+          templateFilename="assets_template.csv"
+          importFn={importAssets}
+          entityNoun={{ singular: 'asset', plural: 'assets' }}
+          onClose={() => setImportOpen(false)}
+          onImported={(n) => {
+            setImportOpen(false);
+            setImportToast(`Imported ${n} ${n === 1 ? 'asset' : 'assets'}`);
+            setTimeout(() => setImportToast(''), 2500);
+            refreshAssets();
+          }}
+        />,
+        document.body,
+      )}
+
+      {importToast && <div className="toast"><Icon name="check" size={16} />{importToast}</div>}
     </div>
   );
 }

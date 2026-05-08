@@ -16,6 +16,8 @@ import { nextAssetNumber } from '../services/numbering.js';
 import { incidentsLinkedToAsset } from '../services/entity_links.js';
 import { loadFieldsForCategory, validateCustomFields } from '../services/custom_fields.js';
 import { writeActivity, diffFields } from '../services/activity_log.js';
+import { runImport, CsvImportError } from '../services/csv_import.js';
+import { checkLen, NAME_MAX, ADDRESS_MAX } from '../services/validators.js';
 
 const router = Router();
 
@@ -312,6 +314,194 @@ router.delete('/:id', (req, res) => {
   });
 
   res.json({ success: true, soft_deleted: true });
+});
+
+// ---------- CSV import (P3-OB2) ----------------------------------------
+
+const ASSET_IMPORT_HEADERS = [
+  'name', 'display_id', 'site_name', 'asset_type',
+  'location_description', 'serial_number', 'description',
+];
+
+const ASSET_IMPORT_TEMPLATE_BODY =
+  ASSET_IMPORT_HEADERS.join(',') + '\n' +
+  'Press 4,PRESS-04,Cleveland Plant,machine,Bay 3 — Production floor,P4-2018-44211,1500-ton stamping press\n' +
+  'Forklift FL-3,FL-3,Cleveland Plant,vehicle,Loading dock,CAT-FL3-77621,\n';
+
+// asset_type matches an existing org category by name → category_id resolved.
+// No match → category_id stays NULL (free-text type, like the POST route).
+// Custom fields per category are skipped in v1 — the importer sets
+// custom_fields='{}' regardless. Categories with required custom fields
+// would normally reject blank values via validateCustomFields(); we
+// document this as a v1 limitation in the adapter and route comment.
+function buildAssetImportDefinition() {
+  return {
+    entityName: 'asset',
+    headers: ASSET_IMPORT_HEADERS,
+
+    validateRow(raw, ctx) {
+      const errors = [];
+      const name = raw.name.trim();
+      const display_id = raw.display_id.trim();
+      const site_name = raw.site_name.trim();
+      const asset_type = raw.asset_type.trim();
+      const location_description = raw.location_description.trim();
+      const serial_number = raw.serial_number.trim();
+      const description = raw.description.trim();
+
+      if (!name) errors.push({ column: 'name', reason: 'Name is required' });
+      else {
+        const e = checkLen(name, NAME_MAX, 'Name');
+        if (e) errors.push({ column: 'name', reason: e });
+      }
+
+      if (!display_id) errors.push({ column: 'display_id', reason: 'display_id is required' });
+      else {
+        const e = checkLen(display_id, NAME_MAX, 'display_id');
+        if (e) errors.push({ column: 'display_id', reason: e });
+        else if (ctx.seen.has(display_id.toLowerCase())) {
+          errors.push({ column: 'display_id', reason: `Duplicate display_id in this file (also on row ${ctx.seen.get(display_id.toLowerCase())})` });
+        } else if (ctx.existingDisplayIds.has(display_id.toLowerCase())) {
+          errors.push({ column: 'display_id', reason: 'Another asset already uses this display_id' });
+        }
+      }
+
+      // Track even if other validation failed (mirrors users + sites pattern).
+      if (display_id && checkLen(display_id, NAME_MAX, 'display_id') === null && !ctx.seen.has(display_id.toLowerCase())) {
+        ctx.seen.set(display_id.toLowerCase(), raw.__rowNumber);
+      }
+
+      if (!site_name) errors.push({ column: 'site_name', reason: 'site_name is required' });
+      let site_id = null;
+      if (site_name) {
+        site_id = ctx.sitesByName.get(site_name.toLowerCase()) ?? null;
+        if (site_id === null) {
+          errors.push({ column: 'site_name', reason: `Site "${site_name}" not found in your organization` });
+        }
+      }
+
+      if (!asset_type) errors.push({ column: 'asset_type', reason: 'asset_type is required' });
+      else {
+        const e = checkLen(asset_type, NAME_MAX, 'asset_type');
+        if (e) errors.push({ column: 'asset_type', reason: e });
+      }
+
+      const locErr = checkLen(location_description, ADDRESS_MAX, 'location_description');
+      if (locErr) errors.push({ column: 'location_description', reason: locErr });
+      const serErr = checkLen(serial_number, NAME_MAX, 'serial_number');
+      if (serErr) errors.push({ column: 'serial_number', reason: serErr });
+      const descErr = checkLen(description, ADDRESS_MAX * 5, 'description');  // 1500 chars
+      if (descErr) errors.push({ column: 'description', reason: descErr });
+
+      // Resolve asset_type → category_id if it happens to match an active
+      // org category. We tolerate categories that have required custom
+      // fields by importing without them — a v1 limitation. Document on
+      // the FE helperText.
+      let asset_category_id = null;
+      if (asset_type) {
+        asset_category_id = ctx.categoriesByName.get(asset_type.toLowerCase()) ?? null;
+      }
+
+      if (errors.length === 0) {
+        return {
+          parsed: {
+            name, display_id, site_id, asset_type, asset_category_id,
+            location_description: location_description || null,
+            serial_number: serial_number || null,
+            description: description || null,
+          },
+        };
+      }
+      return { errors };
+    },
+
+    insertRow(parsed, ctx) {
+      const number = nextAssetNumber();
+      const result = db.prepare(`
+        INSERT INTO assets (asset_number, display_id, org_id, site_id, name, asset_type, asset_category_id, location_description, serial_number, description, custom_fields, active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 1)
+      `).run(
+        number, parsed.display_id, ctx.orgId, parsed.site_id, parsed.name,
+        parsed.asset_type, parsed.asset_category_id,
+        parsed.location_description, parsed.serial_number, parsed.description,
+      );
+
+      writeActivity({
+        org_id: ctx.orgId,
+        entity_type: 'asset',
+        entity_id: result.lastInsertRowid,
+        action: 'asset_created',
+        description: `imported asset ${parsed.name} (${parsed.display_id})`,
+        user_id: ctx.actorId,
+        metadata: {
+          source: 'csv_import',
+          asset_number: number,
+          display_id: parsed.display_id,
+          site_id: parsed.site_id,
+          asset_type: parsed.asset_type,
+          asset_category_id: parsed.asset_category_id,
+        },
+      });
+
+      return result.lastInsertRowid;
+    },
+
+    onAllInserted(ids, ctx) {
+      writeActivity({
+        org_id: ctx.orgId,
+        entity_type: 'asset',
+        entity_id: null,
+        action: 'assets_imported',
+        description: `imported ${ids.length} asset${ids.length === 1 ? '' : 's'} via CSV`,
+        user_id: ctx.actorId,
+        metadata: { count: ids.length, ids },
+      });
+    },
+  };
+}
+
+router.get('/import/template.csv', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot import assets.' });
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', 'attachment; filename="assets_template.csv"');
+  res.send(ASSET_IMPORT_TEMPLATE_BODY);
+});
+
+router.post('/import', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot import assets.' });
+  const { csv_text, mode } = req.body;
+  if (!csv_text) return res.status(400).json({ error: 'csv_text is required' });
+  if (mode !== 'dry_run' && mode !== 'commit') {
+    return res.status(400).json({ error: "mode must be 'dry_run' or 'commit'" });
+  }
+
+  const sitesByName = new Map(
+    db.prepare('SELECT id, name FROM sites WHERE org_id = ?')
+      .all(req.user.org_id)
+      .map(s => [s.name.toLowerCase(), s.id])
+  );
+  const categoriesByName = new Map(
+    db.prepare('SELECT id, name FROM asset_categories WHERE org_id = ? AND active = 1')
+      .all(req.user.org_id)
+      .map(c => [c.name.toLowerCase(), c.id])
+  );
+  const existingDisplayIds = new Set(
+    db.prepare('SELECT display_id FROM assets WHERE org_id = ? AND display_id IS NOT NULL')
+      .all(req.user.org_id)
+      .map(r => r.display_id.toLowerCase())
+  );
+
+  try {
+    const result = runImport(buildAssetImportDefinition(), csv_text, mode, {
+      orgId: req.user.org_id,
+      actorId: req.user.id,
+      sitesByName, categoriesByName, existingDisplayIds,
+    });
+    res.json(result);
+  } catch (e) {
+    if (e instanceof CsvImportError) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
 });
 
 export default router;
