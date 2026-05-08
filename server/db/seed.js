@@ -138,6 +138,7 @@ db.transaction(() => {
   const ins = db.prepare(
     'INSERT INTO users (org_id, site_id, email, password_hash, name, initials, role, department, job_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
+  const priyaId = ins.run(orgId, clevelandId, 'priya@sdsmanager.com', pw, 'Priya Patel', 'PP', 'admin', 'Leadership', 'Chief Operating Officer').lastInsertRowid;
   const elenaId = ins.run(orgId, clevelandId, 'elena@sdsmanager.com', pw, 'Elena Hartmann', 'EH', 'ehs_manager', 'EHS', 'EHS Lead').lastInsertRowid;
   const marcusId = ins.run(orgId, clevelandId, 'marcus@sdsmanager.com', pw, 'Marcus Rivera', 'MR', 'supervisor', 'Operations', 'Supervisor').lastInsertRowid;
   const jamesId = ins.run(orgId, sheffieldId, 'james@sdsmanager.com', pw, 'James Chen', 'JC', 'ehs_manager', 'EHS', 'EHS Manager').lastInsertRowid;
@@ -535,6 +536,7 @@ db.transaction(() => {
 
 console.log('Seed complete.');
 console.log('Demo users (password: password123):');
+console.log('  priya@sdsmanager.com   (Admin — COO)');
 console.log('  elena@sdsmanager.com   (EHS Lead)');
 console.log('  marcus@sdsmanager.com  (Supervisor)');
 console.log('  james@sdsmanager.com   (EHS Manager — Sheffield)');
