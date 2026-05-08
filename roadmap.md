@@ -8,15 +8,17 @@ the full detail. Most recent session entries at the bottom.
 
 ## Current state
 
-- **Branch:** `backend` at `2e8daa7` — `origin/backend` and `origin/main` were
-  in sync at `36a564f` after PR #8; today's commit `2e8daa7` is on `backend`
-  only, not yet PR'd to main.
+- **Branch:** `backend` at `6051395` — `origin/backend == origin/main == 6051395`.
+  Two PRs merged this session (#9 UI/UX overhaul merge, #10 P3-OB2 sites + assets).
+  Main also added a maintainer commit `6051395` (responsive mobile/tablet support)
+  that fast-forwarded into backend post-PR #10 merge.
 - **Phase 2:** code complete (only F6.2 manual demo walkthrough open).
 - **Wave 7:** E7.1 (custom asset fields per category) done.
 - **UX backlog A–H:** done. UX-C body-parts editor deferred (needs BodyMap3D
   outside the wizard).
-- **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OP2, OP3.
-- **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, OB2, OB3, RG1.
+- **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, **OB2** (users + sites + assets),
+  OP2, OP3.
+- **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, OB3, RG1.
 - **Migrations applied:** 001–019 + letter fixups `014a`, `017a`. Final lexical
   order: 001 → 014 → 014a → 015 → 016_osha_compliance_fields → 017_closure_workflow
   → 017a_rename_legacy_org_migrations → 018_org_onboarding_fields → 019_compliance_frameworks.
@@ -33,7 +35,7 @@ the full detail. Most recent session entries at the bottom.
 
 ### Files to re-read cold before extending
 
-These were auto-merged from main on 2026-05-08 and never read end-to-end:
+These were auto-merged from main and never read end-to-end this session:
 - `server/services/closure_gates.js` — ISO 45001 / OSHA / ANSI Z10 closure gates
 - `server/services/notifications.js` — backend-side notification creation
 - `server/routes/incidents.js` — backend's witnesses + recordability + stop-work merged
@@ -43,7 +45,14 @@ These were auto-merged from main on 2026-05-08 and never read end-to-end:
 - `client/src/pages/capas/CAPADetail.jsx` — main's hero-card redesign
 - `client/src/pages/incidents/modals/{ClosureChecklistModal,ClosureApprovalModal,ReopenModal}.jsx`
 - `client/src/pages/capas/UpdateProgressModal.jsx`
-- `client/src/components/layout/TopBar.jsx`
+- `client/src/components/layout/TopBar.jsx` — also gets hamburger button + label `<span>` wraps from `6051395`
+- **Responsive commit `6051395`** (2026-05-08) — `Sidebar.jsx` becomes a slide-in drawer at ≤768px;
+  `AppContext.jsx` adds `sidebarOpen` / `setSidebarOpen`; `Icon.jsx` adds `menu`;
+  8 page-CSS files get `@media` blocks at 768px + 480px. BE untouched. Diff was read
+  but the live mobile rendering wasn't browser-tested.
+- New onboarding files from main (`SignupOrg.jsx` redesign, `OnboardingFirstSite.jsx`,
+  `components/shared/OnboardingIllustrations.jsx` — 6 SVGs) — read to verify P3-O1
+  framework logic survived the redesign, but never opened in a browser.
 
 ---
 
@@ -51,7 +60,7 @@ These were auto-merged from main on 2026-05-08 and never read end-to-end:
 
 ### Onboarding + data import
 - [ ] **P3-OB1** User onboarding flow — first-login walkthrough, sample-data toggle, role-tailored "what to do first".
-- [ ] **P3-OB2** CSV import — users / sites / assets / work_hours. Dry-run + error report.
+- [x] **P3-OB2** CSV import — users / sites / assets done; **work_hours** outstanding (table exists, no CRUD UI yet — CSV would be the first write path).
 - [ ] **P3-OB3** Document versioning — supersede a doc with a new file, audit trail of prior revisions.
 
 ### AI assistance
@@ -97,6 +106,10 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 | P3-OP2 | Inspection module (mig `008`+`009`) | `918279a` (main) |
 | P3-OP3 | Templates with versioning | `918279a` (main) |
 | OSHA/RIDDOR gating | `frameworkVisibility(user)` helper; gated 6 surfaces (IncidentDetail, InvestigationDetail, InvestigationsPage, Dashboard, ReportWizard) | `2e8daa7` |
+| P3-OB2 (users) | Generic `csv_import.js` engine + users adapter; admin-only; dry-run + atomic commit; Members.jsx button | `e30954d` + `d8d6803` (modal fixes) |
+| P3-OB2 (sites) | Sites adapter (parent_name resolves to parent_id, two-pass for in-file parent refs, cycle/depth re-checked at insert); generic `<ImportModal>` extracted; users adapter consistency fix | `57db454` |
+| P3-OB2 (assets) | Assets adapter (display_id case-insensitive uniqueness; asset_type → category resolution; v1 skips custom_fields); button on AssetsList | `7388574` |
+| Priya admin demo | Seeded admin user in SDS Manager Inc. + first row in Login.jsx DEMO grid | `dd94fe4` |
 
 ## Done — UX backlog
 
@@ -152,21 +165,38 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 
 ## Recent session log
 
-### 2026-05-08 (later) — OSHA/RIDDOR display gated by compliance_frameworks
+### 2026-05-08 (afternoon) — OSHA/RIDDOR gating + Priya admin + P3-OB2 + main merges
 
-Commit `2e8daa7`. New `client/src/utils/frameworks.js` mirrors ReportsPage's
-defensive-fallback pattern: missing `compliance_frameworks` field → show
-everything (legacy users / stale JWTs); explicit empty array → hide everything.
-Six surfaces gated: IncidentDetail (header badges + Triage card OSHA row +
-nested OSHA detail block + RecordabilityVerifyCard mount), InvestigationDetail
-(banner + summary OSHA fact-row + summary RIDDOR fact-row), InvestigationsPage
-(RIDDOR pill on kanban + list + `—` fallback), Dashboard (KPI counts zero out
-under the gate; existing guard then hides the reg-alerts block), ReportWizard
-Step 3 (review-card OSHA/RIDDOR rows + RIDDOR "phone HSE" next-step item).
+Long session, ~2.5hr. Seven commits + two PRs round-tripped.
 
-FE-only, no schema. P3-RG1 will extend the helper with `showSafework` when AU
-surfaces exist. Build clean (184 modules, 777 KB bundle). Not click-tested by
-me — user verifying. **Servers left running.**
+| Area | What changed | Commit |
+|---|---|---|
+| OSHA/RIDDOR gating | New `client/src/utils/frameworks.js` mirrors ReportsPage's defensive-fallback pattern. Gates 6 surfaces by org's `compliance_frameworks`. | `2e8daa7` |
+| Roadmap compress | 330 → 195 lines. Done items become one-line entries with commit SHAs. | `3c18b63` |
+| Priya admin demo | Seeded admin in SDS Manager Inc. + first row in Login.jsx DEMO grid. Direct-inserted into running dev DB (id=13) so it works without SEED_FORCE rebuild. | `dd94fe4` |
+| P3-OB2 users | New `server/services/csv_import.js` engine; users adapter inline in `routes/users.js`. Strict template, admin-only, dry-run + atomic commit. New dep `csv-parse@^6.2.1`. ImportUsersModal on `/admin/members`. | `e30954d` |
+| ImportUsersModal fixes | File re-pick (clear input value after read), close-during-commit guarded by `safeClose`. | `d8d6803` |
+| Merge from main (PR #10's pre-cursor) | UI/UX overhaul (`fd3d165`): signup wizard redesign + 567-line OnboardingIllustrations + 509-line members.css + members page redesign + eye/eyeOff toggle. Design precedence to main on conflicts; backend functionality preserved (Priya kept as DEMO admin since main's `admin@sdsmanager.com` reference points at non-existent user). | `1849051` |
+| PR #9 (backend → main) | Round-tripped. | merge `669be3c` |
+| P3-OB2 sites + ImportModal generic | Sites adapter mounted on the engine. Modal extracted to `client/src/components/shared/ImportModal.jsx` parameterized by `{title, subtitle, helperText, templateUrl, templateFilename, importFn, entityNoun}`. Members + Sites both use it now. Users adapter consistency fix bundled (mixed-error duplicate detection). | `57db454` |
+| P3-OB2 assets | Assets adapter — display_id case-insensitive uniqueness, asset_type → category resolution, custom fields skipped in v1. AssetsList "Import CSV" button between "Asset types" and "+ New asset". | `7388574` |
+| PR #10 (backend → main) | Round-tripped. Maintainer also pushed `6051395` "responsive: full mobile/tablet support" between PR #10 merge and my fast-forward — fast-forwarded into backend post-merge. | merge `7a8f72e` + ff `6051395` |
+
+**BE testing depth (high):** every adapter exercised end-to-end with curl
+across 26+ test cases including CRLF / BOM / Unicode / quoted commas /
+case-insensitive collisions / cross-org isolation / atomic rollback /
+20-row batch / late conflict simulation / role gating. All green.
+
+**FE testing depth (medium):** maintainer click-test passed for /admin/members,
+/admin/sites, /assets after PR #10 merge. Wider responsive verification
+(mobile/tablet at 768/480 breakpoints from `6051395`) not done by me.
+
+**Hallucination-risk notes for next session:**
+- `6051395` responsive commit: read the diff, didn't browser-test.
+- The `<ImportModal>` is the modal pattern for any future bulk operations —
+  reuse before re-implementing.
+- `csv_import.js` engine is the canonical place to extend for new entities.
+  Adapter pattern: `{entityName, headers, validateRow, insertRow, onAllInserted}`.
 
 ### 2026-05-08 — Reports framework filter + merge-from-main + PR #8
 
