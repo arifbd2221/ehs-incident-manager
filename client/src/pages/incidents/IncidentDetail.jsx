@@ -7,6 +7,7 @@ import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
 import { useAuth } from '../../context/AuthContext';
 import { timeAgo, formatDate } from '../../utils/time';
+import { frameworkVisibility } from '../../utils/frameworks';
 import AssignModal from './modals/AssignModal';
 import EscalateModal from './modals/EscalateModal';
 import CloseModal from './modals/CloseModal';
@@ -158,6 +159,7 @@ export default function IncidentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { showOsha, showRiddor } = frameworkVisibility(user);
   const canVerify = ELEVATED_ROLES.has(user?.role);
   const canEdit = ELEVATED_ROLES.has(user?.role);
   const [incident, setIncident] = useState(null);
@@ -437,8 +439,8 @@ export default function IncidentDetail() {
               <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
                 <span className="st-dot"/>{r.status}
               </span>
-              {r.osha_recordable === 1 && <span className="inc-card-status st-triage"><span className="st-dot"/>OSHA</span>}
-              {r.riddor_reportable === 1 && <span className="inc-card-status" style={{ background: '#fef2f2', color: '#dc2626' }}><span className="st-dot" style={{ background: '#dc2626' }}/>RIDDOR</span>}
+              {showOsha && r.osha_recordable === 1 && <span className="inc-card-status st-triage"><span className="st-dot"/>OSHA</span>}
+              {showRiddor && r.riddor_reportable === 1 && <span className="inc-card-status" style={{ background: '#fef2f2', color: '#dc2626' }}><span className="st-dot" style={{ background: '#dc2626' }}/>RIDDOR</span>}
             </div>
           </div>
 
@@ -760,13 +762,15 @@ export default function IncidentDetail() {
                   <span className="idet-triage-label">Track</span>
                   <TrackBadge t={r.track}/>
                 </div>
-                <div className="idet-triage-row">
-                  <span className="idet-triage-label">OSHA recordable</span>
-                  <span className={`inc-card-status ${r.osha_recordable ? 'st-capa' : 'st-closed'}`}>
-                    <span className="st-dot"/>{r.osha_recordable ? 'Yes' : 'No'}
-                  </span>
-                </div>
-                {r.osha_recordable === 1 && (
+                {showOsha && (
+                  <div className="idet-triage-row">
+                    <span className="idet-triage-label">OSHA recordable</span>
+                    <span className={`inc-card-status ${r.osha_recordable ? 'st-capa' : 'st-closed'}`}>
+                      <span className="st-dot"/>{r.osha_recordable ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                )}
+                {showOsha && r.osha_recordable === 1 && (
                   <>
                     {r.osha_privacy_case === 1 && (
                       <div className="idet-triage-row">
@@ -864,7 +868,7 @@ export default function IncidentDetail() {
             </div>
           </div>
 
-          {canVerify && (r.type === 'injury' || r.type === 'illness') && (
+          {canVerify && showOsha && (r.type === 'injury' || r.type === 'illness') && (
             <RecordabilityVerifyCard incident={r} onVerified={load}/>
           )}
         </div>

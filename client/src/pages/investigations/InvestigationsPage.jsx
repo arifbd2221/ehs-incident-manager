@@ -3,10 +3,12 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getInvestigations, updateInvestigation, closeInvestigation } from '../../api/investigations';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import { SevBadge } from '../../components/shared/Badges';
 import { timeAgo } from '../../utils/time';
+import { frameworkVisibility } from '../../utils/frameworks';
 import '../../styles/investigations.css';
 
 const KANBAN_COLS = [
@@ -28,6 +30,8 @@ const ALLOWED_MOVES = {
 export default function InvestigationsPage() {
   const navigate = useNavigate();
   const { refreshKey } = useApp();
+  const { user } = useAuth();
+  const { showRiddor } = frameworkVisibility(user);
   const [investigations, setInvestigations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('kanban');
@@ -269,9 +273,9 @@ export default function InvestigationsPage() {
                           )}
                         </div>
                       </div>
-                      {(inv.riddor_reportable === 1 || inv.capa_count > 0) && (
+                      {((showRiddor && inv.riddor_reportable === 1) || inv.capa_count > 0) && (
                         <div className="inv-kcard-flags">
-                          {inv.riddor_reportable === 1 && <span className="inv-kflag kf-riddor"><span className="kf-dot"/>RIDDOR</span>}
+                          {showRiddor && inv.riddor_reportable === 1 && <span className="inv-kflag kf-riddor"><span className="kf-dot"/>RIDDOR</span>}
                           {inv.capa_count > 0 && <span className="inv-kflag kf-capa"><span className="kf-dot"/>{inv.capa_count} CAPAs</span>}
                         </div>
                       )}
@@ -329,9 +333,9 @@ export default function InvestigationsPage() {
               </span>
               <span>
                 <div className="inv-list-flags">
-                  {inv.riddor_reportable === 1 && <span className="inv-kflag kf-riddor"><span className="kf-dot"/>RIDDOR</span>}
+                  {showRiddor && inv.riddor_reportable === 1 && <span className="inv-kflag kf-riddor"><span className="kf-dot"/>RIDDOR</span>}
                   {inv.capa_count > 0 && <span className="inv-kflag kf-capa"><span className="kf-dot"/>{inv.capa_count}</span>}
-                  {inv.riddor_reportable !== 1 && !inv.capa_count && <span style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>—</span>}
+                  {!(showRiddor && inv.riddor_reportable === 1) && !inv.capa_count && <span style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>—</span>}
                 </div>
               </span>
               <span className="inv-list-time">{timeAgo(inv.created_at)}</span>

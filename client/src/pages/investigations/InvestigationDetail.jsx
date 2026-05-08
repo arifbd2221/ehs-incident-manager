@@ -8,6 +8,7 @@ import { uploadAttachments, deleteAttachment } from '../../api/incidents';
 import api from '../../api/client';
 import { createLink, deleteLink } from '../../api/links';
 import { useAuth } from '../../context/AuthContext';
+import { frameworkVisibility } from '../../utils/frameworks';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
@@ -48,6 +49,7 @@ export default function InvestigationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { showOsha, showRiddor } = frameworkVisibility(user);
   const canEdit = ELEVATED.has(user?.role);
   const [inv, setInv] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -301,7 +303,7 @@ export default function InvestigationDetail() {
       </div>
 
       {/* OSHA banner */}
-      {inv.osha_recordable === 1 && (
+      {showOsha && inv.osha_recordable === 1 && (
         <div className="invd-osha-banner">
           <div className="invd-osha-icon"><Icon name="reports" size={16}/></div>
           <div className="invd-osha-text"><b>OSHA recordable</b> — this incident will appear on the OSHA 300 log.</div>
@@ -557,13 +559,15 @@ export default function InvestigationDetail() {
                   <span className="invd-summary-label">Track</span>
                   <TrackBadge t={inv.track || inv.incident_track}/>
                 </div>
-                <div className="invd-summary-row">
-                  <span className="invd-summary-label">OSHA recordable</span>
-                  <span className={`inv-kflag ${inv.osha_recordable ? 'kf-capa' : ''}`} style={!inv.osha_recordable ? { background: '#f3f4f6', color: '#6b7280' } : {}}>
-                    <span className="kf-dot"/>{inv.osha_recordable ? 'Yes' : 'No'}
-                  </span>
-                </div>
-                {inv.riddor_reportable === 1 && (
+                {showOsha && (
+                  <div className="invd-summary-row">
+                    <span className="invd-summary-label">OSHA recordable</span>
+                    <span className={`inv-kflag ${inv.osha_recordable ? 'kf-capa' : ''}`} style={!inv.osha_recordable ? { background: '#f3f4f6', color: '#6b7280' } : {}}>
+                      <span className="kf-dot"/>{inv.osha_recordable ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                )}
+                {showRiddor && inv.riddor_reportable === 1 && (
                   <div className="invd-summary-row">
                     <span className="invd-summary-label">RIDDOR</span>
                     <span className="inv-kflag kf-riddor"><span className="kf-dot"/>Reportable</span>
