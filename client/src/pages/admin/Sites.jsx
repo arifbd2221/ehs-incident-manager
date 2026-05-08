@@ -2,9 +2,10 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { listSites, createSite, updateSite, deleteSite } from '../../api/sites';
+import { listSites, createSite, updateSite, deleteSite, importSites, siteImportTemplateUrl } from '../../api/sites';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
+import ImportModal from '../../components/shared/ImportModal';
 import '../../styles/sites.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -63,6 +64,8 @@ export default function Sites() {
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [activeSection, setActiveSection] = useState('general');
   const [success, setSuccess] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [toast, setToast] = useState('');
   const nameRef = useRef(null);
 
   const refresh = () => {
@@ -195,11 +198,18 @@ export default function Sites() {
         </div>
         <div style={{ flex: 1 }} />
         {canEdit && (
-          <button className="btn btn-primary" onClick={openNew}>
-            <Icon name="plus" size={16} /> New site
-          </button>
+          <div style={{ display: 'inline-flex', gap: 'var(--sds-space-sm)' }}>
+            <button className="btn btn-secondary" onClick={() => setImportOpen(true)}>
+              <Icon name="upload" size={16} /> Import CSV
+            </button>
+            <button className="btn btn-primary" onClick={openNew}>
+              <Icon name="plus" size={16} /> New site
+            </button>
+          </div>
         )}
       </div>
+
+      {toast && <div className="toast"><Icon name="check" size={16} />{toast}</div>}
 
       {loading && <div className="sites-loading">Loading...</div>}
 
@@ -481,6 +491,26 @@ export default function Sites() {
           </form>
         </div>,
         document.body
+      )}
+
+      {importOpen && createPortal(
+        <ImportModal
+          title="Import sites from CSV"
+          subtitle="Bulk-create sites for a multi-location org. Strict template — headers must match exactly."
+          helperText="Columns: name, country, address, naics_code, establishment_id, annual_avg_employees, total_hours_worked, timezone, parent_name. Required: name. Use parent_name to nest under another site (already-existing or earlier in the same file). Hierarchy depth limited to 5 levels."
+          templateUrl={siteImportTemplateUrl}
+          templateFilename="sites_template.csv"
+          importFn={importSites}
+          entityNoun={{ singular: 'site', plural: 'sites' }}
+          onClose={() => setImportOpen(false)}
+          onImported={(n) => {
+            setImportOpen(false);
+            setToast(`Imported ${n} ${n === 1 ? 'site' : 'sites'}`);
+            setTimeout(() => setToast(''), 2500);
+            refresh();
+          }}
+        />,
+        document.body,
       )}
     </div>
   );

@@ -22,6 +22,8 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
 import { writeActivity, diffFields } from '../services/activity_log.js';
+import { runImport, CsvImportError } from '../services/csv_import.js';
+import { checkLen, NAME_MAX, NAICS_MAX, ADDRESS_MAX } from '../services/validators.js';
 
 const router = Router();
 
@@ -355,6 +357,210 @@ router.delete('/:id', (req, res) => {
   });
 
   res.json({ success: true });
+});
+
+// ---------- CSV import (P3-OB2) ----------------------------------------
+
+const SITE_IMPORT_HEADERS = [
+  'name', 'country', 'address', 'naics_code', 'establishment_id',
+  'annual_avg_employees', 'total_hours_worked', 'timezone', 'parent_name',
+];
+
+const SITE_IMPORT_TEMPLATE_BODY =
+  SITE_IMPORT_HEADERS.join(',') + '\n' +
+  'Cleveland Plant,US,123 Main St,325199,12-3456,248,508420,America/New_York,\n' +
+  'Bay 3,US,,,,50,100000,America/New_York,Cleveland Plant\n';
+
+// Two-pass insert lets parent_name reference a site created earlier in the
+// same import (e.g. a parent on row 2, child referencing the parent on row 3).
+// We resolve in two stages: first pass creates rows whose parent is empty or
+// already exists in the DB; second pass creates rows whose parent name was
+// inserted in the first pass. Cycle/depth validation runs per insert via the
+// existing validateParent() helper.
+function buildSiteImportDefinition() {
+  return {
+    entityName: 'site',
+    headers: SITE_IMPORT_HEADERS,
+
+    validateRow(raw, ctx) {
+      const errors = [];
+      const name = raw.name.trim();
+      const country = raw.country.trim() || 'US';
+      const address = raw.address.trim();
+      const naics_code = raw.naics_code.trim();
+      const establishment_id = raw.establishment_id.trim();
+      const annual_avg_employees_raw = raw.annual_avg_employees.trim();
+      const total_hours_worked_raw = raw.total_hours_worked.trim();
+      const timezone = raw.timezone.trim() || 'America/New_York';
+      const parent_name = raw.parent_name.trim();
+
+      if (!name) errors.push({ column: 'name', reason: 'Name is required' });
+      else {
+        const e = checkLen(name, NAME_MAX, 'Name');
+        if (e) errors.push({ column: 'name', reason: e });
+        else if (ctx.seen.has(name.toLowerCase())) {
+          errors.push({ column: 'name', reason: `Duplicate site name in this file (also on row ${ctx.seen.get(name.toLowerCase())})` });
+        } else if (ctx.existingNames.has(name.toLowerCase())) {
+          errors.push({ column: 'name', reason: 'A site with this name already exists in your organization' });
+        }
+      }
+
+      // Track the name in `seen` even if this row has other validation
+      // errors, so a later row with the same name still gets flagged on
+      // the first dry-run rather than waiting for the earlier row to be
+      // cleaned up.
+      if (name && checkLen(name, NAME_MAX, 'Name') === null && !ctx.seen.has(name.toLowerCase())) {
+        ctx.seen.set(name.toLowerCase(), raw.__rowNumber);
+      }
+
+      const addrErr = checkLen(address, ADDRESS_MAX, 'Address');
+      if (addrErr) errors.push({ column: 'address', reason: addrErr });
+      const naicsErr = checkLen(naics_code, NAICS_MAX, 'NAICS code');
+      if (naicsErr) errors.push({ column: 'naics_code', reason: naicsErr });
+      const estErr = checkLen(establishment_id, NAME_MAX, 'Establishment ID');
+      if (estErr) errors.push({ column: 'establishment_id', reason: estErr });
+
+      let annual_avg_employees = 0;
+      if (annual_avg_employees_raw !== '') {
+        const n = Number(annual_avg_employees_raw);
+        if (!Number.isInteger(n) || n < 0) {
+          errors.push({ column: 'annual_avg_employees', reason: 'Must be a non-negative integer' });
+        } else annual_avg_employees = n;
+      }
+
+      let total_hours_worked = 0;
+      if (total_hours_worked_raw !== '') {
+        const n = Number(total_hours_worked_raw);
+        if (!Number.isInteger(n) || n < 0) {
+          errors.push({ column: 'total_hours_worked', reason: 'Must be a non-negative integer' });
+        } else total_hours_worked = n;
+      }
+
+      // parent_name must resolve to either an existing site OR a site
+      // earlier in this same file. We don't validate cycles/depth here —
+      // that runs at insert time against the live state.
+      if (parent_name) {
+        const inDb = ctx.existingNames.has(parent_name.toLowerCase());
+        const inFile = ctx.seen.has(parent_name.toLowerCase());
+        if (!inDb && !inFile) {
+          errors.push({ column: 'parent_name', reason: `Parent site "${parent_name}" not found (must already exist or be defined earlier in this file)` });
+        }
+        if (parent_name.toLowerCase() === name.toLowerCase()) {
+          errors.push({ column: 'parent_name', reason: 'A site cannot be its own parent' });
+        }
+      }
+
+      if (errors.length === 0) {
+        return {
+          parsed: {
+            name, country, address: address || null, naics_code: naics_code || null,
+            establishment_id: establishment_id || null,
+            annual_avg_employees, total_hours_worked, timezone,
+            parent_name: parent_name || null,
+          },
+        };
+      }
+      return { errors };
+    },
+
+    insertRow(parsed, ctx) {
+      let parent_id = null;
+      if (parsed.parent_name) {
+        // Look in this import's just-inserted IDs first (case-insensitive),
+        // then fall back to live DB lookup.
+        const fromFile = ctx.insertedByName.get(parsed.parent_name.toLowerCase());
+        if (fromFile) parent_id = fromFile;
+        else {
+          const row = db.prepare('SELECT id FROM sites WHERE LOWER(name) = LOWER(?) AND org_id = ?')
+            .get(parsed.parent_name, ctx.orgId);
+          if (row) parent_id = row.id;
+        }
+      }
+
+      // Late cycle/depth check using the existing validator. Throws to
+      // trigger atomic rollback if a fully-committed batch would exceed
+      // 5 levels (rare but possible if rows depend on each other).
+      const parentErr = parent_id ? validateParent(null, parent_id, ctx.orgId) : null;
+      if (parentErr) {
+        throw new Error(`Row ${parsed.__rowNumber}: ${parentErr}`);
+      }
+
+      const result = db.prepare(`
+        INSERT INTO sites (
+          org_id, name, address, country, naics_code, establishment_id,
+          annual_avg_employees, total_hours_worked, timezone, parent_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        ctx.orgId, parsed.name, parsed.address, parsed.country, parsed.naics_code,
+        parsed.establishment_id, parsed.annual_avg_employees, parsed.total_hours_worked,
+        parsed.timezone, parent_id,
+      );
+
+      ctx.insertedByName.set(parsed.name.toLowerCase(), result.lastInsertRowid);
+
+      writeActivity({
+        org_id: ctx.orgId,
+        entity_type: 'site',
+        entity_id: result.lastInsertRowid,
+        action: 'site_created',
+        description: `imported site ${parsed.name}`,
+        user_id: ctx.actorId,
+        metadata: {
+          source: 'csv_import',
+          country: parsed.country,
+          parent_id,
+          establishment_id: parsed.establishment_id,
+        },
+      });
+
+      return result.lastInsertRowid;
+    },
+
+    onAllInserted(ids, ctx) {
+      writeActivity({
+        org_id: ctx.orgId,
+        entity_type: 'site',
+        entity_id: null,
+        action: 'sites_imported',
+        description: `imported ${ids.length} site${ids.length === 1 ? '' : 's'} via CSV`,
+        user_id: ctx.actorId,
+        metadata: { count: ids.length, ids },
+      });
+    },
+  };
+}
+
+router.get('/import/template.csv', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot import sites.' });
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', 'attachment; filename="sites_template.csv"');
+  res.send(SITE_IMPORT_TEMPLATE_BODY);
+});
+
+router.post('/import', (req, res) => {
+  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot import sites.' });
+  const { csv_text, mode } = req.body;
+  if (!csv_text) return res.status(400).json({ error: 'csv_text is required' });
+  if (mode !== 'dry_run' && mode !== 'commit') {
+    return res.status(400).json({ error: "mode must be 'dry_run' or 'commit'" });
+  }
+
+  const existingNames = new Set(
+    db.prepare('SELECT name FROM sites WHERE org_id = ?').all(req.user.org_id).map(s => s.name.toLowerCase())
+  );
+
+  try {
+    const result = runImport(buildSiteImportDefinition(), csv_text, mode, {
+      orgId: req.user.org_id,
+      actorId: req.user.id,
+      existingNames,
+      insertedByName: new Map(),  // populated as rows commit
+    });
+    res.json(result);
+  } catch (e) {
+    if (e instanceof CsvImportError) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
 });
 
 export default router;
