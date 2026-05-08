@@ -251,15 +251,16 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
         </div>
       )}
 
-      {addOpen && (
-        <AddLinkModal
-          entityType={entityType}
-          entityId={entityId}
-          onClose={() => setAddOpen(false)}
-          onCreated={() => { setAddOpen(false); refresh(); }}
-        />
-      )}
     </>
+  );
+
+  const addLinkPortal = addOpen && (
+    <AddLinkModal
+      entityType={entityType}
+      entityId={entityId}
+      onClose={() => setAddOpen(false)}
+      onCreated={() => { setAddOpen(false); refresh(); }}
+    />
   );
 
   if (compact) {
@@ -294,7 +295,7 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
               </div>
               <div className="modal-f">
                 {canEdit && (
-                  <button className="btn btn-secondary" onClick={() => setAddOpen(true)}>
+                  <button className="btn btn-secondary" onClick={() => { setModalOpen(false); setAddOpen(true); }}>
                     <Icon name="plus" size={12}/> Link record
                   </button>
                 )}
@@ -304,6 +305,7 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
           </div>,
           document.body
         )}
+        {addLinkPortal}
       </>
     );
   }
@@ -320,6 +322,7 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
         )}
       </div>
       {fullContent}
+      {addLinkPortal}
     </div>
   );
 }
