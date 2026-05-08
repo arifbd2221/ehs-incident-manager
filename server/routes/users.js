@@ -2,7 +2,8 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import db from '../db/connection.js';
 import { writeActivity, diffFields } from '../services/activity_log.js';
-import { validEmail, checkLen, checkPassword, NAME_MAX } from '../services/validators.js';
+import { validEmail, checkLen, checkPassword, NAME_MAX, EMAIL_MAX } from '../services/validators.js';
+import { runImport, CsvImportError } from '../services/csv_import.js';
 
 const router = Router();
 
@@ -221,6 +222,169 @@ router.post('/:id/password', (req, res) => {
   });
 
   res.json({ message: 'Password reset' });
+});
+
+// ---------- CSV import (P3-OB2) ----------------------------------------
+
+const USER_IMPORT_HEADERS = ['email', 'name', 'role', 'department', 'job_title', 'site_name', 'password'];
+
+const USER_IMPORT_TEMPLATE_BODY =
+  USER_IMPORT_HEADERS.join(',') + '\n' +
+  'jane.doe@example.com,Jane Doe,worker,Production,Press Operator,,changeme1\n' +
+  'tom.lee@example.com,Tom Lee,supervisor,Production,Shift Lead,,changeme1\n';
+
+// Per-entity definition consumed by services/csv_import.js. The validateRow
+// hook resolves site_name → site_id within the caller's org and surfaces
+// per-column errors. The seen Map carries the in-file uniqueness check so
+// the same email twice in one CSV is caught before the DB UNIQUE fires.
+function buildUserImportDefinition() {
+  return {
+    entityName: 'user',
+    headers: USER_IMPORT_HEADERS,
+
+    validateRow(raw, ctx) {
+      const errors = [];
+      const email = raw.email.trim().toLowerCase();
+      const name = raw.name.trim();
+      const role = raw.role.trim();
+      const department = raw.department.trim();
+      const job_title = raw.job_title.trim();
+      const site_name = raw.site_name.trim();
+      const password = raw.password;  // do not trim — leading/trailing intentional
+
+      if (!email) errors.push({ column: 'email', reason: 'Email is required' });
+      else if (!validEmail(email) || email.length > EMAIL_MAX) {
+        errors.push({ column: 'email', reason: 'Email format is invalid' });
+      } else if (ctx.seen.has(email)) {
+        errors.push({ column: 'email', reason: `Duplicate email in this file (also on row ${ctx.seen.get(email)})` });
+      } else if (ctx.existingEmails.has(email)) {
+        errors.push({ column: 'email', reason: 'Email is already registered' });
+      }
+
+      if (!name) errors.push({ column: 'name', reason: 'Name is required' });
+      else {
+        const nameErr = checkLen(name, NAME_MAX, 'Name');
+        if (nameErr) errors.push({ column: 'name', reason: nameErr });
+      }
+
+      if (!role) errors.push({ column: 'role', reason: 'Role is required' });
+      else if (!VALID_ROLES.has(role)) {
+        errors.push({ column: 'role', reason: `Role must be one of: ${[...VALID_ROLES].join(', ')}` });
+      }
+
+      const deptErr = checkLen(department, NAME_MAX, 'Department');
+      if (deptErr) errors.push({ column: 'department', reason: deptErr });
+      const titleErr = checkLen(job_title, NAME_MAX, 'Job title');
+      if (titleErr) errors.push({ column: 'job_title', reason: titleErr });
+
+      let site_id = null;
+      if (site_name) {
+        site_id = ctx.sitesByName.get(site_name.toLowerCase()) ?? null;
+        if (site_id === null) {
+          errors.push({ column: 'site_name', reason: `Site "${site_name}" not found in your organization` });
+        }
+      }
+
+      const pwErr = checkPassword(password);
+      if (pwErr) errors.push({ column: 'password', reason: pwErr });
+
+      if (errors.length === 0) {
+        ctx.seen.set(email, raw.__rowNumber);
+        return {
+          parsed: {
+            email, name, role,
+            department: department || null,
+            job_title: job_title || null,
+            site_id,
+            password,
+          },
+        };
+      }
+      return { errors };
+    },
+
+    insertRow(parsed, ctx) {
+      const initials = parsed.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+      const passwordHash = bcrypt.hashSync(parsed.password, 10);
+      const result = db.prepare(`
+        INSERT INTO users (org_id, site_id, email, password_hash, name, initials, role, department, job_title)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(ctx.orgId, parsed.site_id, parsed.email, passwordHash, parsed.name, initials, parsed.role, parsed.department, parsed.job_title);
+
+      writeActivity({
+        org_id: ctx.orgId,
+        entity_type: 'user',
+        entity_id: result.lastInsertRowid,
+        action: 'user_created',
+        description: `imported ${parsed.name} (${parsed.email}) as ${parsed.role}`,
+        user_id: ctx.actorId,
+        metadata: {
+          source: 'csv_import',
+          role: parsed.role,
+          site_id: parsed.site_id,
+          department: parsed.department,
+          job_title: parsed.job_title,
+        },
+      });
+
+      return result.lastInsertRowid;
+    },
+
+    onAllInserted(ids, ctx) {
+      writeActivity({
+        org_id: ctx.orgId,
+        entity_type: 'user',
+        entity_id: null,
+        action: 'users_imported',
+        description: `imported ${ids.length} user${ids.length === 1 ? '' : 's'} via CSV`,
+        user_id: ctx.actorId,
+        metadata: { count: ids.length, ids },
+      });
+    },
+  };
+}
+
+// GET /import/template.csv — strict-template download (admin-only).
+router.get('/import/template.csv', (req, res) => {
+  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admin only' });
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', 'attachment; filename="users_template.csv"');
+  res.send(USER_IMPORT_TEMPLATE_BODY);
+});
+
+// POST /import — body { csv_text, mode: 'dry_run' | 'commit' }.
+router.post('/import', (req, res) => {
+  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admin only' });
+  const { csv_text, mode } = req.body;
+  if (!csv_text) return res.status(400).json({ error: 'csv_text is required' });
+  if (mode !== 'dry_run' && mode !== 'commit') {
+    return res.status(400).json({ error: "mode must be 'dry_run' or 'commit'" });
+  }
+
+  // Pre-load org-scoped lookups so each row check is a Map hit, not a query.
+  const sitesByName = new Map(
+    db.prepare('SELECT id, name FROM sites WHERE org_id = ?')
+      .all(req.user.org_id)
+      .map(s => [s.name.toLowerCase(), s.id])
+  );
+  // Email is globally unique on `users` — pre-load all to flag conflicts at
+  // dry-run time without one query per row.
+  const existingEmails = new Set(
+    db.prepare('SELECT email FROM users').all().map(r => r.email.toLowerCase())
+  );
+
+  try {
+    const result = runImport(buildUserImportDefinition(), csv_text, mode, {
+      orgId: req.user.org_id,
+      actorId: req.user.id,
+      sitesByName,
+      existingEmails,
+    });
+    res.json(result);
+  } catch (e) {
+    if (e instanceof CsvImportError) return res.status(e.status).json({ error: e.message });
+    throw e;
+  }
 });
 
 export default router;
