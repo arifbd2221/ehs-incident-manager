@@ -5,7 +5,12 @@ import { calculateSeverityAndTrack, shouldAutoClose, inferSeverityFrom } from '.
 import { determineOshaRecordability, determineRiddorReportability, calculateDeadline } from '../services/regulatory.js';
 import { verifyOshaRecordability } from '../services/recordability.js';
 import { parseBodyParts } from '../services/body_parts.js';
+import multer from 'multer';
 import { extractFromTranscript } from '../services/voice_extract.js';
+import { extractFromTranscriptGemini } from '../services/gemini_extract.js';
+import { transcribeAudio } from '../services/gemini_transcribe.js';
+
+const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 import { injuryTypeForOsha300, descriptionForOsha300 } from '../services/osha_300_helpers.js';
 import { createCapaRow } from './capas.js';
 import { notifyUser, notifyElevatedAtSite, notifyRole } from '../services/notifications.js';
@@ -496,42 +501,81 @@ router.post('/:id/note', (req, res) => {
 router.post('/voice-extract', async (req, res, next) => {
   try {
     const { transcript } = req.body || {};
-    const result = await extractFromTranscript({
-      transcript,
-      orgId: req.user.org_id,
-      userId: req.user.id,
-    });
+    const extractArgs = { transcript, orgId: req.user.org_id, userId: req.user.id };
 
-    // entity_type='system' (pre-incident, no incident_id yet); the
-    // extraction_id is captured in metadata. The activity_log CHECK only
-    // allows incident/investigation/capa/system, so 'system' is the right
-    // bucket for a transcription event that hasn't tied to an incident yet.
+    const useGemini = !!process.env.GEMINI_API_KEY;
+    const result = useGemini
+      ? await extractFromTranscriptGemini(extractArgs)
+      : await extractFromTranscript(extractArgs);
+
     db.prepare(`
       INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
       VALUES (?, 'system', NULL, 'voice_extracted', ?, ?, ?)
     `).run(
       req.user.org_id,
-      `voice transcript extracted (${result.transcript_hash.slice(0, 8)}…)`,
+      `voice transcript extracted via ${useGemini ? 'Gemini' : 'Claude'} (${result.transcript_hash.slice(0, 8)}…)`,
       req.user.id,
       JSON.stringify({
         extraction_id: result.extraction_id,
         transcript_hash: result.transcript_hash,
         extracted_type: result.extracted_fields.type,
         missing_required: result.missing_required,
+        engine: useGemini ? 'gemini' : 'claude',
       }),
     );
 
     res.json(result);
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
-    // Anthropic SDK errors expose .status (auth, rate-limit, etc.) — surface
-    // these as 502 so the wizard can show a "voice intake failed, try again
-    // or fill manually" message instead of a generic 500.
     if (err.status || err.name === 'APIError' || err.message?.includes('Connection error')) {
       return res.status(502).json({
         error: 'Voice extraction service is unavailable right now. You can fill the wizard manually.',
         upstream: err.message,
       });
+    }
+    next(err);
+  }
+});
+
+router.post('/voice-report', audioUpload.single('audio'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No audio file uploaded.' });
+
+    const transcript = await transcribeAudio(req.file.buffer, req.file.mimetype);
+
+    const extractArgs = { transcript, orgId: req.user.org_id, userId: req.user.id };
+    const useGemini = !!process.env.GEMINI_API_KEY;
+    const result = useGemini
+      ? await extractFromTranscriptGemini(extractArgs)
+      : await extractFromTranscript(extractArgs);
+
+    result.transcript = transcript;
+
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+      VALUES (?, 'system', NULL, 'voice_extracted', ?, ?, ?)
+    `).run(
+      req.user.org_id,
+      `voice audio transcribed + extracted via Gemini (${result.transcript_hash.slice(0, 8)}…)`,
+      req.user.id,
+      JSON.stringify({
+        extraction_id: result.extraction_id,
+        transcript_hash: result.transcript_hash,
+        extracted_type: result.extracted_fields.type,
+        missing_required: result.missing_required,
+        engine: 'gemini-audio',
+      }),
+    );
+
+    res.json(result);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err.status === 429 || err.message?.includes('429') || err.message?.includes('quota')) {
+      return res.status(429).json({ error: 'API quota exceeded. Please wait a moment and try again, or enable billing on your Gemini project.' });
+    }
+    if (err.message?.includes('GoogleGenerativeAI') || err.message?.includes('fetch failed')) {
+      console.error('[voice-report] Gemini error:', err.message);
+      return res.status(502).json({ error: 'Voice service unavailable. Try again later.' });
     }
     next(err);
   }

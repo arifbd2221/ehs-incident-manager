@@ -29,6 +29,7 @@ import InspectionsList from './pages/inspections/InspectionsList';
 import InspectionEditor from './pages/inspections/InspectionEditor';
 import InspectionReport from './pages/inspections/InspectionReport';
 import ReportWizard from './pages/wizard/ReportWizard';
+import GlobalVoiceFab from './components/voice/GlobalVoiceFab';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -51,6 +52,7 @@ function ProtectedLayout() {
           onSubmit={() => { setWizardOpen(false); triggerRefresh(); }}
         />
       )}
+      <GlobalVoiceFab />
     </div>
   );
 }

@@ -1,68 +1,17 @@
-// VoiceIntakeModal.jsx — speak the report, AI extracts structured fields.
-//
-// Flow:
-//   1. User opens modal from wizard step 0.
-//   2. Mic toggle uses the browser Web Speech API (no audio leaves the box —
-//      transcription happens in-browser before we POST). Falls back to a
-//      plain textarea if the browser doesn't support SpeechRecognition.
-//   3. "Extract" → POST /api/incidents/voice-extract → loading spinner.
-//   4. Modal closes, parent gets onExtracted({ extraction_id, fields, ... }).
-//   5. Wizard pre-populates and badges those fields as "AI suggested" until
-//      the user edits or confirms each.
-//
-// Phase 2 W5 F5.1.
-
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import Icon from '../shared/Icon';
 import { voiceExtract } from '../../api/incidents';
-
-const SpeechRecognition =
-  typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+import useSpeechRecognition from '../../hooks/useSpeechRecognition';
 
 export default function VoiceIntakeModal({ onCancel, onExtracted }) {
-  const [transcript, setTranscript] = useState('');
-  const [listening, setListening] = useState(false);
+  const { transcript, setTranscript, listening, toggleMic, stopMic, speechSupported } =
+    useSpeechRecognition();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const recognitionRef = useRef(null);
-  const baseTextRef = useRef('');
-
-  const toggleMic = useCallback(() => {
-    if (!SpeechRecognition) return;
-    if (listening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      return;
-    }
-    baseTextRef.current = transcript;
-    const rec = new SpeechRecognition();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = 'en-US';
-    let finalTranscript = '';
-    rec.onresult = (e) => {
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
-        else interim = e.results[i][0].transcript;
-      }
-      const base = baseTextRef.current;
-      const sep = base && !base.endsWith(' ') ? ' ' : '';
-      setTranscript(base + sep + finalTranscript + interim);
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recognitionRef.current = rec;
-    rec.start();
-    setListening(true);
-  }, [listening, transcript]);
-
-  useEffect(() => {
-    return () => { if (recognitionRef.current) recognitionRef.current.stop(); };
-  }, []);
 
   const submit = async () => {
     if (!transcript.trim()) return;
-    if (recognitionRef.current && listening) recognitionRef.current.stop();
+    stopMic();
     setSubmitting(true);
     setError(null);
     try {
@@ -80,8 +29,6 @@ export default function VoiceIntakeModal({ onCancel, onExtracted }) {
       setSubmitting(false);
     }
   };
-
-  const speechSupported = !!SpeechRecognition;
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>

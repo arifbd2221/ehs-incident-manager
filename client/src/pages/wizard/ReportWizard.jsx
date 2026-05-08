@@ -10,6 +10,7 @@ import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
 import { frameworkVisibility } from '../../utils/frameworks';
 import InjuryForm from './types/InjuryForm';
 import IllnessForm from './types/IllnessForm';
@@ -163,6 +164,7 @@ const fileTypeInfo = (file) => {
 
 export default function ReportWizard({ onClose, onSubmit }) {
   const { user } = useAuth();
+  const { voiceSheetData, setVoiceSheetData } = useApp();
   const { showOsha, showRiddor } = frameworkVisibility(user);
   const [step, setStep] = useState(0);
   const [type, setType] = useState('injury');
@@ -231,20 +233,34 @@ export default function ReportWizard({ onClose, onSubmit }) {
     if (f.description) { setDescription(f.description); filled.add('description'); originals.description = f.description; }
     if (f.area) { setArea(f.area); filled.add('area'); originals.area = f.area; }
     if (f.site_id) { setSiteId(String(f.site_id)); filled.add('site'); originals.site = String(f.site_id); }
-    // assetId picks up after the site change effect runs; stash it in original
-    // so we can re-apply once the assets list reloads.
+    if (f.incident_datetime) { setDatetime(f.incident_datetime); filled.add('datetime'); originals.datetime = f.incident_datetime; }
     if (f.asset_id) { originals.asset = String(f.asset_id); filled.add('asset'); }
+    const td = {};
     if (Array.isArray(f.body_parts_affected) && f.body_parts_affected.length > 0) {
-      setTypeData(td => ({ ...td, body_parts: f.body_parts_affected }));
+      td.body_parts = f.body_parts_affected;
       filled.add('body_parts');
       originals.body_parts = f.body_parts_affected;
     }
+    if (f.injured_name)      { td.injured_name = f.injured_name;           filled.add('injured_name'); }
+    if (f.affected_name)     { td.affected_name = f.affected_name;         filled.add('affected_name'); }
+    if (f.illness_category)  { td.illness_category = f.illness_category;   filled.add('illness_category'); }
+    if (f.primary_hazard)    { td.primary_hazard = f.primary_hazard;       filled.add('primary_hazard'); }
+    if (f.equipment_name)    { td.equipment_name = f.equipment_name;       filled.add('equipment_name'); }
+    if (f.substance_name)    { td.substance_name = f.substance_name;       filled.add('substance_name'); }
+    if (Object.keys(td).length > 0) setTypeData(prev => ({ ...prev, ...td }));
     setVoiceExtractionId(result.extraction_id);
     setAiSuggestedFields(filled);
     setAiOriginalValues(originals);
     setVoiceFollowups(result.suggested_followups || []);
     setShowVoiceModal(false);
   }, []);
+
+  useEffect(() => {
+    if (voiceSheetData) {
+      handleVoiceExtracted(voiceSheetData);
+      setVoiceSheetData(null);
+    }
+  }, [voiceSheetData, handleVoiceExtracted, setVoiceSheetData]);
 
   // After site-change effect reloads assets, apply the AI-suggested asset
   // (if any) once the option is actually present in the dropdown.

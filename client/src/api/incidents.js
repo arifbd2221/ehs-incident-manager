@@ -29,6 +29,15 @@ export const deleteAttachment = (id) => api.delete(`/attachments/${id}`).then(r 
 export const voiceExtract = (transcript) =>
   api.post('/incidents/voice-extract', { transcript }).then(r => r.data);
 
+export const voiceReport = (audioBlob) => {
+  const form = new FormData();
+  form.append('audio', audioBlob, 'recording.webm');
+  return api.post('/incidents/voice-report', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  }).then(r => r.data);
+};
+
 export const addIncidentNote = (id, text) =>
   api.post(`/incidents/${id}/note`, { text }).then(r => r.data);
 
