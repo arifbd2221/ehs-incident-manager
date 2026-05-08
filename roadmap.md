@@ -1,330 +1,195 @@
-# Phase 2 Roadmap
+# EHS Incident Management — Roadmap
 
-Live task tracker. Tick boxes as tasks land. Each task gets one focused commit.
+Live status for what's open, what's done (with commit SHAs), and how to operate
+on this codebase. Done items are one-line entries; `git show <sha>` recovers
+the full detail. Most recent session entries at the bottom.
 
-## Wave 1 — Foundation ✅ complete
+---
 
-- [x] **T1.1** Migration runner + `_schema_migrations` table — commit `c7d0be4`
-- [x] **T1.2** Bump multer → 2.x + install `@anthropic-ai/sdk` — commit `6f56829`
-- [x] **T1.3** Migration 001 — 9 new tables + 25 risk_matrix rows — commit `d3a4a27`
-- [x] **T1.4** Migration 002 — incident column adds + `reported_by` rebuild — commit `c2c2494`
-- [x] **T1.5** Migration 003 — capa polymorphic + `investigation_id` rebuild + CHECK — commit `07944db`
+## Current state
 
-## Wave 2 — Site / Asset / Document / EntityLink ✅ complete
+- **Branch:** `backend` at `2e8daa7` — `origin/backend` and `origin/main` were
+  in sync at `36a564f` after PR #8; today's commit `2e8daa7` is on `backend`
+  only, not yet PR'd to main.
+- **Phase 2:** code complete (only F6.2 manual demo walkthrough open).
+- **Wave 7:** E7.1 (custom asset fields per category) done.
+- **UX backlog A–H:** done. UX-C body-parts editor deferred (needs BodyMap3D
+  outside the wizard).
+- **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OP2, OP3.
+- **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, OB2, OB3, RG1.
+- **Migrations applied:** 001–019 + letter fixups `014a`, `017a`. Final lexical
+  order: 001 → 014 → 014a → 015 → 016_osha_compliance_fields → 017_closure_workflow
+  → 017a_rename_legacy_org_migrations → 018_org_onboarding_fields → 019_compliance_frameworks.
+  `017a` aliases the legacy backend names in `_schema_migrations` — idempotent on fresh DBs.
+- **Demo accounts** (all `password123`):
+  - `elena@sdsmanager.com` (ehs_manager, multi-framework: OSHA 300/300A/301 + RIDDOR)
+  - `marcus@sdsmanager.com` (supervisor), `james@sdsmanager.com` (ehs_manager Sheffield),
+    `mehta@sdsmanager.com` (ehs_officer), `wendy@sdsmanager.com` (worker)
+  - `acme@sdsmanager.com` — empty Acme Manufacturing org, OSHA-only US (onboarding showcase)
+  - `riddor-test@example.com` — empty UK org, RIDDOR-only
+  - `sydney-test@example.com` — empty AU org, SafeWork-NSW-only (no Reports card yet — RG1 open)
+- **Dev servers:** `cd server && node --watch index.js` (BE :3001) +
+  `cd client && npm run dev` (FE :5173).
 
-- [x] **T2.1** Site CRUD (`POST/PATCH/DELETE /api/sites`) — commit `6a881c1`
-- [x] **F2.1** Sites admin page + `api/sites.js` + Sidebar nav — commit `d4786a8` (later redesigned upstream by `ef1cc50`)
-- [x] **T2.2** Asset CRUD — commit `982c39c`
-- [x] **F2.2** Assets module pages + nav + routing — commit `907a3b4` (later redesigned upstream by `b27b352`)
-- [x] **T2.2b** Custom asset categories (`/api/asset-categories` + migration 004 + auto-seed trigger) — commit `982c39c`
-- [x] **F2.2b** Asset detail rebuild + category picker w/ "+ New" inline — commit `907a3b4`
-- [x] **T2.3** EntityLink endpoints + service + asset-detail enrichment — commit `982c39c`
-- [x] **F2.3** Site → Asset cascade in wizard + incidents POST accepts `asset_id` — commit `a58f8a7`
-- [x] **T2.4** Document module (CRUD + multipart upload + linking via entity_links) — commit `ec1c292`
-- [x] **F2.4** Documents library page + upload modal + nav — commit `d1540c4` (later redesigned upstream by `b27b352`)
-- [x] **F2.5** Document linking on investigation evidence — commit `0837e2a`
+### Files to re-read cold before extending
 
-## Wave 3 — Incident extensions ✅ complete
+These were auto-merged from main on 2026-05-08 and never read end-to-end:
+- `server/services/closure_gates.js` — ISO 45001 / OSHA / ANSI Z10 closure gates
+- `server/services/notifications.js` — backend-side notification creation
+- `server/routes/incidents.js` — backend's witnesses + recordability + stop-work merged
+  alongside main's closure_request / approve / reject / reopen
+- `client/src/pages/incidents/IncidentDetail.jsx` — main's consolidated cards merged with
+  backend's witnesses + edit affordances
+- `client/src/pages/capas/CAPADetail.jsx` — main's hero-card redesign
+- `client/src/pages/incidents/modals/{ClosureChecklistModal,ClosureApprovalModal,ReopenModal}.jsx`
+- `client/src/pages/capas/UpdateProgressModal.jsx`
+- `client/src/components/layout/TopBar.jsx`
 
-- [x] **T3.1** Service foundations: `body_parts.js` + recordability/riddor split + `auto_classify.js` — commit `7053b7b` (severity-floor refinement in `661e9b0`)
-- [x] **T3.2** `incidents.js` POST extends: `body_parts_affected`, `is_anonymous`, `prior_incidents_count` + new `POST /classify-preview` endpoint — commit `302cf7a`
-- [x] **T3.3** Stop-work endpoints + state machine + down-route guard — commit `1de6eb5`
-- [x] **F3.3** STOP WORK button (TopBar) + active dashboard banner — commit `f18d712`
-- [x] **F3.1** Body map wiring (`InjuryForm` uses `BodyMap3D`) — commit `73db417`
-- [x] **F3.2** Anonymous toggle in wizard Step 1 — commit `73db417`
-- [x] **F3.4** Trending banner + auto-classification suggestion on wizard Step 2 — commit `73db417`
-- [x] **T3.4** `POST /incidents/:id/recordability-verify` (5-gate decision) — commit `29d390e`
-- [x] **F3.5** EHS recordability verification card on incident detail — commit `2aa3e3b`
+---
 
-## Wave 4 — CAPA polymorphic ✅ complete
-
-- [x] **T4.1** CAPA polymorphic: `POST /capas` + `POST /incidents/:id/create-capa` + assign-capa source_type — commit `465a5dd`
-- [x] **F4.1** "+ New CAPA" button with source picker on CAPA list — commit `18eeb68`
-
-## Wave 5 — Voice intake ✅ complete
-
-- [x] **T5.1** `services/voice_extract.js` (Anthropic SDK + tool-use schema) — commit `5d5d98e`
-- [x] **T5.2** `POST /incidents/voice-extract` endpoint + `voice_extractions` write + activity log — commit `8b5f609`
-- [x] **F5.1** Voice intake confirmation flow (Web Speech transcribes in browser, BE extracts structure) — commit `108f08f`
-
-## Wave 6 — Polish + seed ✅ code complete (F6.2 is a manual walkthrough)
-
-- [x] **T6.1** Hygiene: multer 2.x cleanup + OSHA 300 `injury_type` granularity + FK error scrubbing — commit `75fb1ef`
-- [x] **T6.2 + T6.3** Demo seed rewrite (foundation + incident graph) — bundled in commit `48e29ff` (the seed is one atomic transaction; splitting would have left a half-written, broken seed)
-- [x] **F6.1** 300A sign-off button on Reports page — commit `511dab9`
-- [ ] **F6.2** End-to-end demo path walkthrough in browser — *manual; run `SEED_FORCE=1 node db/seed.js`, then click through the 10 beats per plan-phase-2.md §5*
-
-## Wave 7 — Deferred enhancements
-
-- [x] **E7.1** **Custom fields per asset type** — SafetyCulture-style. Migration 005 + asset_category_fields table + assets.custom_fields JSON + CRUD endpoints + validation hook + FE category-fields editor + dynamic form rendering on asset create/edit + display card on detail.
-  - BE: commit `d4d4b2b`
-  - FE editor modal: commit `cab263c`
-  - FE dynamic form + display: commit `da0e3fe`
-
-## Phase 3 — Productionization (user-driven backlog, captured 2026-05-06)
-
-User observations after clicking through the Phase 2 build. Treat as an
-actual app, not a hackathon. Order shifts based on user direction; nothing
-here ships without explicit go-ahead.
-
-### Navigation / pages
-- [x] **P3-N1** **Site details page + hierarchy** — `/admin/sites/:id` with breadcrumb, sub-sites, recent incidents/assets, compliance, workforce. Migration 015 adds `parent_id` to sites (originally landed as 012; renumbered to 015 after main merged its own 012_template_cover_image in parallel). BE: cycle/self/depth-cap (5 levels) validation on POST/PATCH, child-blocks-delete on DELETE, enriched `GET /api/sites/:id` returns parent + ancestors + children + counts + recents + work_hours total. FE: stacked-cards detail page with `sd-*` page-scoped styles in `sites.css`, clickable list cards with "Sub-site of …" parent chip, "Parent site" select in the General section of the site modal that excludes self + descendants to prevent cycles from the UI. Login demo grid gains a Worker (Wendy) row so role gates are click-testable.
-- [x] **P3-N2** **Document folder structure** — folders/sub-folders for documents — commit `12862f8` (BE: migration `010_document_folders` + `/api/folders` CRUD + folder_id filter on docs; FE: breadcrumb, site filter, "+ New folder", folder tiles in grid + list, kebab rename/delete with content-count warning, native HTML5 DnD doc → folder / folder → folder / either → breadcrumb; Drive-style global search at root, scoped inside folders; folder navigation in the link-from-library modal on investigations).
-- [x] **P3-N3** **Document preview** — inline PDF/image/video/audio preview without leaving the page — commit `1873bb2` (Drive-inspired redesign on origin/main, merged in `eeafa48`).
-
-### Cross-entity linking + history
-- [x] **P3-L1** **Back-tracking everywhere** — "where is this referenced?" on inspections / CAPAs / incidents / assets / docs. The `entity_links` table already exists; consistent surfacing across all detail pages.
-  - **Initial chunk:** shared `referencesFor()` service + `GET /api/links/references?type=X&id=Y` endpoint; reusable `<ReferencedByCard>` component dropped into `AssetDetail`, `IncidentDetail`, `InvestigationDetail`, `CAPADetail`. Four buckets (incidents/investigations/capas/documents) merging direct FKs (e.g., `incidents.asset_id`, `capas.incident_id`) with polymorphic `entity_links` rows in either direction.
-  - **Follow-up (this commit):**
-    1. **Inspections back-tracking** — `'inspection'` added to `LINKABLE_TYPES` in `entity_links.js` and `PARENT_TABLES` in `routes/links.js`. New `inspectionsReferencing()` (poly-only — no direct FK between inspections and other entities). `referencesFor()` now returns an `inspections` bucket on every entity, and `<ReferencedByCard>` mounted on `InspectionReport.jsx` so an inspection can see its own back-references.
-    2. **Assets bucket** — added `assetsReferencing()` (uses `incidents.asset_id` as direct FK + polymorphic links) so an inspection can see "Assets I inspected" / a document or CAPA can see linked assets. Six buckets total (incidents/investigations/capas/documents/inspections/assets).
-    3. **Documents detail surfacing** — chose the inline path. `<ReferencedByCard>` mounted inside the Drive-style preview modal between content and footer; new `.dpv-references` CSS slot caps it at 220px max-height with overflow scroll so the modal layout stays bounded.
-    4. **Link / unlink post-creation + clickable rows** — `referencesFor()` now returns `link_id` on every row (NULL on direct-FK rows like `incidents.asset_id`, populated on polymorphic `entity_links` rows). `<ReferencedByCard>` gains a "+ Link" button in the header and a hover-reveal × on every poly row, both gated to elevated. Clicking the button opens new `<AddLinkModal>` (type chips + debounced search of the chosen list endpoint + click-to-link); unlink calls DELETE /api/links/:id then refreshes via a tick counter. **Also retro-added the missing `.refby-*` CSS** — the original P3-L1 ship had row classes referenced in JSX with no styles anywhere in the tree, so rows had no cursor/hover and the click affordance was invisible. New `.refby-*` (~140 lines) and `.alm-*` (~155 lines) sit at the bottom of `styles.css`, all design-token references.
-- [x] **P3-L2** **Media on investigations** — attachments card on investigation detail (parallel to UX-A on incidents) — commit `e75e8ce` (FE-only; BE polymorphic route already supported `entity_type='investigation'`). Follow-up `77a2eab` aligned upload to UX-A's worker-can-upload behavior. Page-scoped `.invd-attach-*` styles mirror UX-A's `.idet-attach-*` design (hover-reveal red ×, dashed CTA empty state). Bug-fix folded in: rendering read `a.original_name` / `a.size` but schema columns are `filename` / `size_bytes` — never exercised before because nothing seeded investigation attachments.
-
-### Audit
-- [ ] **P3-A1** **Proper activity logging + audit export** — wider coverage (every mutation writes a row), consistent shape, filterable + exportable. Compliance framing: OSHA / HSE / ISO 45001 inspectors can request the chain of custody for any record on demand.
-  - **Done in 4 chunks (uncommitted at end of session):**
-    1. **Foundation** — migration `013_activity_log_widen` (CHECK adds asset/document/folder/site/user/link), shared `services/activity_log.js` (`writeActivity` + `diffFields` for old/new diffs in metadata). Wired into `sites.js` (3 routes), `assets.js` (3, plus `asset_archived` / `asset_restored` distinct from `asset_updated`), `documents.js` (3, plus `document_moved` when only `folder_id` changes), `folders.js` (3, plus distinct `folder_renamed` / `folder_moved` / `folder_updated` actions), `links.js` (2), `auth.js` (3 — registered / profile_updated / password_changed; login intentionally skipped as noise). 15 audit rows verified end-to-end.
-    2. **Admin config + partial-coverage gaps** — migration `014_activity_log_admin_types` (CHECK adds asset_category, answer_set). Wired into `asset_categories.js` (8 actions covering category + per-field CRUD + reorder), `answer_sets.js` (3, with options before/after diff in metadata). Filled gaps in `investigations.js` (delete five-why preserves removed Q/A in metadata; team_member_added), `templates.js` (PATCH metadata + items_updated rollup), `inspections_routes.js` (PATCH metadata with `status_at_edit` flag — item-level PUT skipped because the route already enforces 409 immutability after completion).
-    3. **Audit-log export endpoint + Reports tab** — `GET /api/reports/audit-log` (paginated) and `GET /api/reports/audit-log/export.csv` (UTF-8 BOM + RFC 4180 escaping; `Content-Disposition: attachment`). New "Audit Log" card on the Reports page (slate/gray `rt-audit` accent). The export itself writes an `audit_log_exported` row with the filters used → tamper-evident chain of custody.
-    4. **Polish** — entity-number resolver (accepts `INC-2026-0150` / `CAPA-048` / `AST-2026-00001` etc., case-insensitive, falls back to entity_type/id on bogus prefix). Role-narrowed: audit endpoints require `ehs_officer` / `ehs_manager` / `admin` only (supervisor blocked). Multi-select pickers for actions (grouped by entity_type with select-all per group), entity types (flat), and actors (flat). Distinct-actions endpoint feeds the dropdown. Popover portal'd to `document.body` because `.rpt-panel` has `overflow: hidden`; scrollable body, `position: fixed`, repositions on scroll/resize.
-  - **Intentionally deferred:**
-    - Per-answer inspection-item logging (`#9` from the audit survey) — the route's status='in_progress' guard returns 409 for completed/abandoned inspections, so a successful mutation can't reach a state worth auditing. Code comment in `inspections_routes.js` documents where to add the log if the route is ever loosened.
-    - Verb normalization (`#10`) — cosmetic only; would touch every existing log call site and risk silent breakage if any FE/dashboard filters on `action` strings.
-
-### Org / multi-tenancy
-- [x] **P3-O1** **Concept of organization** — multi-tenant onboarding showcase. Visitor signs up, fills 3-step wizard (Org → Compliance → Founder), lands on first-site wizard, then dashboard scoped to their org. Per user direction: **no org switching** (`users.email` stays globally unique), **no real invitation/email flow** (slice 2 deferred). Founder gets existing `admin` role; no new roles added.
-  - **Slice 1 — sign-up + onboarding** (commit `b72bd6c`): migration `016_org_onboarding_fields` adds `country / industry_sector / naics_code / primary_regulator / company_size` to `organizations` and widens `activity_log` CHECK to accept `entity_type='organization'`. New `POST /auth/signup-org` (atomic org+founder insert + `org_created` activity row), `/register` locked to 403, `/auth/sites` locked to authMiddleware + org-scoped. JWT carries `org_name` for first-paint UI. New FE `/signup` (3-step) + `/onboarding/site` (1-step). Register stub. Login footer CTA. TopBar breadcrumb dynamic (`user.org_name` instead of hardcoded "SDS Manager"). Settings shows read-only Organization section. Seed adds Acme Manufacturing demo org (`acme@sdsmanager.com / password123`) with no sites — empty new-tenant showcase.
-  - **Compliance frameworks → multi-select** (commit `650a2e8`): migration `017_compliance_frameworks` adds `compliance_frameworks TEXT` (JSON array). `primary_regulator` column kept in schema unused (cheaper than SQLite DROP COLUMN; harmless). 6 framework codes: `osha_300 / osha_300a / osha_301 / riddor_f2508 / safework_nsw / generic`. Country auto-pre-selects defaults (US→3 OSHA, UK→RIDDOR, AU→SafeWork NSW, else→generic), then country switch *always* overwrites with new defaults. SignupOrg step 2 renders 6 framework cards with checked-state border tint. Settings shows comma-separated framework names via `FRAMEWORK_LABELS` map.
-  - **Audit fixes** (commit `8f3b01c`, bundled with O2): see below.
-  - **Reports filter follow-up** (commit `37e6826`): closed. Each regulator-specific card on `/reports` now declares the `requiresFramework` code that gates it (`osha_300 / osha_300a / osha_301 / riddor_f2508`). Cards without `requiresFramework` (Metrics, Audit Log) are universal/internal and stay visible. RIDDOR-only org no longer sees OSHA cards; OSHA-only org no longer sees RIDDOR card. Auto-falls-back to first-visible tab if currently-selected tab gets filtered out. Empty-state copy when no cards visible (e.g., a `safework_nsw`-only org since no SafeWork report card exists yet — see P3-RG1). Defensive fallback: empty/missing `compliance_frameworks` shows everything (legacy users from before migration 019 / stale JWTs aren't locked out).
-  - **Open follow-ups (deferred):** Real invitation/email flow. Org rename / archive UI. AU-state-specific forms beyond NSW.
-- [x] **P3-O2** **Org + site members management** — admin-gated CRUD on `/admin/members` with audit. Admin types email + initial password, hands off out-of-band (no email service yet). Mutation routes admin-only; read view open to anyone in the org.
-  - **Direct-create + members CRUD** (commit `7aafa99`): rewrite of `server/routes/users.js` with `GET /` (JOIN sites, active+inactive sorted active-first), `POST /` (admin only, validates email + role + cross-org site_id), `PATCH /:id` (admin only, **self-edit block** on role + is_active, **last-admin lockout** as defense-in-depth, field-level diff in `user_updated` activity rows), `POST /:id/password` (admin reset for another user; self goes through `/auth/password`). New `/admin/members` page: table with avatar circle + role pill (`admin`→`pill-purple`, `ehs_*`→`pill-info`, others→`pill-gray`) + status pill (`pill-success` w/ animated dot for active, `pill-gray` for inactive) + per-row actions. Dual-purpose `MemberModal` (create/edit) and separate `PasswordResetModal`. Role select `disabled` when editing self. Inactive rows greyed via `opacity: 0.55`. Sidebar nav link, TopBar PAGE_TIPS, App.jsx route.
-  - **Audit fixes** (commit `8f3b01c`): authMiddleware now re-checks `users.is_active` per request via cached prepared statement — deactivation revokes existing JWT instantly (was: 24h grace until token expired). New `services/validators.js` with `validEmail()` regex + `checkLen()` + `checkPassword()` + caps (`NAME_MAX=100, EMAIL_MAX=254, PASSWORD_MIN=8, PASSWORD_MAX=72, NAICS_MAX=32`). Wired into `/signup-org` + `POST /users` + `PATCH /users` + `POST /users/:id/password` + `/auth/password`. Acme seed `org_created` row now uses `writeActivity` with full metadata (was: hand-rolled INSERT, metadata=`{}`). FE polish: new `'people'` icon for Members nav (resolves collision with bottom-anchored Profile `'person'`), Members action buttons wrapped in inline-flex with `gap` (was: flush), SignupOrg country switch always resets frameworks (was: preserved stale OSHA when switching to UK), SignupOrg Back clears stale error, OnboardingFirstSite country becomes ComboBox (was: free-text), OnboardingFirstSite redirects to `/admin/sites` if org already has sites (was: re-creating duplicates by re-visiting URL), Members empty-state dead branch removed.
-  - **Open follow-ups (deferred):** real invite-by-email flow (would need `invitations` table + token + email service). Move-user-between-sites UI is implicit via PATCH `/users/:id` `site_id` field but no dedicated "transfer" affordance.
-
-### AI assistance
-- [ ] **P3-AI1** **Auto-fill investigation (AI + manual modes)** — five-Why suggestions, root-cause prompts, contributing-factors checklist, recommended CAPAs.
-- [ ] **P3-AI2** **Prompt-driven autofill** — system asks targeted questions ("Was the press locked out?"), user answers free-text, AI normalizes into structured fields.
-- [ ] **P3-AI3** **Video → incident report** — extend the existing voice-intake flow (Phase 2 T5.1 / T5.2 / F5.1) to accept video. Pipeline: video upload → audio extracted → transcript (Whisper or similar) → re-use `services/voice_extract.js` (Anthropic tool-use schema) → structured incident draft + same confirmation UX as voice. Visual frames could later feed a separate hazard-detection model — out of scope for v1.
-
-### Operational features
-- [ ] **P3-OP1** **Asset maintenance** — schedules, due dates, last-done, escalations to CAPA when overdue.
-- [x] **P3-OP2** **Inspection module** — full inspection lifecycle (templates → schedule → run → findings → CAPAs) — commit `918279a` (origin/main; merged in `eeafa48`). Pages: `/inspections`, `/inspections/:id` editor + report; routes `/api/inspections`, `/api/answer-sets`; migrations `008_templates_inspections` + `009_template_versioning`.
-- [x] **P3-OP3** **Templates** — reusable templates with versioning + Google-Forms-style builder — commit `918279a` (origin/main; merged in `eeafa48`). Pages: `/templates`, `/templates/:id/edit`; route `/api/templates`.
-- [ ] **P3-OP4** **Scheduling** — recurring inspections, calibrations, training, walkthroughs; calendar view + reminders.
-- [ ] **P3-OP5** **Risk register / risk assessment module** — distinct from the 5×5 matrix used by `ReportWizard.jsx` (which scores incidents *post-event*). This is a *proactive* register: identify hazards at sites/assets, assess L×C, assign mitigations, periodic review, link to incidents/CAPAs that arose from a given risk. Likely needs `risks` + `risk_assessments` tables, `risk_review_due` field, and entity_links wiring. Big enough to be its own phase — scope before starting.
+## Open work — Phase 3
 
 ### Onboarding + data import
-- [ ] **P3-OB1** **User onboarding flow** — first-login walkthrough, sample data toggle, role-tailored "what to do first".
-- [ ] **P3-OB2** **CSV import** — users, sites, assets, work_hours, etc. With dry-run + error report.
-- [ ] **P3-OB3** **Document versioning** — supersede a doc with a new file while keeping the audit trail of prior revisions.
+- [ ] **P3-OB1** User onboarding flow — first-login walkthrough, sample-data toggle, role-tailored "what to do first".
+- [ ] **P3-OB2** CSV import — users / sites / assets / work_hours. Dry-run + error report.
+- [ ] **P3-OB3** Document versioning — supersede a doc with a new file, audit trail of prior revisions.
 
-### Regulatory expansion
-- [ ] **P3-RG1** **Australian regulation** — third regulator alongside US OSHA (300/300A/301) and UK HSE/RIDDOR. Add `country='AU'` support on sites and integrate Safe Work Australia's notifiable-incident workflow. Each AU state has its own Work Health & Safety Act (e.g., NSW WHS s38, Vic OHS Act 2004 s37) with different categories (death, serious injury/illness, dangerous incident) and notification deadlines (immediately for death/serious; written follow-up within 48h–7d depending on state). Schema: likely `notifiable_incidents` table joining incident + state + category + phone_notified_at + written_submitted_at + reference_number; new report variant on the Reports page; per-state submission deadline tracking on the dashboard.
+### AI assistance
+- [ ] **P3-AI1** Auto-fill investigation (AI + manual) — five-Why suggestions, root-cause prompts, contributing-factors checklist, recommended CAPAs.
+- [ ] **P3-AI2** Prompt-driven autofill — system asks targeted questions ("Was the press locked out?"), AI normalizes free-text answers into structured fields.
+- [ ] **P3-AI3** Video → incident report — extend voice intake to accept video. Pipeline: video → audio → transcript → existing `services/voice_extract.js` → confirmation UX.
 
----
+### Operational features
+- [ ] **P3-OP1** Asset maintenance — schedules, due dates, last-done, escalation to CAPA when overdue.
+- [ ] **P3-OP4** Scheduling — recurring inspections, calibrations, training, walkthroughs; calendar view + reminders.
+- [ ] **P3-OP5** Risk register / risk assessment — *proactive*: identify hazards at sites/assets, assess L×C, mitigations, periodic review, link to incidents/CAPAs. Distinct from the post-event 5×5 in `ReportWizard.jsx`. Likely needs `risks` + `risk_assessments` tables, `risk_review_due`, entity_links wiring. Big enough to be its own phase — scope before starting.
 
-## Backlog — productionization UX (treat this as an actual app, not just demo polish)
+### Regulatory
+- [ ] **P3-RG1** Australian regulation — third regulator alongside US OSHA + UK HSE. Add `country='AU'` on sites + Safe Work Australia notifiable-incident workflow. Per-state WHS Acts (NSW WHS s38, Vic OHS Act 2004 s37) with different categories (death / serious injury / dangerous incident) and notification deadlines (immediately for death/serious, written follow-up 48h–7d). Schema: likely `notifiable_incidents` table (incident + state + category + phone_notified_at + written_submitted_at + reference_number). New Reports card. Per-state deadline tracking on dashboard. **Closes the `safework_nsw` framework loop** — currently has no Reports card.
+  - When RG1 lands, extend `client/src/utils/frameworks.js` with `showSafework` (one-line addition; pattern shipped 2026-05-08 in `2e8daa7`).
 
-These came out of the post-Wave-4 review. The shared theme is **"the incident record lives — investigators keep it accurate as facts emerge, every change is auditable."** OSHA 1904.33 explicitly expects amendments within the 5-year retention window, so none of this is a recordkeeping risk as long as the activity log captures who/what/when.
-
-### Editable Incident Detail (one cohesive bundle)
-
-- [x] **UX-A** **Post-report attachments** — add + delete with audit. Photos surface hours/days later; capturing them at submission only is a real gap. — commit `ba14826`
-- [x] **UX-B** **Inline notes on activity timeline** — `POST /incidents/:id/note` + composer + distinct amber styling for note rows + Cmd/Ctrl+Enter to post + optimistic prepend. Commit `31f8be7`.
-- [ ] **UX-C** **Editable description / area / department / body parts** on the detail page. PATCH already supports all of these BE-side; UI is what's missing. Use field-level edit affordances rather than a giant edit-mode toggle.
-  - **Done:** description (textarea in "What happened" card), area + department (input in Quick Facts; department added as new fact-row, both shown to elevated even when empty with "(not set)" placeholder). Inline `<DescEdit>` and `<FactEdit>` components in `IncidentDetail.jsx`; small `idet-edit-*` page-scoped CSS for trigger button + edit-row footer + empty-state styling. Edit gated to elevated roles (`canEdit`).
-  - **BE compliance gap closed:** PATCH `/incidents/:id` now writes an `incident_updated` activity_log row with field-level `{from, to}` diff in metadata for any change to title / description / area / specific_location / department / immediate_actions_taken. Severity continues to log `severity_overridden` separately. Closes the OSHA 1904.33 amendment-trail gap that previously made non-restricted edits silent. New action wired into `IncidentDetail` timeline icon/dot-class helpers.
-  - **Open:** body parts editing — needs BodyMap3D integration on the detail page (separate component surface from the wizard's flow).
-- [x] **UX-D** **Add/edit witnesses post-creation** — BE: three new routes on `incidents.js` (POST/PATCH/DELETE `/incidents/:id/witnesses[/:wid]`), all gated to elevated, all writing `witness_added` / `witness_updated` / `witness_removed` activity_log rows with full witness data (or field-level diff for updates) in metadata. FE: `WitnessModal.jsx` (dual-purpose add/edit, mirrors AssignModal's `idet-modal-*` pattern), Witnesses card placed in the sidebar between Reporter and Triage state, list of `<div className="idet-witness">` cards with name + contact + collapsed-style statement + edit/remove triggers (elevated only), empty state with prompt copy. Page-scoped `.idet-witness-*` CSS in `incidents.css` (~50 lines, all design-token references). New activity actions wired into `tlIcon`/`tlDotClass`. Worker role gets 403 surfaced as toast.
-- [x] **UX-E** **Severity override UI** — `SeverityOverrideModal` (new file, mirrors AssignModal's `idet-modal-*` pattern, zero new CSS), "Override severity" trigger button in IncidentDetail header-actions row (only visible to elevated roles, hidden when status=Closed). Sev `<select>` + required-reason textarea, confirm disabled until severity differs and reason is non-empty. Sends PATCH `/incidents/:id` with `severity` + `severity_override_reason`; BE writes `severity_overridden` activity-log row with old→new + reason in metadata. Worker role gets 403 surfaced as toast.
-
-### Quick wins (independent, can land any time)
-
-- [x] **UX-F** **Global search jump-to in TopBar** — `globalSearch` API hits `/api/incidents|investigations|capas` with `search=` param; categorized dropdown in `SearchResults`; debounced 300ms; keyboard `/` focus, ↑/↓ navigate, Enter open, Esc close; click-to-navigate; loading + empty states; status chips; auto-closes on route change. Page-scoped `.sr-*` styles in `styles.css`. (Implemented earlier; roadmap entry was stale.)
-- [x] **UX-G** **CAPA due-date color coding** — pills on kanban + list (red ≤2d & overdue, amber ≤6d, muted else). Commit `48ca9b2`.
-- [x] **UX-H** **Cross-page stop-work banner** — slim pulsing red bar above TopBar in ProtectedLayout, polls every 30s, click → first active stop-work. Commit `48ca9b2`.
-
-### Deferred (cool but expensive — revisit only if other beats are solid)
-
-- "Similar incidents" panel on IncidentDetail (semantic match by site + body part + window).
-- OSHA 301 PDF export.
-- Trending dashboard widgets ("3 incidents at Press 4 this month, +200%").
-- Keyboard shortcuts (`?` help, `g i` incidents, `n` new incident).
-
-## Known issues (investigate later, not blocking)
-
-- [x] **BUG-001** ~~"Failed to create category" error~~ — fixed by the upstream AssetsList redesign (`b27b352`). Verified 2026-05-06 against the live Vite proxy: new unique name → 201, active duplicate → 409 with friendly message, case-insensitive duplicate → 409, predefined name → 409, soft-deleted reactivation → returns row with active=1. No reproducer left.
-
-## Pre-Wave-3-design-system-rules violations (carried, do not fix per user direction)
-
-The following Wave 2 FE files were authored before the new `CLAUDE.md` design system was added on main (`317b4c4`). They use `--sds-text-*` tokens (instead of `--sds-fg-*`), `.btn-ghost` (not in canonical set), and inline modals (no `createPortal`). Upstream redesigns at `ef1cc50` (Sites) and `b27b352` (Assets + Documents) have **already replaced** the Wave 2 versions, so most of these are no longer present in the repo. Wave 3 work follows the design rules from the start.
+### Smaller open follow-ups
+- Body-parts editor for UX-C — BodyMap3D integration outside the wizard.
+- Real invitation/email flow (slice 2 of P3-O1) — needs `invitations` table + token + email service.
+- Org rename / archive UI.
+- Per-answer inspection-item logging (P3-A1 deferred #9) — route's `status='in_progress'` guard returns 409 for completed inspections, so successful mutations can't reach an audit-worthy state. Code comment in `inspections_routes.js` documents where to add logging.
+- Verb normalization across activity_log actions (P3-A1 deferred #10) — cosmetic; would touch every existing log call site.
+- F6.2 — manual end-to-end demo walkthrough.
 
 ---
 
-## State
+## Done — Phase 2
 
-- **Branch**: `backend` — at `36a564f` (PR #8 merge of backend → main, fast-forward-pulled into backend). `origin/backend` and `origin/main` are both at `36a564f` — fully in sync. Working tree clean.
-- **Phase 2**: code complete. Only F6.2 (manual demo walkthrough) outstanding.
-- **Wave 7**: E7.1 done.
-- **Productionization backlog** (UX-A through UX-H): **A, B, D, E, F, G, H done. C done except body-parts editor (deferred — needs BodyMap3D integration outside the wizard).**
-- **BUG-001**: closed.
-- **Phase 3** (P3-* items): **N1, N2, N3, L1, L2, A1, O1, O2, OP2, OP3 all done.** O1/O2 ship without invitations (deferred — would need email service) and without org switching (explicit user decision: each user belongs to one org forever, `users.email` stays globally unique). **Reports filter follow-up of O1**: closed (commit `37e6826`).
-  - **Open** (not started): AI1, AI2, AI3 (video intake), OP1, OP4, OP5 (risk register), OB1, OB2, OB3, RG1 (Australian regulation).
-- **Migrations applied**: 001–019 (numbered) plus three letter-suffixed fixups (014a, 017a) and the `017_closure_workflow.sql` from main. Final lexical order is 001 → 014 → 014a → 015 → 016_osha_compliance_fields (main) → 017_closure_workflow (main) → **017a_rename_legacy_org_migrations** (this session — aliases backend's old 016/017 names) → 018_org_onboarding_fields (renamed from backend's 016) → 019_compliance_frameworks (renamed from backend's 017). `primary_regulator` column lives on as dead schema. The 017a fixup is idempotent on fresh DBs.
-- **Schema landed from main this session**: `incidents` gains `er_treated`, `hospitalized`, `hospitalization_date`, `osha_privacy_case`, `osha_work_related`, `closure_type`, `reopened_at`, `reopened_by`, `reopened_reason`, `reopen_count`. New table `closure_requests` (incident_id, requested_by, closure_summary, lessons_learned, gate_snapshot JSON, status pending/approved/rejected, reviewed_by, reviewed_at, review_notes). `osha_300_log` rebuilt with `is_privacy_case` column + nullable `incident_id` (allows manual entries).
-- **New BE services from main this session**: `server/services/closure_gates.js` (ISO 45001 / OSHA / ANSI Z10 closure-readiness gates, used by the tiered closure workflow); `server/services/notifications.js`. Neither has been read top-to-bottom in this session — re-read before extending.
-- **New FE modals from main**: `ClosureChecklistModal.jsx`, `ClosureApprovalModal.jsx`, `ReopenModal.jsx` (all under `client/src/pages/incidents/modals/`); `UpdateProgressModal.jsx` (under `client/src/pages/capas/`). None click-tested in this session.
-- **Demo accounts** (all `password123`): 5 SDS Manager Inc. users (elena/marcus/james/mehta/wendy) plus `acme@sdsmanager.com` (Aisha Carter, role=admin, Acme Manufacturing — OSHA-only US org, empty onboarding showcase). Two test orgs created during this session and left in the dev DB: `riddor-test@example.com` (RIDDOR-only UK org, "RIDDOR Test Co", no sites) and `sydney-test@example.com` (SafeWork-NSW-only AU org, "Sydney Smelters Pty", no sites). These exist solely to exercise the Reports framework filter — feel free to delete or reseed.
-- **Running**: dev servers via `cd server && node --watch index.js` (BE :3001) and `cd client && npm run dev` (FE :5173).
+Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink CRUD, Incident extensions (body parts, anonymous toggle, stop-work, recordability verification), CAPA polymorphic, Voice intake (Anthropic tool-use), Polish + seed, Custom asset fields per category. Full commit history on `git log`.
 
-## Most recent session — 2026-05-08 — Reports framework filter + merge-from-main + PR #8
+## Done — Phase 3
 
-Short, tightly-scoped session. Two pieces of work shipped, one PR merged round-trip, and the rest of the time was thorough verification.
-
-| Area | What changed | Commit |
+| Item | Description | Commit(s) |
 |---|---|---|
-| Reports cards filter by `compliance_frameworks` | Closes the open follow-up from P3-O1 / P3-O2: a RIDDOR-only org no longer sees OSHA cards on `/reports`. Each regulator card declares the framework code that gates it (`requiresFramework: 'osha_300' / 'osha_300a' / 'osha_301' / 'riddor_f2508'`). Cards without a `requiresFramework` field (Metrics, Audit Log) are universal/internal — Audit retains its existing role gating. New `useMemo`-based `visibleReports` + a follow-up effect that resets the active tab if the previously-selected card gets filtered out (so the page never renders an empty content area). Empty-state copy in `.rpt-panel` / `.cell-empty` if the visible set is empty (e.g., a `safework_nsw`-only org until P3-RG1 ships a card). Defensive fallback: empty/missing `compliance_frameworks` shows everything (legacy users / stale JWTs aren't locked out). No new CSS — reused existing classes. | `37e6826` |
-| Merge from `origin/main` | 8 commits brought in: `8da2b28` OSHA compliance fields + 301 form + notifications, `a1649f4` tiered closure workflow with ISO 45001 gates, `ab51f86` React-hooks fix on Login/Register, `d3f06cb` animated 3D logo + notification nav + badge positioning, `6a17319` CAPA detail hero card redesign, `a4a0356` consolidated incident detail cards + sidebar UX, `193a606` ReferencedByCard at bottom of investigation sidebar, `003d1be` ReferencedByCard inline trigger + modal. Resolution rules: UI/UX wins on conflicting hunks; server logic + schema preserve backend's functionality. | `8c9ac40` |
-| Migration collision resolved | Both sides shipped 016 + 017 in parallel. Main's `016_osha_compliance_fields` + `017_closure_workflow` keep their numbers. Backend's were renumbered: `016_org_onboarding_fields` → `018_org_onboarding_fields`, `017_compliance_frameworks` → `019_compliance_frameworks`. New `017a_rename_legacy_org_migrations.sql` aliases the legacy filenames in `_schema_migrations` for existing dev DBs (mirrors the established `014a_normalize_site_hierarchy_name.sql` pattern). Idempotent — no-op on fresh DBs. Verified: dev DB rebooted clean, all 21 migrations recorded under their final names, no duplicate-column errors. | `8c9ac40` |
-| PR #8 (backend → main) | Opened, merged, fast-forward-pulled back into backend. `origin/backend` == `origin/main` == `36a564f`. | merge commit `36a564f` on main |
+| P3-N1 | Site detail page + parent_id hierarchy (mig `015`) | `25ad9af` |
+| P3-N2 | Document folders + DnD | `12862f8` |
+| P3-N3 | Document inline preview | `1873bb2` (main) |
+| P3-L1 | Back-tracking everywhere — `referencesFor()` + `<ReferencedByCard>` + `<AddLinkModal>` | initial + `8b3359d` |
+| P3-L2 | Media on investigations | `e75e8ce` + `77a2eab` |
+| P3-A1 | Activity-log widening (`013`+`014`) + `services/activity_log.js` + audit CSV export + Reports tab | 4 chunks |
+| P3-O1 | Org sign-up + onboarding (mig `018`+`019`); compliance_frameworks multi-select; Reports filter | `b72bd6c` `650a2e8` `8f3b01c` `37e6826` |
+| P3-O2 | Members management — admin-gated CRUD; auth re-checks `is_active` per request; shared validators | `7aafa99` `8f3b01c` |
+| P3-OP2 | Inspection module (mig `008`+`009`) | `918279a` (main) |
+| P3-OP3 | Templates with versioning | `918279a` (main) |
+| OSHA/RIDDOR gating | `frameworkVisibility(user)` helper; gated 6 surfaces (IncidentDetail, InvestigationDetail, InvestigationsPage, Dashboard, ReportWizard) | `2e8daa7` |
 
-**Two manual conflicts resolved during the merge:**
-- `client/src/pages/Register.jsx` — kept backend's invite-only stub (`{ user } = useAuth(); if (user) <Navigate />`). Discarded main's reintroduced full register form because main's branch never knew `/signup-org` existed.
-- `client/src/pages/reports/ReportsPage.jsx` — merged main's new `osha301` card with backend's `requiresFramework` gate. The 301 card now sits between 300A and RIDDOR with `requiresFramework: 'osha_301'` so a RIDDOR-only org doesn't see it either.
+## Done — UX backlog
 
-**Files where main heavily refactored — auto-merged but NOT click-tested this session** (the highest-risk surface for the next session):
-- `client/src/pages/incidents/IncidentDetail.jsx` — main's "consolidate cards + sidebar UX" refactor auto-merged with backend's witnesses card + edit affordances. Sidebar layout / witnesses card placement need visual sanity check.
-- `client/src/pages/capas/CAPADetail.jsx` — main's hero-card redesign + `UpdateProgressModal.jsx`. New layout never opened.
-- `client/src/pages/incidents/modals/ClosureChecklistModal.jsx`, `ClosureApprovalModal.jsx`, `ReopenModal.jsx` — entirely new from main, never exercised in this session.
-- `client/src/components/layout/TopBar.jsx` — main's notification redesign auto-merged with backend's dynamic `org_name` breadcrumb + `/admin/members` PAGE_TIPS. Build-clean but UI not loaded.
-- `client/src/pages/reports/ReportsPage.jsx` — the merged page rendering with osha301 card + framework filter has never been opened in a browser.
-- `server/services/closure_gates.js`, `server/services/notifications.js` — new from main, neither read top-to-bottom this session. Don't extend without re-reading.
-
-**What was verified this session:**
-- BE smoke test on every list endpoint and every detail endpoint as elena/wendy/marcus/acme/RIDDOR-test/Sydney-test users. All 200 / 4xx as expected, no 500s, BE logs clean.
-- Witnesses CRUD post-merge: 201/200/204, audit log captured.
-- Backend routes alive co-existing with main's: `/signup-org`, `/users` (members management), `/reports/audit-log`, `/incidents/:id/witnesses`, `/incidents/:id/closure-checklist`, `/incidents/:id/closure-request[/approve|/reject]`, `/incidents/:id/reopen`.
-- Schema verified: `incidents` carries main's new 9 columns + `closure_requests` table exists. `organizations` carries backend's 6 columns including `compliance_frameworks`. `activity_log` CHECK still includes `'organization'`.
-- Vite production build clean post-merge: 183 modules (was 179 pre-merge), 777 KB bundle.
-- All merge-touched JSX files have hook usage matching imports (the `useRef`-drop pattern from the prior `-X theirs` merge did not recur).
-- No stale conflict markers anywhere in the tree.
-- Sign-up of brand-new AU/SafeWork-NSW org end-to-end OK; `/me` returns the correct framework set.
-
-**Honest hallucination report at end of session:**
-- **Backend: low risk.** All routes curl-tested with multiple user/org combinations.
-- **Frontend: medium-high risk.** Build clean ≠ visually correct. The merge involved heavy main-side refactors (CAPA hero, incident detail consolidation, notification UX) that I never opened in a browser. Anything visual could be subtly broken.
-- **Stale-cache risk:** browser tabs open before the deploy will have a JWT minted before main's session. Hard-refresh (Cmd+Shift+R) recommended for first paint.
-
-**Operating note for next session:** the user explicitly raised the "fresh session vs. continue" question at the end of this one. The agreed split: this session pushed `36a564f`, prepped roadmap.md + memory files for handoff, then closes. Any non-trivial work in the merge-touched files (especially `IncidentDetail.jsx`, `CAPADetail.jsx`, the new closure modals, or the new closure_gates / notifications services) should re-read those files cold — don't trust this session's grep-based inferences.
-
-## Most recent session — 2026-05-07 (later evening) — P3-O1 + P3-O2 (multi-tenancy onboarding showcase + members management)
-
-Session shipped P3-O1 (org sign-up showcase + first-site onboarding) and P3-O2 (org members admin) end-to-end with audit. The user reframed P3-O1 mid-design from "generic multi-tenancy hardening" to "onboarding showcase" — the slice is about *telling the story* of a visitor signing up, picking compliance frameworks for their sector, and walking into a dashboard scoped to their org. Org switching, real invitation emails, and isolation test runners were explicitly scoped out. Four commits stacked on `backend`; no merges from `origin/main` this session.
-
-| Area | What changed | Commit |
+| Item | Description | Commit |
 |---|---|---|
-| P3-O1 slice 1 — sign-up + onboarding showcase | Migration 016 (5 new columns on `organizations` + `activity_log` CHECK includes `'organization'`). New `POST /auth/signup-org` (atomic org+founder admin user, `org_created` activity row). Locked `/register` to 403 + `/auth/sites` to authMiddleware (was: unauth, leaked every site across orgs). `/login` + `/me` + `/profile` JOIN `organizations` so user payload always carries org demographics. JWT carries `org_name` for first-paint UI without /me round-trip. New FE `SignupOrg.jsx` (3-step: Org → Compliance → Founder) reusing every `auth-*` class verbatim. New `OnboardingFirstSite.jsx`. Register.jsx rewritten as invite-only stub. Login footer CTA repointed. TopBar breadcrumb's hardcoded "SDS Manager" became dynamic `user?.org_name`. Settings → Profile → new read-only Organization section. Seed adds `Acme Manufacturing` second org (`acme@sdsmanager.com`) with no sites/assets/incidents — the empty new-tenant onboarding showcase. | `b72bd6c` |
-| Compliance frameworks → multi-select with report-format granularity | After review, the user iterated on the single `primary_regulator` field — replaced with a multi-select set of report-format codes. Migration 017 adds `compliance_frameworks TEXT` (JSON array). 6 codes: `osha_300 / osha_300a / osha_301 / riddor_f2508 / safework_nsw / generic`. Country auto-pre-selects defaults; country switch always overwrites with new defaults (was preserving stale OSHA when switching to UK). SignupOrg step 2 renders 6 framework cards with checked-state border tint. Settings shows comma-separated framework names via `FRAMEWORK_LABELS` map. JWT swaps `primary_regulator` → `compliance_frameworks`. `primary_regulator` column kept in DB unused. | `650a2e8` |
-| P3-O2 — org members management | Rewrite of `server/routes/users.js`: `GET /` (JOIN sites, active+inactive sorted active-first), `POST /` (admin only, validates email format + role + cross-org site_id), `PATCH /:id` (admin only with **self-edit block** on role + is_active + **last-admin lockout** as defense-in-depth, field-level diff in `user_updated`), `POST /:id/password` (admin reset for another user; self goes through `/auth/password`). New `/admin/members` page: avatar circle + role pills + status pills + per-row Edit / Reset PW / Deactivate actions. Dual-purpose `MemberModal` (create/edit). Separate `PasswordResetModal`. Sidebar nav, TopBar PAGE_TIPS, App.jsx route. | `7aafa99` |
-| P3-O1/O2 audit fixes (after thorough audit pass) | User asked for thorough testing. Audit found 15 issues; 12 got fixed in one bundled commit. **authMiddleware re-checks `users.is_active` per request** via cached prepared statement — closes a real security hole where deactivated users kept full API access until JWT expired (24h). New `services/validators.js` (shared `validEmail()` regex + `checkLen()` + `checkPassword()` + caps `NAME_MAX=100, EMAIL_MAX=254, PASSWORD_MIN=8, PASSWORD_MAX=72, NAICS_MAX=32`) wired into `/signup-org` + `POST /users` + `PATCH /users` + `POST /users/:id/password` + `/auth/password`. Acme seed `org_created` now uses `writeActivity` with full metadata. New `'people'` icon in `Icons.jsx`. Members nav swapped from `'person'` → `'people'` (resolves icon collision with bottom-anchored Profile). Members action buttons wrapped in inline-flex `gap` (was: flush). SignupOrg country switch always resets frameworks (was: preserving stale selection across country changes). SignupOrg Back clears stale error. OnboardingFirstSite country becomes ComboBox (was: free-text). OnboardingFirstSite redirects to `/admin/sites` if org already has sites (was: re-creating duplicates by re-visiting URL). Members empty-state dead-branch removed. | `8f3b01c` |
+| UX-A | Post-report attachments | `ba14826` |
+| UX-B | Inline notes on activity timeline | `31f8be7` |
+| UX-C | Inline-edit description / area / department + PATCH activity log (body-parts deferred) | `ff465d8` |
+| UX-D | Witness CRUD post-creation | `d87ea04` |
+| UX-E | Severity override modal | `dffaf1f` |
+| UX-F | Global search jump-to in TopBar | (earlier) |
+| UX-G | CAPA due-date color coding | `48ca9b2` |
+| UX-H | Cross-page stop-work banner | `48ca9b2` |
 
-**Issues identified but deferred** (no fix in this session):
-- **#11 Toast inside `.page` wrapper** — pre-existing pattern across InspectionEditor, InspectionsList, TemplatesList, TemplateEditor. Touching only Members.jsx would create inconsistency. Wider review needed if CLAUDE.md's `position:fixed`-breaks-inside-`.page` warning is to be enforced.
-- **#12 Single-letter initials for one-word names** (e.g., "Bobby" → "B", "田中" → "田") — matches existing `auth.js` and seed pattern. Changing here alone would diverge.
-- **#15 "(you)" tag font-size 11px** — purely cosmetic, falls below fix-it threshold.
-- **`/reports` page filtering by `compliance_frameworks`** — explicit follow-up. A RIDDOR-only org still sees OSHA report cards. Decoupled from this slice; would touch the Reports page rendering.
-- **Real invitation/email flow** — slice 2 of P3-O1; needs `invitations` table + token + email service.
+---
 
-**Honest hallucination report** (per user's "what's your hallucination risk?" pattern):
-- **Backend: low risk.** Every endpoint exercised via curl with multiple edge cases. Deactivation revoke verified bidirectionally (200 → 401 instantly on deactivate, 401 → 200 on reactivate). Email format / length cap / password cap rejections verified. SQL-injection-safe (parameterized queries). UTF-8 / emoji round-trip intact. Compliance-framework whitelist confirmed (junk codes filtered, all-junk → 400, valid+junk → 201 with junk dropped).
-- **Frontend: medium-high risk.** Build clean (Vite 740kB bundle, no parse errors). All 80+ class names I reference verified to exist in `client/src/styles/*.css`. ComboBox `disabled` prop confirmed. But: SignupOrg 3-step wizard navigation, Step 2 framework checkbox cards (heavy inline-token styling), OnboardingFirstSite redirect-during-load gate, Members table action button cluster, Members modal field disable behavior, Settings Organization section row layout — **none of these were click-tested in a browser**. The user is the only path to closing this risk.
-- **Stale-cache risk:** the JWT shape changed (added `org_name`, replaced `primary_regulator` with `compliance_frameworks`). Any browser tab open before the deploy will have a stale token; first paint after pull will show empty Frameworks row in Settings until /me round-trips, which AuthContext handles cleanly (blocks UI render until /me resolves) — but worth noting.
+## Architectural decisions worth knowing
 
+- **Single-org-per-user.** `users.email` is globally UNIQUE. No `org_memberships` table, no "active org" concept. JWT carries one `org_id`. Switching orgs would require a schema rebuild (drop UNIQUE on email + add `org_memberships`).
+- **No real invitation flow.** Admin creates users directly via `POST /api/users` with email + initial password, hands credentials off out-of-band.
+- **`primary_regulator` is dead schema.** Replaced by `compliance_frameworks` JSON array. Column kept (SQLite DROP COLUMN is expensive). Never read or write `primary_regulator`.
+- **6 framework codes** whitelisted in `server/routes/auth.js` `VALID_FRAMEWORKS`: `osha_300 / osha_300a / osha_301 / riddor_f2508 / safework_nsw / generic`. Adding a new framework needs touches in: `VALID_FRAMEWORKS`, `client/src/pages/SignupOrg.jsx` `FRAMEWORKS`, `client/src/pages/Settings.jsx` `FRAMEWORK_LABELS`, `client/src/pages/reports/ReportsPage.jsx` `requiresFramework`, and (for incident-side gating) `client/src/utils/frameworks.js`.
+- **Admin-mutation guardrails on users** (`server/routes/users.js`): admin-only allowlist; self-edit block on role + is_active; last-admin lockout. `authMiddleware` re-checks `users.is_active` per request via cached prepared statement — deactivation revokes JWT instantly.
+- **Shared validators** in `server/services/validators.js`: `validEmail()`, `checkLen()`, `checkPassword()` + caps (`NAME_MAX=100, EMAIL_MAX=254, PASSWORD_MIN=8, PASSWORD_MAX=72, NAICS_MAX=32`). New input-accepting routes should import these.
+- **Activity logging:** `server/services/activity_log.js` exposes `writeActivity()` + `diffFields()`. Use for any audit-relevant mutation. `entity_type` CHECK accepts: `incident, investigation, capa, system, template, inspection, asset, document, folder, site, user, link, asset_category, answer_set, organization`.
+- **List endpoints disagree on search param:** `incidents/investigations/capas/inspections` use `search`; `assets/documents` use `q`. Send both for cross-endpoint search.
+- **Migration collisions** (both branches numbered the same migration in parallel): renumber yours upward and add a letter-suffixed fixup (e.g. `017a_…`) that aliases the legacy filename in `_schema_migrations`. Mirrors `014a_normalize_site_hierarchy_name.sql` and `017a_rename_legacy_org_migrations.sql`. Idempotent on fresh DBs.
 
+---
 
-Session shipped P3-N1 (site detail page + hierarchy) end-to-end, then prototyped P3-L1 back-tracking across four detail pages, then delivered the P3-A1 compliance audit-logging stack in four chunks (foundation, admin config + gaps, audit export, multi-select polish + role gate). Pulled `origin/main` mid-session bringing dashboard customisation + assets/incidents redesigns. Three new roadmap items added at the user's direction (P3-AI3 video intake, P3-OP5 risk register, P3-RG1 Australian regulation).
+## Operating norms
 
-| Area | What changed | Commit / status |
-|---|---|---|
-| P3-N1 site detail + hierarchy | Migration 015 (parent_id; originally 012, renumbered after this session's main merge), enriched `GET /api/sites/:id` (parent + ancestors + children + counts + recents), cycle/depth/cross-org validation. New `/admin/sites/:id` page with stacked-cards layout (`sd-*` page-scoped styles); list cards become clickable; "Sub-site of …" parent chip; parent-picker in modal that excludes self+descendants. Login demo grid gains Wendy (worker) for role-gate click-testing. | `25ad9af` (pushed to `origin/backend`) |
-| Merge from main | PR #6 merged earlier (`52479ba`); pulled main into backend (`d38cbc0`) bringing dashboard customisation (`8328863`), assets page redesign (`260584e`), incidents page redesign (`38597f4`). Migration 011 (`dashboard_layout`) auto-applied. | `d38cbc0` (pushed) |
-| P3-L1 back-tracking prototype | New `referencesFor()` service + `GET /api/links/references?type=X&id=Y`. Shared `<ReferencedByCard>` component dropped into AssetDetail / IncidentDetail / InvestigationDetail / CAPADetail (one import + one JSX line per page). Refby card groups by Incidents / Investigations / CAPAs / Documents; click-through navigates. Open follow-ups: inspections aren't in `LINKABLE_TYPES`; documents have no detail page. | uncommitted |
-| P3-A1 chunk 1 (foundation) | Migration 013 (CHECK widened), `services/activity_log.js` helper, sites + assets + documents + folders + links + auth all log compliance-relevant mutations with field-level diff metadata. | uncommitted |
-| P3-A1 chunk 2 (admin + gaps) | Migration 014 (asset_category + answer_set), asset_categories full CRUD + per-field operations logged, answer_sets (options before/after captured), filled investigation/template/inspection partial-coverage gaps. | uncommitted |
-| P3-A1 chunk 3 (export endpoint + UI) | `/api/reports/audit-log` + `/audit-log/export.csv` (UTF-8 BOM, RFC 4180), new "Audit Log" card on Reports (slate-gray `rt-audit`), filterable preview table + CSV download. Export logged → tamper-evident. | uncommitted |
-| P3-A1 chunk 4 (polish) | Entity-number resolver (INC-/INV-/CAPA-/AST-/DOC-/INS-), audit-role gate (ehs_officer/manager/admin only — supervisor blocked), multi-select pickers (actions grouped + select-all-per-group, entity types flat, actors flat), `MultiPicker` component portal'd to body to escape `.rpt-panel` `overflow:hidden` clip. | uncommitted |
-| Roadmap updates | Added **P3-AI3** (video intake), **P3-OP5** (risk register / risk assessment — distinct from the 5×5 incident-scoring matrix), **P3-RG1** (Australian regulation — Safe Work Australia notifiable-incident workflow alongside OSHA + RIDDOR). Updated P3-L1 description to call out the inspection + document-detail open follow-ups. Updated P3-A1 description with all four chunks + the deferred items (`#9` per-answer, `#10` verb-normalisation). | this commit |
+- Treat as an actual app, not hackathon polish.
+- Each task = one focused commit + push to `origin/backend`.
+- Always leave dev servers running so the user can click-test.
+- Don't claim FE success without exercising the UI; "Vite transforms cleanly" is not proof.
+- **Never override or overdo UI/UX** — reuse existing classes/tokens; no new CSS or inline styles unless the feature genuinely needs them, in which case ask first. Page-scoped CSS uses prefixes (`idet-`, `invd-`, `dp-`, `tp-`, `ie-`, `sd-`, etc.).
+- **After every multi-step Edit on JSX/JS**, verify the file actually parses — run `cd client && npx vite build` or grep the Vite log for "SyntaxError"/"Failed to" lines, not just timestamp markers.
+- **For merges from main with both backend + UI/UX changes:** prefer default merge with manual resolution over `-X theirs`. The latter silently dropped a `useRef` import on a prior merge.
+- **Read schema before referencing columns.** Don't trust grep summaries for files in the "re-read cold" list above.
 
-**Honest hallucination report at end of session** (per user-requested "what's your hallucination risk?" pattern):
-- **Low risk on BE**: every endpoint exercised via curl with multiple parameter combinations, every audit row inspected by id, role gates verified for Elena (ehs_manager) / Marcus (supervisor) / Wendy (worker), CSV format inspected.
-- **Medium-high risk on FE**: the `MultiPicker` component, the portal'd popover with computed `getBoundingClientRect` positioning, scroll-fix, indeterminate checkbox state, disabled state styling — none of these were click-tested in a browser. Build clean + HMR clean confirms parse correctness, not visual correctness.
-- **Stale-cache risk**: `ActionPicker` was renamed to `MultiPicker` mid-session; if the user has Reports open in a browser tab, hard-refresh before judging visuals.
-
-## Most recent session — 2026-05-06 (afternoon → evening)
-
-Session shipped the document folder system, fixed the demo seed's missing PDFs, repaired the broken investigation link-modal, then delivered P3-L2 (media on investigations) end-to-end. Multiple pulls from `origin/main` folded in the templates + inspections feature, the Drive-style documents redesign + preview, and the premium UI overhaul (auth/profile rewrites, animated nav icons, kanban hover-expand) — all without disturbing local work. Two PRs merged (#5, #6).
-
-| Area | What changed | Commit / PR |
-|---|---|---|
-| Document folder system (P3-N2) | Migration 010 + `/api/folders` CRUD + folder_id filter on docs; FE breadcrumb, site filter, "+ New folder", folder tiles in grid + list, kebab rename/delete with content-count warning, native HTML5 DnD doc → folder / folder → folder / either → breadcrumb; Drive-style global search at root, scoped inside folders; folder navigation in the link-from-library modal on investigations | `12862f8` (PR #5) |
-| Demo seed: real PDFs on disk | Seeded sample docs now write valid 1-page PDFs to `server/uploads/` and persist `stored_filename` so download/preview work on a fresh `SEED_FORCE=1` reseed (previously returned 404 because `stored_filename` was NULL) | bundled in `12862f8` |
-| Investigation link-modal repair | Switched the broken `docs-modal-*` classes (deleted upstream by `b27b352`) to the standard shared `.modal-*` shell so the modal actually renders | bundled in `12862f8` |
-| Folder system from main | Documents page Drive-inspired UI + inline preview (`1873bb2`), templates + inspections module (`918279a`), inspection redesign + template conditional logic (`9e34bfb`) | merged in `eeafa48` and `ee91f6b` |
-| Premium UI overhaul (from main) | Split-screen auth, tabbed profile, global polish (566-line `styles.css` rework), animated nav icons (`86c305f`), kanban hover-expand (`ac92b88`) | merged in `0b75795` |
-| Roadmap ticks | P3-N2, P3-N3, P3-OP2, P3-OP3 ticked | `189f942` |
-| P3-L2 media on investigations | Mirror of UX-A: "+ Add files" header button, hover-reveal red × delete, dashed CTA empty state, activity-log entries, role-gated delete (uploader OR elevated). Page-scoped `.invd-attach-*` CSS mirrors UX-A's `.idet-attach-*` design — explicitly authorized by user. Field-name bug fix (`a.original_name` → `a.filename`, `a.size` → `a.size_bytes`) folded in. | `e75e8ce` (PR #6) |
-| Search-input collapse fix | Search field in link-from-library modal was shrinking to intrinsic width; added `flex: 1; min-width: 0` so it spans the row left of the 160px type dropdown | `ab2313f` (PR #6) |
-| L2 worker-upload alignment | Removed the `canEdit &&` gates so workers can upload investigation attachments (matches UX-A behavior); per-row delete still gated on `canDeleteAttachment` (uploader OR elevated) | `77a2eab` (PR #6) |
-
-Two PRs merged into `main`: **#5** (folder system + seed fix + investigation link-modal repair, merged at `18940c7`) and **#6** (L2 media + search fix + worker-upload alignment, status open at end of session — merge if not already). After PR #6 lands, main = backend.
-
-## Most recent session — 2026-05-07 — UX backlog cleanup + P3-L1 closure
-
-Session shipped the entire remaining UX backlog (UX-C/D/E + ticked F) and closed P3-L1 with link/unlink + missing CSS. Pulled `origin/main` mid-session bringing investigations redesign + ComboBox/SmartTextarea components + accessibility passes.
-
-| Area | What changed | Commit |
-|---|---|---|
-| Merge from main | 7 commits from main folded in (investigations redesign `0fb699c`, kanban hover-fix `79d66e9`, ComboBox + SmartTextarea `1782fa6`, accessibility `da194fd`, etc.). Used `-X theirs` so main's UI/UX wins on conflicting hunks; backend feature additions (ReferencedByCard mounts, audit-log card, site-detail page, `/admin/sites` page tip) survived as non-conflicting hunks. | `f313722` |
-| UX-E severity override modal | New `SeverityOverrideModal.jsx` mirrors AssignModal's `idet-modal-*` pattern (zero new CSS). "Override severity" trigger in incident detail header-actions row, gated to elevated. Sev `<select>` + required-reason textarea; BE already wired severity_override / _by / _reason and writes severity_overridden activity_log row. | `dffaf1f` |
-| UX-C inline-edit description / area / department | `<DescEdit>` + `<FactEdit>` components in IncidentDetail. Field-level edit affordance via small `idet-edit-trigger` pencil. Department added as a first-class fact-row. **Closed compliance gap**: PATCH /incidents/:id now writes incident_updated activity_log row with field-level diff metadata, so non-restricted edits aren't silent (OSHA 1904.33 amendment trail). New action wired into timeline icon helpers. Body-parts editor deferred. | `ff465d8` |
-| UX-D witnesses post-creation | BE: 3 new routes (POST/PATCH/DELETE `/incidents/:id/witnesses[/:wid]`), all gated to elevated, all logging witness_added / witness_updated / witness_removed with full data + diff in metadata. FE: dual-purpose `WitnessModal.jsx`, Witnesses card placed between Reporter and Triage state in the sidebar, hover-reveal × on rows for elevated. Page-scoped `.idet-witness-*` CSS. | `d87ea04` |
-| P3-L1 follow-ups | `inspection` added to `LINKABLE_TYPES` + `PARENT_TABLES`. New `inspectionsReferencing()` (poly-only) + `assetsReferencing()` (uses incidents.asset_id direct FK + poly). Six buckets total. Every row carries `link_id` (NULL on direct-FK). `<ReferencedByCard>` gains "+ Link" header button + hover-reveal × per poly row. New `<AddLinkModal>` (type chips + debounced search + click-to-link, sends both `search` and `q` params because endpoints are inconsistent — bug caught in testing). Mounted on InspectionReport.jsx and inside the document preview modal. Document rows deep-link to `/documents?folder=N` (DocumentsList consumes via `useSearchParams` and walks parent_id for breadcrumb). **Retro-added `.refby-*` CSS (~140 lines) — original P3-L1 ship had row classes referenced in JSX with zero CSS anywhere in the tree, making click affordances invisible.** New `.alm-*` (~155 lines) for the modal. | `8b3359d` |
-| Roadmap | Ticked UX-C, UX-D, UX-E, UX-F (already-implemented), P3-L1; itemized P3-L1 follow-up sub-chunks; updated `## State` section to reflect this session's pushes. | this entry |
+---
 
 ## Quick re-orientation for a fresh session
 
-1. Read this `roadmap.md` first — full status with commit SHAs. Most recent session entry is dated 2026-05-08.
-2. Read `plan-phase-2.md` if you need design rationale for any Phase-2 wave.
-3. Read `~/.claude/projects/-Users-rukaiyafahmida-Downloads-SDS-Manager-Incident-Management-System-project-ehs-incident-manager/memory/MEMORY.md` for user preferences and project context. Pay particular attention to `feedback_migration_collision.md` and `feedback_merge_x_theirs.md` if any merge work is on deck.
-4. `git fetch origin && git status` — `backend` should be at `36a564f`, working tree clean. `origin/backend == origin/main == backend`.
-5. Boot: `cd server && node --watch index.js` (port 3001) and `cd client && npm run dev` (port 5173). Existing-tenant login: `elena@sdsmanager.com / password123` (ehs_manager). Empty new-tenant onboarding showcase: `acme@sdsmanager.com / password123` (admin, no sites/data — OSHA-only US org; good for the "fresh OSHA tenant" UX). For exercising the Reports framework filter: `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU). Or sign up a brand-new org via `/signup`.
-6. **First-priority click-tests** (from the 2026-05-08 session's "not click-tested" list — closing this gap is the cheapest hallucination-reduction move):
-   - `/reports` rendering for elena (multi-framework — should see all OSHA cards + RIDDOR + Metrics + Audit), acme (OSHA-only — RIDDOR card hidden), riddor-test (RIDDOR-only — OSHA cards hidden), sydney-test (SafeWork-NSW-only — only Metrics + Audit visible plus the "no reports available" empty state, since RG1 hasn't shipped a SafeWork card yet).
-   - `/incidents/:id` detail page — main consolidated cards + sidebar UX; backend's witnesses card and edit affordances need to render alongside main's tiered closure UI.
-   - `/capas/:id` detail — main's hero-card redesign + new `UpdateProgressModal`.
-   - Tiered closure flow: open an incident → request closure (`ClosureChecklistModal`) → as elevated user, approve/reject via `ClosureApprovalModal` → re-open via `ReopenModal`.
-   - Notification nav UX from main's `d3f06cb` — animated 3D logo, badge positioning.
-7. **Files to re-read cold before extending** (this session inferred their behavior from grep, not full reads):
-   - `server/services/closure_gates.js` (main's ISO 45001 gates)
-   - `server/services/notifications.js` (main's notifications service)
-   - `server/routes/incidents.js` (auto-merged: backend's witnesses + recordability-verify + stop-work, alongside main's closure_request / approve / reject / reopen + OSHA fields)
-   - `client/src/pages/incidents/IncidentDetail.jsx` (auto-merged: backend's edit affordances + witnesses card, alongside main's consolidated card layout)
-   - `client/src/pages/capas/CAPADetail.jsx` (main's hero redesign)
-8. **What's likely next** (user-priority order, taken from open P3 items):
-   - **Click-test the merge** (item 6 above) — closes hallucination risk before any new feature.
-   - **Body-parts editor** to fully close UX-C — needs BodyMap3D integration outside the wizard flow.
-   - **Real invitation/email flow** — slice 2 of P3-O1; needs `invitations` table + token + email service.
-   - **Remaining P3 themes**: AI assistance (AI1/AI2/AI3 video), ops (OP1 maintenance / OP4 scheduling / OP5 risk register), regulatory (RG1 Australia — also closes the loop on the `safework_nsw` framework code that has no Reports card yet), onboarding (OB1/OB2/OB3).
-9. **Operating norms** (per user feedback during Phase 2 + Phase 3):
-   - Treat as an actual app, not hackathon polish.
-   - Each task = one focused commit + push to `origin/backend`.
-   - Always leave dev servers running at the end so the user can click-test.
-   - Don't claim FE success without actually exercising the UI; "Vite transforms cleanly" alone is not proof.
-   - **Never override or overdo UI/UX** — reuse existing classes/tokens; no new CSS or inline styles unless the feature genuinely needs new visual treatment, in which case **ask first**. If you do add page-scoped CSS, follow the prefix convention (`idet-` incident detail, `invd-` investigation detail, `dp-` documents page, `tp-` templates list, `ie-` inspection editor, etc.).
-   - **After every multi-step Edit on JSX/JS**, verify the file actually parses — run `cd client && npx vite build` or grep the Vite log for "SyntaxError"/"Failed to" lines, not just timestamp markers. Babel parse errors don't always abort HMR; the trailing log entry can be a stale "hmr update" while the file is silently broken.
-   - **For migration collisions** (both branches numbered the same migration in parallel): renumber yours upward and add a letter-suffixed fixup (e.g. `017a_…`) that aliases the legacy filename in `_schema_migrations`. Mirrors the existing `014a_normalize_site_hierarchy_name.sql` and `017a_rename_legacy_org_migrations.sql` pattern. Idempotent on fresh DBs.
-   - **For merges from main with both backend + UI/UX changes:** prefer default merge strategy with manual resolution over `-X theirs`. The 2026-05-08 merge succeeded with default strategy + 2 manual resolutions; the prior `-X theirs` merge silently dropped a `useRef` import. Default merge surfaces real conflicts so you can choose per-file.
+1. Read this file. Most recent session at the bottom.
+2. `git fetch origin && git status` — `backend` should be at `2e8daa7`, working tree clean. `origin/main` lags by today's commit (not yet PR'd).
+3. Boot servers (BE :3001, FE :5173). Login as elena (multi-framework) for the broadest exercise, or one of the empty test orgs to see framework-gated UI.
+4. For new work in any "re-read cold" file (above), read it top-to-bottom before editing.
+5. Ask the user which P3 item to pick up. Don't guess.
+
+---
+
+## Recent session log
+
+### 2026-05-08 (later) — OSHA/RIDDOR display gated by compliance_frameworks
+
+Commit `2e8daa7`. New `client/src/utils/frameworks.js` mirrors ReportsPage's
+defensive-fallback pattern: missing `compliance_frameworks` field → show
+everything (legacy users / stale JWTs); explicit empty array → hide everything.
+Six surfaces gated: IncidentDetail (header badges + Triage card OSHA row +
+nested OSHA detail block + RecordabilityVerifyCard mount), InvestigationDetail
+(banner + summary OSHA fact-row + summary RIDDOR fact-row), InvestigationsPage
+(RIDDOR pill on kanban + list + `—` fallback), Dashboard (KPI counts zero out
+under the gate; existing guard then hides the reg-alerts block), ReportWizard
+Step 3 (review-card OSHA/RIDDOR rows + RIDDOR "phone HSE" next-step item).
+
+FE-only, no schema. P3-RG1 will extend the helper with `showSafework` when AU
+surfaces exist. Build clean (184 modules, 777 KB bundle). Not click-tested by
+me — user verifying. **Servers left running.**
+
+### 2026-05-08 — Reports framework filter + merge-from-main + PR #8
+
+Two pieces of work + one round-trip PR.
+
+| Area | What changed | Commit |
+|---|---|---|
+| Reports cards filter by `compliance_frameworks` (closes P3-O1/O2 follow-up) | Each regulator card declares `requiresFramework` (`osha_300/300a/301/riddor_f2508`); `useMemo`-based `visibleReports` + tab-fallback effect; empty-state copy when no cards visible; defensive fallback for missing/empty frameworks. | `37e6826` |
+| Merge from `origin/main` | 8 commits (OSHA compliance fields + 301 form + notifications, tiered closure workflow + ISO 45001 gates, hooks fix, animated logo, CAPA hero redesign, IncidentDetail consolidation, ReferencedByCard inline). UI/UX wins on conflicting hunks; backend logic preserved. | `8c9ac40` |
+| Migration collision resolved | Renumbered backend's `016` → `018` and `017` → `019`; new `017a_rename_legacy_org_migrations.sql` aliases legacy names in `_schema_migrations`. Idempotent on fresh DBs. | `8c9ac40` |
+| PR #8 (backend → main) | Merged, fast-forward-pulled. `origin/backend == origin/main == 36a564f` at end of session. | merge `36a564f` |
+
+Two manual conflicts: `Register.jsx` (kept backend's invite-only stub) and
+`ReportsPage.jsx` (merged main's new osha301 card with backend's `requiresFramework` gate).
+
+**Honest hallucination report:** BE low risk (curl-tested per user/org). FE
+medium-high risk — heavy main-side refactors auto-merged but never opened in a
+browser. See "Files to re-read cold" in Current state.
+
+### Earlier sessions (compressed)
+
+- **2026-05-07 (later evening)** — P3-O1 (org sign-up + onboarding showcase, mig `018`+`019`) + P3-O2 (members management) + audit-fix pass (auth re-checks `is_active`, shared validators). Commits `b72bd6c` / `650a2e8` / `7aafa99` / `8f3b01c`.
+- **2026-05-07** — UX-C/D/E + P3-L1 closure (link/unlink + missing CSS). Merged 7 commits from main (investigations redesign, ComboBox/SmartTextarea, accessibility). Commits `f313722` / `dffaf1f` / `ff465d8` / `d87ea04` / `8b3359d`.
+- **2026-05-06 (afternoon → evening)** — P3-N2 doc folders + seed-PDF fix + investigation link-modal repair + P3-L2 media on investigations. PRs #5 + #6. Folded in main's templates/inspections + Drive-style preview + premium UI overhaul. Commits `12862f8` / `e75e8ce` / `77a2eab` / `ab2313f`.
+- **2026-05-06 (earlier)** — P3-N1 site detail + hierarchy (mig `015`), P3-L1 prototype, P3-A1 four chunks (foundation / admin gaps / export endpoint / polish). Pulled main's dashboard customization + assets/incidents redesigns. Roadmap items P3-AI3 / P3-OP5 / P3-RG1 added.
+- **Earlier** — Phase 2 waves 1–7, UX-A/B/F/G/H. All commit history visible via `git log`.
