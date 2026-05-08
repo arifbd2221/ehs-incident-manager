@@ -8,21 +8,24 @@ the full detail. Most recent session entries at the bottom.
 
 ## Current state
 
-- **Branch:** `backend` at `6051395` — `origin/backend == origin/main == 6051395`.
-  Two PRs merged this session (#9 UI/UX overhaul merge, #10 P3-OB2 sites + assets).
-  Main also added a maintainer commit `6051395` (responsive mobile/tablet support)
-  that fast-forwarded into backend post-PR #10 merge.
+- **Branch:** `backend` at `fb8fc8f` (plus this roadmap update). 2 commits ahead of
+  `origin/main` at `6051395` — work_hours CSV slice not yet PR'd to main.
+  Two PRs merged this session: #9 (UI/UX overhaul merge), #10 (P3-OB2 sites + assets).
+  Main added `6051395` (responsive mobile/tablet support) which fast-forwarded into
+  backend post-PR #10 merge.
 - **Phase 2:** code complete (only F6.2 manual demo walkthrough open).
 - **Wave 7:** E7.1 (custom asset fields per category) done.
 - **UX backlog A–H:** done. UX-C body-parts editor deferred (needs BodyMap3D
   outside the wizard).
-- **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, **OB2** (users + sites + assets),
+- **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, **OB2** (users + sites + assets + work_hours),
   OP2, OP3.
 - **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, OB3, RG1.
-- **Migrations applied:** 001–019 + letter fixups `014a`, `017a`. Final lexical
+- **Migrations applied:** 001–020 + letter fixups `014a`, `017a`. Final lexical
   order: 001 → 014 → 014a → 015 → 016_osha_compliance_fields → 017_closure_workflow
-  → 017a_rename_legacy_org_migrations → 018_org_onboarding_fields → 019_compliance_frameworks.
-  `017a` aliases the legacy backend names in `_schema_migrations` — idempotent on fresh DBs.
+  → 017a_rename_legacy_org_migrations → 018_org_onboarding_fields → 019_compliance_frameworks
+  → 020_activity_log_work_hours. `017a` aliases the legacy backend names in
+  `_schema_migrations` — idempotent on fresh DBs. `020` widens `activity_log` CHECK
+  to accept `entity_type='work_hours'`.
 - **Demo accounts** (all `password123`):
   - `elena@sdsmanager.com` (ehs_manager, multi-framework: OSHA 300/300A/301 + RIDDOR)
   - `marcus@sdsmanager.com` (supervisor), `james@sdsmanager.com` (ehs_manager Sheffield),
@@ -32,6 +35,16 @@ the full detail. Most recent session entries at the bottom.
   - `sydney-test@example.com` — empty AU org, SafeWork-NSW-only (no Reports card yet — RG1 open)
 - **Dev servers:** `cd server && node --watch index.js` (BE :3001) +
   `cd client && npm run dev` (FE :5173).
+
+### Next session priority
+
+**work_hours: industry-standard surfaces** — see "Smaller open follow-ups" below
+for the full scoped breakdown. Storage + CSV import are done (`fb8fc8f`); next
+slice adds the manual entry / edit / delete UI, periods-list display on
+`/admin/sites/:id`, and switches OSHA 300A + rate calcs from reading
+`sites.total_hours_worked` to `SUM(work_hours.hours_worked)`. ~1.5–2hr slice;
+yellow zone. Per-employee shape was considered and rejected — industry
+standard is per-site aggregate (VelocityEHS / Cority / Enablon all confirm).
 
 ### Files to re-read cold before extending
 
@@ -60,7 +73,7 @@ These were auto-merged from main and never read end-to-end this session:
 
 ### Onboarding + data import
 - [ ] **P3-OB1** User onboarding flow — first-login walkthrough, sample-data toggle, role-tailored "what to do first".
-- [x] **P3-OB2** CSV import — users / sites / assets done; **work_hours** outstanding (table exists, no CRUD UI yet — CSV would be the first write path).
+- [x] **P3-OB2** CSV import — users / sites / assets / work_hours **all done** (`e30954d` `57db454` `7388574` `fb8fc8f`).
 - [ ] **P3-OB3** Document versioning — supersede a doc with a new file, audit trail of prior revisions.
 
 ### AI assistance
@@ -78,6 +91,13 @@ These were auto-merged from main and never read end-to-end this session:
   - When RG1 lands, extend `client/src/utils/frameworks.js` with `showSafework` (one-line addition; pattern shipped 2026-05-08 in `2e8daa7`).
 
 ### Smaller open follow-ups
+- **work_hours: full industry-standard surfaces** (next-session priority). The CSV import + storage shape are done (`fb8fc8f`); what remains to match VelocityEHS / Cority / Enablon-tier behavior:
+  - **Manual entry modal on `SiteDetail.jsx`** — "Add work hours" + per-row "Edit" / "Delete" affordances on a periods table. Single-period add via form (period_start, period_end, hours_worked, avg_employees, notes). New BE routes: `POST /api/work-hours`, `PATCH /api/work-hours/:id`, `DELETE /api/work-hours/:id` (all elevated; same UNIQUE collision check + activity log shape as the import endpoint already uses).
+  - **Periods list on `SiteDetail.jsx`** — table showing every entered period for the site, sorted desc, with year-grouped subtotals. Replace or augment the existing aggregate display ("`SUM(hours_worked)`, `COUNT(periods)`").
+  - **Wire OSHA 300A + rate calcs to read from `work_hours`** — currently OSHA 300A and any TRIR/DART surfaces read `sites.total_hours_worked` (a denormalized cache). Switch to `SUM(work_hours.hours_worked) WHERE site_id = ? AND period_start BETWEEN ? AND ?`. Keep `sites.total_hours_worked` populated as a derived cache (auto-update on every work_hours INSERT/PATCH/DELETE) OR drop reads of it entirely. Audit which queries touch it first: `grep -rn "total_hours_worked" server/ client/`.
+  - **Dashboard rate widgets** (optional this slice) — TRIR / DART / severity-rate cards reading live from `work_hours`.
+  - **Decision recorded:** per-employee timesheet shape was considered and rejected — VelocityEHS / Cority / Enablon all use **per-site, per-period aggregate** for OSHA 300A rate calc. Per-employee hours live in HRIS (Workday / ADP / SAP) and integrate via flat-file or API. Per-employee in EHS only makes sense for **industrial hygiene exposure tracking** (chemical / noise / radiation dose), which is a separate dose-tracking schema and out of scope for OSHA recordkeeping. Don't relitigate this in next session; this is the industry-standard pattern and it's what we've built.
+  - Estimated scope: ~1.5–2 hr in a fresh session. Yellow zone.
 - Body-parts editor for UX-C — BodyMap3D integration outside the wizard.
 - Real invitation/email flow (slice 2 of P3-O1) — needs `invitations` table + token + email service.
 - Org rename / archive UI.
@@ -109,6 +129,7 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 | P3-OB2 (users) | Generic `csv_import.js` engine + users adapter; admin-only; dry-run + atomic commit; Members.jsx button | `e30954d` + `d8d6803` (modal fixes) |
 | P3-OB2 (sites) | Sites adapter (parent_name resolves to parent_id, two-pass for in-file parent refs, cycle/depth re-checked at insert); generic `<ImportModal>` extracted; users adapter consistency fix | `57db454` |
 | P3-OB2 (assets) | Assets adapter (display_id case-insensitive uniqueness; asset_type → category resolution; v1 skips custom_fields); button on AssetsList | `7388574` |
+| P3-OB2 (work_hours) | Migration `020` widens `activity_log` CHECK; `routes/work_hours.js` adapter mounted at `/api/work-hours`; ISO date validation w/ calendar round-trip; UNIQUE(site_id, period_start) collision detection; second "Import work hours" button on `/admin/sites` | `fb8fc8f` |
 | Priya admin demo | Seeded admin user in SDS Manager Inc. + first row in Login.jsx DEMO grid | `dd94fe4` |
 
 ## Done — UX backlog
@@ -165,9 +186,10 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 
 ## Recent session log
 
-### 2026-05-08 (afternoon) — OSHA/RIDDOR gating + Priya admin + P3-OB2 + main merges
+### 2026-05-08 (afternoon) — OSHA/RIDDOR gating + Priya admin + P3-OB2 (full) + main merges
 
-Long session, ~2.5hr. Seven commits + two PRs round-tripped.
+Long session, ~3hr. Nine commits + two PRs round-tripped. P3-OB2 closed in full
+(users + sites + assets + work_hours all on the shared engine).
 
 | Area | What changed | Commit |
 |---|---|---|
@@ -181,6 +203,8 @@ Long session, ~2.5hr. Seven commits + two PRs round-tripped.
 | P3-OB2 sites + ImportModal generic | Sites adapter mounted on the engine. Modal extracted to `client/src/components/shared/ImportModal.jsx` parameterized by `{title, subtitle, helperText, templateUrl, templateFilename, importFn, entityNoun}`. Members + Sites both use it now. Users adapter consistency fix bundled (mixed-error duplicate detection). | `57db454` |
 | P3-OB2 assets | Assets adapter — display_id case-insensitive uniqueness, asset_type → category resolution, custom fields skipped in v1. AssetsList "Import CSV" button between "Asset types" and "+ New asset". | `7388574` |
 | PR #10 (backend → main) | Round-tripped. Maintainer also pushed `6051395` "responsive: full mobile/tablet support" between PR #10 merge and my fast-forward — fast-forwarded into backend post-merge. | merge `7a8f72e` + ff `6051395` |
+| Roadmap tick | OB2 done for users + sites + assets; session entry added; old "(later)" mini-entry merged in. | `beeda7b` |
+| P3-OB2 work_hours | Migration `020` widens `activity_log` CHECK; `routes/work_hours.js` adapter mounted at `/api/work-hours`; ISO date format with calendar round-trip (Feb 30 rejected); UNIQUE(site_id, period_start) collision detection (in-file + against DB); second "Import work hours" button on `/admin/sites`; full activity log with thousands-formatted hours descriptions. **Closes P3-OB2 entirely.** Per-site aggregate (industry standard) — per-employee was considered and rejected. | `fb8fc8f` |
 
 **BE testing depth (high):** every adapter exercised end-to-end with curl
 across 26+ test cases including CRLF / BOM / Unicode / quoted commas /
