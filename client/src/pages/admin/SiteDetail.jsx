@@ -493,7 +493,7 @@ export default function SiteDetail() {
                 <th>Name</th>
                 <th>Country</th>
                 <th>Employees</th>
-                <th>Hours / yr</th>
+                <th>Time zone</th>
               </tr>
             </thead>
             <tbody>
@@ -506,7 +506,7 @@ export default function SiteDetail() {
                   <td>{c.name}</td>
                   <td>{c.country || '—'}</td>
                   <td>{fmtInt(c.annual_avg_employees)}</td>
-                  <td>{fmtInt(c.total_hours_worked)}</td>
+                  <td>{c.timezone || '—'}</td>
                 </tr>
               ))}
             </tbody>

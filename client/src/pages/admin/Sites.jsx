@@ -18,7 +18,6 @@ const EMPTY = {
   establishment_id: '',
   hse_establishment_id: '',
   annual_avg_employees: 0,
-  total_hours_worked: 0,
   timezone: 'America/New_York',
   parent_id: '',
 };
@@ -95,7 +94,6 @@ export default function Sites() {
       establishment_id: site.establishment_id || '',
       hse_establishment_id: site.hse_establishment_id || '',
       annual_avg_employees: site.annual_avg_employees ?? 0,
-      total_hours_worked: site.total_hours_worked ?? 0,
       timezone: site.timezone || 'America/New_York',
       parent_id: site.parent_id || '',
     });
@@ -126,7 +124,6 @@ export default function Sites() {
       const payload = {
         ...form,
         annual_avg_employees: Number(form.annual_avg_employees) || 0,
-        total_hours_worked: Number(form.total_hours_worked) || 0,
         parent_id: form.parent_id ? Number(form.parent_id) : null,
       };
       if (editing === 'new') {
@@ -248,7 +245,6 @@ export default function Sites() {
             </div>
             <div className="site-stats">
               <div><span>{s.annual_avg_employees ?? 0}</span> employees</div>
-              <div><span>{(s.total_hours_worked ?? 0).toLocaleString()}</span> hours/yr</div>
               <div><span>{s.timezone || '—'}</span></div>
             </div>
             {canEdit && (
@@ -427,47 +423,23 @@ export default function Sites() {
               {/* Workforce */}
               {activeSection === 'workforce' && (
                 <div className="sm-section" key="workforce">
-                  <div className="sm-row-2" style={{ animationDelay: '0ms' }}>
-                    <div className="sm-field sm-field-stat">
-                      <label className="sm-label">Annual avg. employees</label>
-                      <div className="sm-stat-input">
-                        <Icon name="person" size={18} />
-                        <input
-                          className="sm-input"
-                          type="number"
-                          min="0"
-                          value={form.annual_avg_employees}
-                          onChange={e => set('annual_avg_employees', e.target.value)}
-                        />
-                      </div>
+                  <div className="sm-field" style={{ animationDelay: '0ms' }}>
+                    <label className="sm-label">Annual avg. employees</label>
+                    <div className="sm-stat-input">
+                      <Icon name="person" size={18} />
+                      <input
+                        className="sm-input"
+                        type="number"
+                        min="0"
+                        value={form.annual_avg_employees}
+                        onChange={e => set('annual_avg_employees', e.target.value)}
+                      />
                     </div>
-                    <div className="sm-field sm-field-stat">
-                      <label className="sm-label">Total hours worked / yr</label>
-                      <div className="sm-stat-input">
-                        <Icon name="clock" size={18} />
-                        <input
-                          className="sm-input"
-                          type="number"
-                          min="0"
-                          value={form.total_hours_worked}
-                          onChange={e => set('total_hours_worked', e.target.value)}
-                        />
-                      </div>
+                    <div className="sm-label-hint" style={{ marginTop: 8 }}>
+                      Per-period work hours (OSHA TRIR/DART denominator) live on the site detail
+                      page — open a site to add or import periods.
                     </div>
                   </div>
-                  {(Number(form.annual_avg_employees) > 0 && Number(form.total_hours_worked) > 0) && (
-                    <div className="sm-workforce-calc" style={{ animationDelay: '50ms' }}>
-                      <div className="sm-calc-item">
-                        <span className="sm-calc-val">{Math.round(Number(form.total_hours_worked) / Number(form.annual_avg_employees)).toLocaleString()}</span>
-                        <span className="sm-calc-lbl">hrs / employee</span>
-                      </div>
-                      <div className="sm-calc-divider" />
-                      <div className="sm-calc-item">
-                        <span className="sm-calc-val">{(Number(form.total_hours_worked) / 200000).toFixed(2)}</span>
-                        <span className="sm-calc-lbl">OSHA rate factor</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -501,7 +473,7 @@ export default function Sites() {
         <ImportModal
           title="Import sites from CSV"
           subtitle="Bulk-create sites for a multi-location org. Strict template — headers must match exactly."
-          helperText="Columns: name, country, address, naics_code, establishment_id, annual_avg_employees, total_hours_worked, timezone, parent_name. Required: name. Use parent_name to nest under another site (already-existing or earlier in the same file). Hierarchy depth limited to 5 levels."
+          helperText="Columns: name, country, address, naics_code, establishment_id, annual_avg_employees, timezone, parent_name. Required: name. Use parent_name to nest under another site (already-existing or earlier in the same file). Hierarchy depth limited to 5 levels."
           templateUrl={siteImportTemplateUrl}
           templateFilename="sites_template.csv"
           importFn={importSites}
@@ -521,7 +493,7 @@ export default function Sites() {
         <ImportModal
           title="Import work hours from CSV"
           subtitle="Bulk-upload per-site, per-period work hours. Used for OSHA 300A incidence-rate calc."
-          helperText="Columns: site_name, period_start, period_end, hours_worked, avg_employees, notes. Required: site_name, period_start, period_end, hours_worked. Dates as YYYY-MM-DD. UNIQUE on (site_name + period_start) — one entry per site per period start."
+          helperText="Columns: site_name, period_start, period_end, hours_worked, avg_employees, contractor_hours_worked, contractor_avg_employees, notes. Required: site_name, period_start, period_end, hours_worked. Dates as YYYY-MM-DD. UNIQUE on (site_name + period_start) — one entry per site per period start. Contractor columns optional — fill them only if your org tracks the split (ISO 45001)."
           templateUrl={workHoursImportTemplateUrl}
           templateFilename="work_hours_template.csv"
           importFn={importWorkHours}

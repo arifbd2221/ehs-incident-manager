@@ -29,7 +29,7 @@ const router = Router();
 
 const SITE_AUDIT_FIELDS = [
   'name', 'address', 'country', 'naics_code', 'establishment_id',
-  'hse_establishment_id', 'annual_avg_employees', 'total_hours_worked',
+  'hse_establishment_id', 'annual_avg_employees',
   'timezone', 'parent_id',
 ];
 
@@ -216,7 +216,7 @@ router.post('/', (req, res) => {
 
   const {
     name, address, country, naics_code, establishment_id, hse_establishment_id,
-    annual_avg_employees, total_hours_worked, timezone, parent_id,
+    annual_avg_employees, timezone, parent_id,
   } = req.body;
 
   if (!name || !name.trim()) {
@@ -229,8 +229,8 @@ router.post('/', (req, res) => {
   const result = db.prepare(`
     INSERT INTO sites (
       org_id, name, address, country, naics_code, establishment_id,
-      hse_establishment_id, annual_avg_employees, total_hours_worked, timezone, parent_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      hse_establishment_id, annual_avg_employees, timezone, parent_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.user.org_id,
     name.trim(),
@@ -240,7 +240,6 @@ router.post('/', (req, res) => {
     establishment_id || null,
     hse_establishment_id || null,
     annual_avg_employees ?? 0,
-    total_hours_worked ?? 0,
     timezone || 'America/New_York',
     parent_id ? Number(parent_id) : null,
   );
@@ -277,7 +276,7 @@ router.patch('/:id', (req, res) => {
 
   const updatable = [
     'name', 'address', 'country', 'naics_code', 'establishment_id',
-    'hse_establishment_id', 'annual_avg_employees', 'total_hours_worked',
+    'hse_establishment_id', 'annual_avg_employees',
     'timezone', 'parent_id',
   ];
   const sets = [];
@@ -363,13 +362,13 @@ router.delete('/:id', (req, res) => {
 
 const SITE_IMPORT_HEADERS = [
   'name', 'country', 'address', 'naics_code', 'establishment_id',
-  'annual_avg_employees', 'total_hours_worked', 'timezone', 'parent_name',
+  'annual_avg_employees', 'timezone', 'parent_name',
 ];
 
 const SITE_IMPORT_TEMPLATE_BODY =
   SITE_IMPORT_HEADERS.join(',') + '\n' +
-  'Cleveland Plant,US,123 Main St,325199,12-3456,248,508420,America/New_York,\n' +
-  'Bay 3,US,,,,50,100000,America/New_York,Cleveland Plant\n';
+  'Cleveland Plant,US,123 Main St,325199,12-3456,248,America/New_York,\n' +
+  'Bay 3,US,,,,50,America/New_York,Cleveland Plant\n';
 
 // Two-pass insert lets parent_name reference a site created earlier in the
 // same import (e.g. a parent on row 2, child referencing the parent on row 3).
@@ -390,7 +389,6 @@ function buildSiteImportDefinition() {
       const naics_code = raw.naics_code.trim();
       const establishment_id = raw.establishment_id.trim();
       const annual_avg_employees_raw = raw.annual_avg_employees.trim();
-      const total_hours_worked_raw = raw.total_hours_worked.trim();
       const timezone = raw.timezone.trim() || 'America/New_York';
       const parent_name = raw.parent_name.trim();
 
@@ -428,14 +426,6 @@ function buildSiteImportDefinition() {
         } else annual_avg_employees = n;
       }
 
-      let total_hours_worked = 0;
-      if (total_hours_worked_raw !== '') {
-        const n = Number(total_hours_worked_raw);
-        if (!Number.isInteger(n) || n < 0) {
-          errors.push({ column: 'total_hours_worked', reason: 'Must be a non-negative integer' });
-        } else total_hours_worked = n;
-      }
-
       // parent_name must resolve to either an existing site OR a site
       // earlier in this same file. We don't validate cycles/depth here —
       // that runs at insert time against the live state.
@@ -455,7 +445,7 @@ function buildSiteImportDefinition() {
           parsed: {
             name, country, address: address || null, naics_code: naics_code || null,
             establishment_id: establishment_id || null,
-            annual_avg_employees, total_hours_worked, timezone,
+            annual_avg_employees, timezone,
             parent_name: parent_name || null,
           },
         };
@@ -488,11 +478,11 @@ function buildSiteImportDefinition() {
       const result = db.prepare(`
         INSERT INTO sites (
           org_id, name, address, country, naics_code, establishment_id,
-          annual_avg_employees, total_hours_worked, timezone, parent_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          annual_avg_employees, timezone, parent_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         ctx.orgId, parsed.name, parsed.address, parsed.country, parsed.naics_code,
-        parsed.establishment_id, parsed.annual_avg_employees, parsed.total_hours_worked,
+        parsed.establishment_id, parsed.annual_avg_employees,
         parsed.timezone, parent_id,
       );
 
