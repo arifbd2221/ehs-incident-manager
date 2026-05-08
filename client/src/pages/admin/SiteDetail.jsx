@@ -12,6 +12,7 @@
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../api/client';
 import { getSite } from '../../api/sites';
 import { getWorkHours, deleteWorkHours, workHoursExportUrl } from '../../api/workHours';
 import Icon from '../../components/shared/Icon';
@@ -97,6 +98,13 @@ export default function SiteDetail() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
+  // Year for rate cards. Defaults to current calendar year. The cards re-fetch
+  // whenever this changes; periods are NOT filtered by the year selector
+  // (periods table shows the full history grouped by year).
+  const [rateYear, setRateYear] = useState(() => new Date().getFullYear());
+  const [metrics, setMetrics] = useState(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+
   useEffect(() => {
     setLoading(true);
     getSite(id)
@@ -118,9 +126,29 @@ export default function SiteDetail() {
     refreshPeriods();
   }, [refreshPeriods]);
 
+  // Fetch metrics whenever the chosen year or the periods change (e.g., after
+  // an Add/Edit/Delete the rates for that year may shift).
+  useEffect(() => {
+    if (!id) return;
+    setMetricsLoading(true);
+    api.get('/reports/site-metrics', { params: { site_id: id, year: rateYear } })
+      .then(r => setMetrics(r.data?.metrics || null))
+      .catch(() => setMetrics(null))
+      .finally(() => setMetricsLoading(false));
+  }, [id, rateYear, periods]);
+
   const yearGroups = useMemo(() => groupByYear(periods), [periods]);
   // Most recent period — used by the modal for "auto-fill from prior".
   const latestPeriod = periods[0] || null;
+
+  // Year selector options for the rate cards. Combines years that have periods
+  // with a 5-year window around the current year so the picker is never empty.
+  const rateYearOptions = useMemo(() => {
+    const cy = new Date().getFullYear();
+    const set = new Set([cy - 1, cy, cy + 1]);
+    for (const g of yearGroups) set.add(g.year);
+    return [...set].sort((a, b) => b - a);
+  }, [yearGroups]);
 
   const handleAdd = () => {
     setEditing(null);
@@ -280,6 +308,75 @@ export default function SiteDetail() {
             </div>
             <div className="stat-icon"><Icon name="factory" size={18} /></div>
           </div>
+        </div>
+      </div>
+
+      {/* Safety performance — TRIR / DART / LTIR / Severity Rate (OSHA 200K denom).
+          Year-scoped, computed live from work_hours + osha_300_log. */}
+      <div className="card card-pad">
+        <div className="card-h">
+          <Icon name="pulse" size={16} /> Safety performance
+          <span className="sd-count-pill">{rateYear}</span>
+          <span style={{ marginLeft: 'auto' }}>
+            <select
+              className="select"
+              value={rateYear}
+              onChange={e => setRateYear(Number(e.target.value))}
+              style={{ width: 'auto', minWidth: 110 }}
+            >
+              {rateYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </span>
+        </div>
+        <div className="stat-grid">
+          <div className="stat">
+            <div className="stat-row">
+              <div>
+                <div className="lbl">TRIR</div>
+                <div className="val">{metricsLoading ? '…' : (metrics?.trir ?? 0).toFixed(2)}</div>
+                <div className="sub">{metrics?.totalRecordableCases ?? 0} recordable cases</div>
+              </div>
+              <div className="stat-icon"><Icon name="warning" size={18} /></div>
+            </div>
+          </div>
+          <div className="stat">
+            <div className="stat-row">
+              <div>
+                <div className="lbl">DART</div>
+                <div className="val">{metricsLoading ? '…' : (metrics?.dart ?? 0).toFixed(2)}</div>
+                <div className="sub">{metrics?.dartCases ?? 0} DART cases</div>
+              </div>
+              <div className="stat-icon"><Icon name="incidents" size={18} /></div>
+            </div>
+          </div>
+          <div className="stat">
+            <div className="stat-row">
+              <div>
+                <div className="lbl">LTIR</div>
+                <div className="val">{metricsLoading ? '…' : (metrics?.ltir ?? 0).toFixed(2)}</div>
+                <div className="sub">{metrics?.daysAwayCases ?? 0} days-away cases</div>
+              </div>
+              <div className="stat-icon"><Icon name="clock" size={18} /></div>
+            </div>
+          </div>
+          <div className="stat">
+            <div className="stat-row">
+              <div>
+                <div className="lbl">Severity Rate</div>
+                <div className="val">{metricsLoading ? '…' : (metrics?.severityRate ?? 0).toFixed(2)}</div>
+                <div className="sub">{metrics?.totalDaysAway ?? 0} total days away</div>
+              </div>
+              <div className="stat-icon"><Icon name="pulse" size={18} /></div>
+            </div>
+          </div>
+        </div>
+        <div style={{ marginTop: 12, fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>
+          OSHA 1904 200,000-hour denominator · {fmtInt(metrics?.totalHoursWorked || 0)} employee hours over{' '}
+          {metrics?.workHoursPeriods || 0} period{metrics?.workHoursPeriods === 1 ? '' : 's'} · weighted avg.{' '}
+          {fmtInt(metrics?.annualAvgEmployees || 0)} employees
+          {metrics?.contractorHoursWorked > 0 && (
+            <> · contractor hours: {fmtInt(metrics.contractorHoursWorked)} ({metrics.contractorPeriods} periods)</>
+          )}
         </div>
       </div>
 

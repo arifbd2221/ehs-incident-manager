@@ -22,6 +22,23 @@ const canSeeAudit = (user) => AUDIT_ROLES.has(user?.role);
 const OSHA_300A_AFFIRMATION =
   'I certify that I have examined this document and that to the best of my knowledge the entries are true, accurate, and complete.';
 
+// Site-scoped metrics for live KPI cards (SiteDetail, embed components).
+// Returns the same `calculateMetrics` shape used by /osha-300a, but standalone
+// so callers don't have to pull case lists + types + certification. Year
+// defaults to the current calendar year (not last year, unlike 300A).
+router.get('/site-metrics', (req, res) => {
+  const { site_id, year } = req.query;
+  if (!site_id) return res.status(400).json({ error: 'site_id is required' });
+  const site = db.prepare('SELECT id FROM sites WHERE id = ? AND org_id = ?')
+    .get(Number(site_id), req.user.org_id);
+  if (!site) return res.status(404).json({ error: 'Site not found' });
+  const y = year ? Number(year) : new Date().getFullYear();
+  if (!Number.isInteger(y) || y < 1900 || y > 2999) {
+    return res.status(400).json({ error: 'year must be a 4-digit year' });
+  }
+  res.json({ year: y, metrics: calculateMetrics(site.id, y) });
+});
+
 router.get('/osha-300', (req, res) => {
   const { site_id, year } = req.query;
   const currentYear = year || new Date().getFullYear();
@@ -94,9 +111,23 @@ router.get('/osha-300a', (req, res) => {
     ORDER BY rc.signed_at DESC LIMIT 1
   `).get(Number(site_id), Number(currentYear));
 
+  // OSHA 300A line 13/14: hours + employee count come from work_hours (live
+  // sum / period-length-weighted avg). When work_hours has no entries for the
+  // year, fall back to the onboarding-time `sites.annual_avg_employees` so a
+  // brand-new tenant doesn't see "0 employees" on a 300A draft. Hours have no
+  // sensible fallback — empty work_hours means zero recorded hours.
+  const liveHours = metrics.totalHoursWorked || 0;
+  const liveAvgEmployees = metrics.annualAvgEmployees || site?.annual_avg_employees || 0;
+
   res.json({
     year: Number(currentYear),
-    site: { name: site?.name, establishment_id: site?.establishment_id, naics_code: site?.naics_code, annual_avg_employees: site?.annual_avg_employees, total_hours_worked: site?.total_hours_worked },
+    site: {
+      name: site?.name,
+      establishment_id: site?.establishment_id,
+      naics_code: site?.naics_code,
+      annual_avg_employees: liveAvgEmployees,
+      total_hours_worked: liveHours,
+    },
     cases: {
       deaths: cases?.deaths || 0,
       days_away: cases?.days_away || 0,
