@@ -584,6 +584,35 @@
   }
 }
 
+@media (max-width: 768px) {
+  .dash-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .dash-hero .flex { width: 100%; flex-wrap: wrap; }
+  .dash-hero .greeting { font-size: 20px; }
+  .kpi-card { padding: 16px; }
+  .kpi-card .kpi-val { font-size: 28px; }
+  .kpi-card .kpi-icon { width: 32px; height: 32px; border-radius: 8px; }
+  .dash-card-h { padding: 14px 16px; }
+  .dash-card-body { padding: 16px; }
+  .donut-section { padding: 16px; gap: 16px; }
+  .dash-stopwork-banner { padding: 12px; gap: 10px; }
+}
+
+@media (max-width: 480px) {
+  .dash-hero .greeting { font-size: 18px; }
+  .dash-hero .flex { gap: 6px; }
+  .kpi-row { grid-template-columns: 1fr !important; }
+  .kpi-card .kpi-val { font-size: 24px; }
+  .donut-section { flex-direction: column; align-items: flex-start; }
+  .donut-chart { align-self: center; }
+  .dash-card-h { padding: 12px 14px; }
+  .dash-card-body { padding: 14px; }
+  .dash-stopwork-row { font-size: 12px; }
+}
+
 /* Active stop-work banner — sits above the dashboard hero. Uses
    --sds-error and existing keyframes per design rules. */
 .dash-stopwork-banner {

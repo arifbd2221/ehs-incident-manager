@@ -507,3 +507,13 @@
     opacity: 1;
   }
 }
+
+@media (max-width: 480px) {
+  .mbr-stats { grid-template-columns: 1fr; }
+  .mbr-stat { padding: 10px 12px; }
+  .mbr-stat-val { font-size: 14px; }
+  .mbr-tbl thead th:nth-child(n+4),
+  .mbr-tbl tbody td:nth-child(n+4) { display: none; }
+  .mbr-hero { padding: 14px 12px; }
+  .mbr-hero .mbr-heading { font-size: 16px; }
+}

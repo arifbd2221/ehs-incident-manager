@@ -179,7 +179,7 @@ function SearchResults({ query, results, loading, activeIdx, onGo, onClose }) {
 
 export default function TopBar() {
   const { user } = useAuth();
-  const { setWizardOpen } = useApp();
+  const { setWizardOpen, setSidebarOpen } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -323,6 +323,9 @@ export default function TopBar() {
   return (
     <>
       <div className="topbar-wrap">
+        <button className="hamburger-btn" onClick={() => setSidebarOpen(v => !v)} aria-label="Toggle navigation">
+          <Icon name="menu" size={22} />
+        </button>
         <div className="search" ref={searchRef}>
           <Icon name="search" size={16} />
           <input
@@ -349,10 +352,10 @@ export default function TopBar() {
         <div className="module-tag"><span className="pulse" />EHS Module</div>
         <div className="grow" />
         <button className="btn btn-danger btn-sm topbar-stopwork" onClick={() => setStopWorkOpen(true)} title="Submit a stop-work — imminent danger">
-          <Icon name="warning" size={16} />STOP WORK
+          <Icon name="warning" size={16} /><span>STOP WORK</span>
         </button>
         <button className="btn btn-primary btn-sm" onClick={() => setWizardOpen(true)}>
-          <Icon name="plus" size={16} />Report incident
+          <Icon name="plus" size={16} /><span>Report incident</span>
         </button>
         <button className={`icon-btn ${helpOpen ? 'is-open' : ''}`} title="Help" onClick={() => setHelpOpen(v => !v)}><Icon name="help" size={20} /></button>
         <div className="notif-anchor">

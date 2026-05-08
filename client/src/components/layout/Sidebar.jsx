@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../shared/Icon';
+import { useApp } from '../../context/AppContext';
 
 function AnimatedLogo() {
   return (
@@ -34,26 +35,35 @@ const NAV = [
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { sidebarOpen, setSidebarOpen } = useApp();
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
 
+  const go = (path) => {
+    navigate(path);
+    setSidebarOpen(false);
+  };
+
   return (
-    <aside className="sidebar">
-      <AnimatedLogo />
-      {NAV.map(it => (
-        <div key={it.id} className={`nav-item ${isActive(it.path) ? 'active' : ''}`} style={{ '--nav-color': it.color }} onClick={() => navigate(it.path)}>
-          <Icon name={it.icon} size={22} />
-          <div className="lbl">{it.label}</div>
+    <>
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
+        <AnimatedLogo />
+        {NAV.map(it => (
+          <div key={it.id} className={`nav-item ${isActive(it.path) ? 'active' : ''}`} style={{ '--nav-color': it.color }} onClick={() => go(it.path)}>
+            <Icon name={it.icon} size={22} />
+            <div className="lbl">{it.label}</div>
+          </div>
+        ))}
+        <div style={{ flex: 1 }} />
+        <div className={`nav-item ${isActive('/profile') ? 'active' : ''}`} style={{ '--nav-color': '#78909C' }} onClick={() => go('/profile')}>
+          <Icon name="person" size={22} />
+          <div className="lbl">Profile</div>
         </div>
-      ))}
-      <div style={{ flex: 1 }} />
-      <div className={`nav-item ${isActive('/profile') ? 'active' : ''}`} style={{ '--nav-color': '#78909C' }} onClick={() => navigate('/profile')}>
-        <Icon name="person" size={22} />
-        <div className="lbl">Profile</div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }

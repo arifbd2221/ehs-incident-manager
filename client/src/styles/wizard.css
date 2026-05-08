@@ -1403,6 +1403,32 @@
   line-height: 1.5;
 }
 
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .wiz-shell { margin: 0; border-radius: 0; max-width: 100%; }
+  .wiz-sidebar { display: none; }
+  .wiz-header { padding: 16px; }
+  .wiz-header .wiz-h-title { font-size: 16px; }
+  .wiz-body { padding: 16px; }
+  .wiz-footer { padding: 14px 16px; }
+  .wiz-type-grid { grid-template-columns: repeat(3, 1fr); }
+  .wiz-step-form .field-row { grid-template-columns: 1fr; }
+  .wiz-step-form .field-row-3 { grid-template-columns: 1fr; }
+  .wiz-review-row { flex-direction: column; gap: 4px; }
+  .wiz-review-row .lbl { min-width: auto; }
+}
+
+@media (max-width: 480px) {
+  .wiz-header { padding: 12px; }
+  .wiz-body { padding: 12px; }
+  .wiz-footer { padding: 10px 12px; flex-wrap: wrap; gap: 8px; }
+  .wiz-footer .btn { flex: 1; min-width: 0; justify-content: center; }
+  .wiz-type-grid { grid-template-columns: repeat(2, 1fr); }
+  .wiz-type-card { padding: 10px 8px; }
+  .wiz-type-card .wiz-tc-name { font-size: 11px; }
+  .wiz-type-card .wiz-tc-desc { font-size: 10px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .wiz-backdrop { animation: none; }
   .wiz-sheet { animation: none; }
