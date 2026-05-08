@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { createSite, listSites } from '../api/sites';
 import Icon from '../components/shared/Icon';
 import ComboBox from '../components/shared/ComboBox';
+import { SiteIllustration, SuccessIllustration } from '../components/shared/OnboardingIllustrations';
 
 const COUNTRY_OPTS = [
   { value: 'US', label: 'United States' },
@@ -19,8 +20,6 @@ export default function OnboardingFirstSite() {
   const navigate = useNavigate();
   const [redirecting, setRedirecting] = useState(true);
 
-  // If the org already has sites, this onboarding wizard is no longer the
-  // right surface — send the user to the standard /admin/sites page.
   useEffect(() => {
     listSites()
       .then(sites => {
@@ -43,6 +42,7 @@ export default function OnboardingFirstSite() {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -57,7 +57,8 @@ export default function OnboardingFirstSite() {
         annual_avg_employees: Number(form.annual_avg_employees) || 0,
         total_hours_worked: Number(form.total_hours_worked) || 0,
       });
-      navigate('/', { replace: true });
+      setDone(true);
+      setTimeout(() => navigate('/', { replace: true }), 2200);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create site');
     } finally {
@@ -66,28 +67,64 @@ export default function OnboardingFirstSite() {
   };
 
   if (redirecting) {
-    return <div className="page" style={{ padding: 'var(--sds-space-lg)', color: 'var(--sds-fg-tertiary)' }}>Loading…</div>;
+    return (
+      <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <div className="onb-loading">
+          <span className="login-spinner" style={{ width: 20, height: 20 }} />
+          <span>Checking your setup…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (done) {
+    return (
+      <div className="page onb-page">
+        <div className="onb-card onb-done-card">
+          <SuccessIllustration className="onb-done-illus" />
+          <h2 className="onb-done-title">You're all set!</h2>
+          <p className="onb-done-sub">
+            <strong>{form.name}</strong> has been created. Taking you to your dashboard…
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="page">
-      <div className="card card-pad" style={{ maxWidth: 720, margin: '0 auto' }}>
-        <div className="card-h">
-          <Icon name="factory" size={20} color="var(--sds-brand-primary)" />
-          <span>Welcome, {user?.name?.split(' ')[0] || 'there'}!</span>
+    <div className="page onb-page">
+      <div className="onb-card">
+        {/* Progress indicator */}
+        <div className="onb-progress">
+          <div className="onb-progress-step done">
+            <span className="onb-progress-dot"><Icon name="check" size={10} /></span>
+            Organization
+          </div>
+          <div className="onb-progress-line" />
+          <div className="onb-progress-step active">
+            <span className="onb-progress-dot">2</span>
+            First site
+          </div>
         </div>
-        <p style={{ color: 'var(--sds-fg-secondary)', marginTop: 'var(--sds-space-xs)', marginBottom: 'var(--sds-space-lg)' }}>
-          Let's set up <strong>{user?.org_name || 'your organization'}</strong>'s first site.
-          Sites are physical locations where incidents, assets, and people live —
-          you can add more later from the <em>Sites</em> admin.
-        </p>
 
-        {error && <div className="auth-error" style={{ marginBottom: 'var(--sds-space-md)' }}><Icon name="warning" size={14} />{error}</div>}
+        {/* Hero section */}
+        <div className="onb-hero">
+          <SiteIllustration className="onb-illus" />
+          <div className="onb-hero-text">
+            <h1 className="onb-title">Welcome, {user?.name?.split(' ')[0] || 'there'}!</h1>
+            <p className="onb-subtitle">
+              Let's set up <strong>{user?.org_name || 'your organization'}</strong>'s first site.
+              Sites are physical locations where incidents, assets, and people live.
+            </p>
+          </div>
+        </div>
 
-        <form onSubmit={handleSubmit}>
+        {error && <div className="auth-error" role="alert" style={{ marginBottom: 'var(--sds-space-md)' }}><Icon name="warning" size={14} />{error}</div>}
+
+        <form onSubmit={handleSubmit} className="onb-form">
           <div className="field">
             <label className="label">Site name <span className="req">*</span></label>
-            <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Cleveland Plant" />
+            <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Cleveland Plant" autoFocus />
           </div>
 
           <div className="field">
@@ -117,15 +154,19 @@ export default function OnboardingFirstSite() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 'var(--sds-space-sm)', marginTop: 'var(--sds-space-lg)', alignItems: 'center' }}>
+          <div className="onb-actions">
             <Link to="/" className="btn btn-text">Skip for now</Link>
             <div style={{ flex: 1 }} />
-            <button className="btn btn-primary" type="submit" disabled={saving}>
-              {saving ? 'Creating…' : 'Create site & continue'}
-              <Icon name="arrow" size={14} />
+            <button className={`btn btn-primary ${saving ? 'auth-loading' : ''}`} type="submit" disabled={saving}>
+              {saving ? <><span className="login-spinner" />Creating…</> : <><span>Create site & continue</span><Icon name="arrow" size={14} /></>}
             </button>
           </div>
         </form>
+
+        <div className="onb-hint">
+          <Icon name="info" size={13} />
+          You can add more sites later from the <em>Sites</em> admin page.
+        </div>
       </div>
     </div>
   );

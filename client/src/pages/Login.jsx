@@ -4,6 +4,7 @@ import { Navigate, useNavigate, Link } from 'react-router-dom';
 import Icon from '../components/shared/Icon';
 
 const DEMO = [
+  { email: 'admin@sdsmanager.com', label: 'Arif (Admin)', icon: 'gear', pw: 'Admin@123' },
   { email: 'elena@sdsmanager.com', label: 'Elena (EHS Lead)', icon: 'shield' },
   { email: 'marcus@sdsmanager.com', label: 'Marcus (Supervisor)', icon: 'person' },
   { email: 'james@sdsmanager.com', label: 'James (EHS Manager)', icon: 'settings' },
@@ -35,9 +36,9 @@ export default function Login() {
     }
   };
 
-  const quickLogin = (demoEmail) => {
-    setEmail(demoEmail);
-    setPassword('password123');
+  const quickLogin = (d) => {
+    setEmail(d.email);
+    setPassword(d.pw || 'password123');
   };
 
   return (
@@ -121,8 +122,8 @@ export default function Login() {
                   placeholder="Enter your password"
                   required
                 />
-                <button type="button" className="auth-pw-toggle" onClick={() => setShowPw(v => !v)}>
-                  <Icon name="eye" size={16} />
+                <button type="button" className="auth-pw-toggle" onClick={() => setShowPw(v => !v)} aria-label={showPw ? 'Hide password' : 'Show password'}>
+                  <Icon name={showPw ? 'eyeOff' : 'eye'} size={16} />
                 </button>
               </div>
             </div>
@@ -136,7 +137,7 @@ export default function Login() {
 
           <div className="auth-demo-grid">
             {DEMO.map(d => (
-              <button key={d.email} className="auth-demo-btn" onClick={() => quickLogin(d.email)}>
+              <button key={d.email} className="auth-demo-btn" onClick={() => quickLogin(d)}>
                 <Icon name={d.icon} size={14} />
                 <span>{d.label}</span>
               </button>
