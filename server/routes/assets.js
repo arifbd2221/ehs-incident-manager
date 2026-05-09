@@ -104,6 +104,16 @@ router.get('/:id', (req, res) => {
         is_required: !!f.is_required,
       }))
     : [];
+
+  // Per-asset audit timeline. Mirrors the shape used by incidents/capas/
+  // investigations so the FE can reuse the same render pattern.
+  asset.activity = db.prepare(`
+    SELECT al.*, u.name as user_name, u.initials as user_initials
+    FROM activity_log al LEFT JOIN users u ON u.id = al.user_id
+    WHERE al.entity_type = 'asset' AND al.entity_id = ?
+    ORDER BY al.created_at DESC
+  `).all(asset.id);
+
   res.json(asset);
 });
 
