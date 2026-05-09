@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/connection.js';
 import { calculateMetrics } from '../services/metrics.js';
 import { writeActivity } from '../services/activity_log.js';
+import { AUDIT_ACTIONS_CATALOG } from '../services/audit_actions_catalog.js';
 
 const router = Router();
 
@@ -492,24 +493,51 @@ function buildAuditWhere(orgId, query) {
   return { where: where.join(' AND '), params };
 }
 
-// Distinct (entity_type, action) pairs present in this org's activity_log.
-// FE groups by entity_type so the user can pick "all site actions" or
-// individual actions inside a group. Same `action` string appearing under
-// multiple entity types shows up as separate rows (e.g., 'created' for
-// incident vs 'created' for capa) — that distinction matters when the user
-// is narrowing what they want to see.
+// Catalog UNION distinct-from-DB pairs. The catalog ensures EVERY known
+// action verb is filterable BEFORE the first trigger — important for an
+// EHS supervisor pulling forensics on a fresh tenant or a brand-new
+// action verb (e.g. "show me every CAPA closure" before any have closed).
+// Pairs the BE writes that aren't in the catalog (forgot to add) still
+// surface via the DB-distinct fallback so nothing is silently invisible.
+//
+// `count` is null for catalog-only entries (never triggered yet), >0 for
+// triggered entries. FE picker can render "—" or hide the count badge
+// when null.
 router.get('/audit-log/actions', (req, res) => {
   if (!canSeeAudit(req.user)) {
     return res.status(403).json({ error: 'Audit log access is limited to EHS compliance roles.' });
   }
-  const rows = db.prepare(`
+  const dbRows = db.prepare(`
     SELECT entity_type, action, COUNT(*) AS count
     FROM activity_log
     WHERE org_id = ?
     GROUP BY entity_type, action
-    ORDER BY entity_type ASC, count DESC, action ASC
   `).all(req.user.org_id);
-  res.json({ actions: rows });
+
+  const dbByKey = new Map(
+    dbRows.map(r => [`${r.entity_type}|${r.action}`, r.count])
+  );
+
+  // Start with catalog (preserves logical lifecycle ordering within entity).
+  const out = [];
+  const seen = new Set();
+  for (const c of AUDIT_ACTIONS_CATALOG) {
+    const key = `${c.entity_type}|${c.action}`;
+    out.push({
+      entity_type: c.entity_type,
+      action: c.action,
+      count: dbByKey.get(key) ?? null,
+    });
+    seen.add(key);
+  }
+  // Append any DB pairs the catalog forgot — defensive against drift.
+  for (const r of dbRows) {
+    const key = `${r.entity_type}|${r.action}`;
+    if (!seen.has(key)) {
+      out.push({ entity_type: r.entity_type, action: r.action, count: r.count });
+    }
+  }
+  res.json({ actions: out });
 });
 
 router.get('/audit-log', (req, res) => {
