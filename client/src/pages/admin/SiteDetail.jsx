@@ -17,7 +17,23 @@ import { getSite } from '../../api/sites';
 import { getWorkHours, deleteWorkHours, workHoursExportUrl } from '../../api/workHours';
 import Icon from '../../components/shared/Icon';
 import WorkHoursModal from './WorkHoursModal';
+import { timeAgo } from '../../utils/time';
 import '../../styles/sites.css';
+import '../../styles/dashboard.css';
+
+// Per-action icon mapping for the site activity timeline. Covers both
+// site_* entries and the work_hours_* entries we surface alongside.
+const ACTION_ICON = {
+  site_created: { icon: 'plus', cls: 'act-create' },
+  site_updated: { icon: 'edit', cls: 'act-create' },
+  site_deleted: { icon: 'close', cls: 'act-system' },
+  sites_imported: { icon: 'upload', cls: 'act-create' },
+  work_hours_created: { icon: 'plus', cls: 'act-create' },
+  work_hours_updated: { icon: 'edit', cls: 'act-create' },
+  work_hours_deleted: { icon: 'close', cls: 'act-system' },
+  work_hours_exported: { icon: 'download', cls: 'act-system' },
+  work_hours_imported: { icon: 'upload', cls: 'act-create' },
+};
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
@@ -122,6 +138,14 @@ export default function SiteDetail() {
       .finally(() => setPeriodsLoading(false));
   }, [id]);
 
+  // Re-fetch the site payload (carries the activity timeline) after any
+  // mutation that writes an audit row, so the timeline updates without
+  // a page reload.
+  const refreshSite = useCallback(() => {
+    if (!id) return;
+    getSite(id).then(setSite).catch(() => {});
+  }, [id]);
+
   useEffect(() => {
     refreshPeriods();
   }, [refreshPeriods]);
@@ -164,6 +188,7 @@ export default function SiteDetail() {
     try {
       await deleteWorkHours(row.id);
       refreshPeriods();
+      refreshSite();
     } catch (e) {
       window.alert(e.response?.data?.error || 'Failed to delete');
     }
@@ -172,6 +197,7 @@ export default function SiteDetail() {
     setModalOpen(false);
     setEditing(null);
     refreshPeriods();
+    refreshSite();
   };
 
   // The export endpoint requires a JWT, so fetch with auth header and trigger
@@ -192,6 +218,8 @@ export default function SiteDetail() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      // Export writes a work_hours_exported audit row — refresh timeline.
+      refreshSite();
     } catch (e) {
       window.alert(e.message || 'Export failed');
     }
@@ -601,6 +629,35 @@ export default function SiteDetail() {
           </table>
         ) : (
           <div className="sd-empty">No assets registered at this site yet.</div>
+        )}
+      </div>
+
+      {/* Activity timeline — site_* + work_hours_* events for this site. */}
+      <div className="card card-pad">
+        <div className="card-h">
+          <Icon name="pulse" size={16} /> Activity
+          <span className="sd-count-pill">{site.activity?.length || 0}</span>
+        </div>
+        {site.activity && site.activity.length > 0 ? (
+          <div className="activity-feed">
+            {site.activity.map((e, i) => {
+              const mapped = ACTION_ICON[e.action] || { icon: 'bell', cls: 'act-system' };
+              return (
+                <div className="act-item" key={e.id || i}>
+                  <div className={`act-dot ${mapped.cls}`}>
+                    <Icon name={mapped.icon} size={16} />
+                  </div>
+                  <div className="act-body">
+                    <div className="act-who">{e.user_name || 'System'}</div>
+                    <div className="act-desc">{e.description}</div>
+                    <div className="act-when">{timeAgo(e.created_at)}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="sd-empty">No activity recorded yet for this site.</div>
         )}
       </div>
 

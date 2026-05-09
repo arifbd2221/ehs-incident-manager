@@ -196,6 +196,23 @@ router.get('/:id', (req, res) => {
     WHERE site_id = ?
   `).get(site.id);
 
+  // Per-site audit timeline. Includes BOTH site_* entries (entity_type='site',
+  // entity_id matching this site) AND work_hours_* entries written by the
+  // /api/work-hours routes whose metadata.site_id resolves to this site.
+  // Capped at 50 most-recent rows to keep the payload bounded.
+  const activity = db.prepare(`
+    SELECT al.*, u.name AS user_name, u.initials AS user_initials
+    FROM activity_log al LEFT JOIN users u ON u.id = al.user_id
+    WHERE al.org_id = ?
+      AND (
+        (al.entity_type = 'site' AND al.entity_id = ?)
+        OR (al.entity_type = 'work_hours'
+            AND json_extract(al.metadata, '$.site_id') = ?)
+      )
+    ORDER BY al.created_at DESC
+    LIMIT 50
+  `).all(req.user.org_id, site.id, site.id);
+
   res.json({
     ...site,
     parent,
@@ -206,6 +223,7 @@ router.get('/:id', (req, res) => {
     recent_assets,
     work_hours_total: work_hours.total_hours,
     work_hours_periods: work_hours.periods,
+    activity,
   });
 });
 
