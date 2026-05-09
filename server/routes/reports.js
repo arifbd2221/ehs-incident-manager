@@ -461,6 +461,28 @@ function buildAuditWhere(orgId, query) {
       params.push(...actions);
     }
   }
+
+  // `entity_action_pairs` — comma-separated 'entity_type:action' tuples.
+  // Each pair is AND'd internally (entity_type AND action) and pairs are
+  // OR'd. This lets the FE filter precisely "incident.created OR capa.completed"
+  // without the cross-product issue that separate entity_type/action lists
+  // produce when the same action name appears under multiple entity types
+  // (e.g. 'created' belongs to incident, capa, AND investigation).
+  if (query.entity_action_pairs) {
+    const pairs = String(query.entity_action_pairs).split(',')
+      .map(s => s.trim())
+      .map(s => {
+        const i = s.indexOf(':');
+        if (i <= 0 || i === s.length - 1) return null;
+        return { t: s.slice(0, i).trim(), a: s.slice(i + 1).trim() };
+      })
+      .filter(p => p && p.t && p.a);
+    if (pairs.length > 0) {
+      const orClauses = pairs.map(() => '(al.entity_type = ? AND al.action = ?)').join(' OR ');
+      where.push(`(${orClauses})`);
+      for (const p of pairs) { params.push(p.t, p.a); }
+    }
+  }
   if (query.from) { where.push('al.created_at >= ?'); params.push(query.from); }
   // `to` is treated as exclusive upper bound (so passing 2026-05-07 returns
   // everything strictly before that date — i.e., all of 2026-05-06).
