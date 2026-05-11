@@ -10,7 +10,9 @@
 // POST   /api/documents                  multipart upload + metadata (elevated)
 // PATCH  /api/documents/:id              update metadata (elevated)
 // DELETE /api/documents/:id              soft-delete (elevated)
-// GET    /api/documents/:id/download     stream the underlying file
+// GET    /api/documents/:id/download     stream the LATEST underlying file
+// POST   /api/documents/:id/versions     supersede with a new file (elevated)
+// GET    /api/documents/:id/versions/:vid/download   stream a historical version
 
 import { Router } from 'express';
 import { join } from 'path';
@@ -123,6 +125,20 @@ router.get('/:id', (req, res) => {
     }
   }
   doc.linked_entities = linked;
+
+  // Immutable revision history (mig 022). DESC so the latest is first; the
+  // frontend can render the timeline top-down without re-sorting. Every
+  // document has ≥1 row thanks to the v1 backfill.
+  doc.versions = db.prepare(`
+    SELECT v.id, v.version_number, v.file_url, v.stored_filename,
+           v.mime_type, v.size_bytes, v.notes, v.created_at,
+           v.uploaded_by, u.name as uploaded_by_name, u.initials as uploaded_by_initials
+    FROM document_versions v
+    LEFT JOIN users u ON u.id = v.uploaded_by
+    WHERE v.document_id = ?
+    ORDER BY v.version_number DESC
+  `).all(doc.id);
+
   res.json(doc);
 });
 
@@ -278,6 +294,121 @@ router.get('/:id/download', (req, res) => {
   if (!doc) return res.status(404).json({ error: 'Document not found' });
   if (!doc.stored_filename) return res.status(404).json({ error: 'No file on disk for this document' });
   res.download(join(uploadDir, doc.stored_filename), doc.name || doc.stored_filename);
+});
+
+// P3-OB3 — supersede a document with a new file. Insert an immutable
+// document_versions row + bump documents.* mirror fields atomically so the
+// existing list/download paths keep serving the latest without rewrites.
+// Old binaries on disk are NEVER overwritten or deleted (regulator audit).
+router.post('/:id/versions', upload.single('file'), (req, res) => {
+  if (!isElevated(req.user)) {
+    if (req.file) try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
+    return res.status(403).json({ error: 'Worker role cannot supersede documents.' });
+  }
+  if (!req.file) return res.status(400).json({ error: 'A file is required' });
+
+  const doc = db.prepare('SELECT * FROM documents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!doc) {
+    try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
+    return res.status(404).json({ error: 'Document not found' });
+  }
+
+  // Validate notes length up front so we can clean the orphan upload on reject.
+  const rawNotes = (req.body.notes || '').toString().trim();
+  if (rawNotes.length > 500) {
+    try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
+    return res.status(400).json({ error: 'Notes must be 500 characters or fewer' });
+  }
+  const notes = rawNotes || null;
+
+  const latestVersionNumber = db.prepare(
+    'SELECT COALESCE(MAX(version_number), 0) as n FROM document_versions WHERE document_id = ?'
+  ).get(doc.id).n;
+  const nextVersion = latestVersionNumber + 1;
+
+  const fileUrl = `/uploads/${req.file.filename}`;
+
+  const apply = db.transaction(() => {
+    const result = db.prepare(`
+      INSERT INTO document_versions
+        (document_id, version_number, file_url, stored_filename,
+         mime_type, size_bytes, uploaded_by, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(doc.id, nextVersion, fileUrl, req.file.filename, req.file.mimetype, req.file.size, req.user.id, notes);
+
+    db.prepare(`
+      UPDATE documents
+      SET file_url = ?, stored_filename = ?, mime_type = ?, size_bytes = ?,
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(fileUrl, req.file.filename, req.file.mimetype, req.file.size, doc.id);
+
+    return result.lastInsertRowid;
+  });
+
+  let newVersionId;
+  try {
+    newVersionId = apply();
+  } catch (err) {
+    try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
+    throw err;
+  }
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'document',
+    entity_id: doc.id,
+    action: 'document_superseded',
+    description: `superseded document ${doc.name} (v${latestVersionNumber} → v${nextVersion})`,
+    user_id: req.user.id,
+    metadata: {
+      version_number: nextVersion,
+      previous_version_number: latestVersionNumber,
+      mime_type: req.file.mimetype,
+      size_bytes: req.file.size,
+      notes,
+    },
+  });
+
+  const newVersion = db.prepare(`
+    SELECT v.id, v.version_number, v.file_url, v.stored_filename,
+           v.mime_type, v.size_bytes, v.notes, v.created_at,
+           v.uploaded_by, u.name as uploaded_by_name, u.initials as uploaded_by_initials
+    FROM document_versions v
+    LEFT JOIN users u ON u.id = v.uploaded_by
+    WHERE v.id = ?
+  `).get(newVersionId);
+
+  res.status(201).json({ version: newVersion });
+});
+
+// Serve a historical version's file. Auto-scoped: the version must belong to
+// a document in the caller's org. Filename echoes the original document name
+// with a "(vN)" suffix so saved files are self-describing.
+router.get('/:id/versions/:vid/download', (req, res) => {
+  const row = db.prepare(`
+    SELECT v.*, d.name as document_name, d.org_id as document_org_id
+    FROM document_versions v
+    JOIN documents d ON d.id = v.document_id
+    WHERE v.id = ? AND v.document_id = ?
+  `).get(Number(req.params.vid), Number(req.params.id));
+
+  if (!row || row.document_org_id !== req.user.org_id) {
+    return res.status(404).json({ error: 'Version not found' });
+  }
+  if (!row.stored_filename) {
+    return res.status(404).json({ error: 'No file on disk for this version' });
+  }
+
+  const baseName = row.document_name || row.stored_filename;
+  // Insert "(vN)" before the extension so the suffix sits next to the name,
+  // not at the end of "report.pdf (v2)" which some OSes mis-handle.
+  const lastDot = baseName.lastIndexOf('.');
+  const displayName = lastDot > 0
+    ? `${baseName.slice(0, lastDot)} (v${row.version_number})${baseName.slice(lastDot)}`
+    : `${baseName} (v${row.version_number})`;
+
+  res.download(join(uploadDir, row.stored_filename), displayName);
 });
 
 export default router;

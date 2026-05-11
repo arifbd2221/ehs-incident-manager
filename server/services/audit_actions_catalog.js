@@ -109,6 +109,9 @@ export const AUDIT_ACTIONS_CATALOG = [
 
   // Documents + folders
   { entity_type: 'document', action: 'document_uploaded' },
+  { entity_type: 'document', action: 'document_updated' },
+  { entity_type: 'document', action: 'document_moved' },
+  { entity_type: 'document', action: 'document_superseded' },
   { entity_type: 'document', action: 'document_deleted' },
   { entity_type: 'folder', action: 'folder_created' },
   { entity_type: 'folder', action: 'folder_deleted' },
