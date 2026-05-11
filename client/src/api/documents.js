@@ -21,3 +21,20 @@ export const deleteDocument = (id) =>
 // Download URL — uses GET /api/documents/:id/download. Browsers handle auth via the
 // existing axios client; for direct anchor download we route through window.open.
 export const downloadUrl = (id) => `/api/documents/${id}/download`;
+
+// Supersede with a new file. Backend writes an immutable document_versions
+// row + mirrors the new file's metadata onto the documents row so the
+// existing list/download paths keep serving the latest untouched.
+export const createDocumentVersion = (id, { file, notes }) => {
+  const fd = new FormData();
+  fd.append('file', file);
+  if (notes != null && notes !== '') fd.append('notes', notes);
+  return api.post(`/documents/${id}/versions`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+};
+
+// Historical-file download — serves the bytes for that specific version
+// (vs `/documents/:id/download` which always serves the latest).
+export const downloadVersion = (id, versionId) =>
+  api.get(`/documents/${id}/versions/${versionId}/download`, { responseType: 'blob' });

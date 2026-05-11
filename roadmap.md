@@ -8,23 +8,32 @@ the full detail. Most recent session entries at the bottom.
 
 ## Current state
 
-- **Branch:** `backend` at `3848029` (plus this roadmap update). 8 commits ahead
-  of `origin/main` at `6051395` — work_hours industry-standard slice (5 commits)
-  and the work_hours CSV slice all unpushed to main; ready for PR #11.
+- **Branch:** `backend` at `897ac78` (P3-OB3 FE — version history + supersede
+  in preview modal). Equal to `origin/backend`. Working tree clean.
+- **`origin/main`** at `b3dbb08` (merge of PR #11). All previously-pending
+  backend work has landed on main; backend is now +2 commits ahead with the
+  P3-OB3 BE + FE slice (`7af629b`, `897ac78`).
+- **PR #11** ✅ merged 2026-05-11 (was: P3-OB2 sellable-tier + audit log fixes).
 - **Phase 2:** code complete (only F6.2 manual demo walkthrough open).
 - **Wave 7:** E7.1 (custom asset fields per category) done.
 - **UX backlog A–H:** done. UX-C body-parts editor deferred (needs BodyMap3D
   outside the wizard).
 - **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, **OB2** (users + sites + assets + work_hours
   full industry-standard surfaces — manual CRUD + year-group/YoY + live OSHA 300A + TRIR/DART/LTIR/Severity
-  cards on SiteDetail and Dashboard + CSV export + contractor split), OP2, OP3.
-- **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, OB3, RG1.
-- **Migrations applied:** 001–021 + letter fixups `014a`, `017a`. `017a` aliases
+  cards on SiteDetail and Dashboard + CSV export + contractor split),
+  **OB3** (document versioning — mig 022, supersede route, immutable history,
+  preview-modal version timeline + inline supersede), OP2, OP3.
+- **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, RG1.
+- **Migrations applied:** 001–022 + letter fixups `014a`, `017a`. `017a` aliases
   the legacy backend names in `_schema_migrations` — idempotent on fresh DBs.
   `020` widens `activity_log` CHECK to accept `entity_type='work_hours'`.
   `021` adds nullable `contractor_hours_worked` + `contractor_avg_employees`
   on `work_hours` (ISO 45001 / Cority parity).
+  `022` adds `document_versions` (UUID-named historical files, immutable
+  rows, per-doc version_number, optional notes) and backfills v1 from
+  every existing document.
 - **Demo accounts** (all `password123`):
+  - `priya@sdsmanager.com` (admin, COO of SDS Manager Inc., id=13) — primary admin test account
   - `elena@sdsmanager.com` (ehs_manager, multi-framework: OSHA 300/300A/301 + RIDDOR)
   - `marcus@sdsmanager.com` (supervisor), `james@sdsmanager.com` (ehs_manager Sheffield),
     `mehta@sdsmanager.com` (ehs_officer), `wendy@sdsmanager.com` (worker)
@@ -36,47 +45,43 @@ the full detail. Most recent session entries at the bottom.
 
 ### Next session priority
 
-**Browser-test the work_hours slice end-to-end + open PR #11.** Five commits
-shipped (`db5c483 → 3848029`) — all curl-tested at the BE layer but the FE
-work (SiteDetail rebuild, modal, Dashboard rate cards, removal of
-`total_hours_worked` form inputs) wasn't click-tested. Verify on Priya's
-account and one empty tenant (acme), then open PR #11 backend → main.
+**Pick one with the user:**
 
-Click-test checklist:
-- `/admin/sites/:id` → "Safety performance" card year picker switches values
-- "Add work hours" modal pre-fills from prior period; Edit loads correct values
-- Year-group subtotals + YoY ▲/▼ pills match SUM in DevTools
-- Export CSV button downloads + the file imports back through the org-level
-  Import button without errors
-- `/admin/sites` Edit Site modal Workforce tab no longer shows hours input
-- Onboarding flow no longer asks for "total hours worked"
-- Dashboard renders 6 KPI cards (TRIR/DART/LTIR/Severity + Open + Overdue)
-  on Priya's account; all 0 on acme
+- **P3-OB1** — first-login walkthrough + sample-data toggle. Onboarding
+  for empty tenants (acme / riddor-test / sydney-test) is the natural
+  closing slice for the OB-series.
+- **P3-OP1** — asset maintenance schedules / due dates / overdue → CAPA
+  escalation. Largest sellable-tier gap on the asset surface.
+- **P3-RG1** — Australian regulator. Closes the `safework_nsw` framework
+  loop (currently has no Reports card). Per-state WHS deadline tracking.
+  Schema work + new Reports surface.
 
-After this slice **P3-OB2 is fully closed** at industry-standard tier. Next
-roadmap candidate: P3-AI1 (auto-fill investigation) or P3-OP1 (asset
-maintenance schedules) — pick from "Open work — Phase 3" with the user.
+Click-test punch list still open for backend's recent work (per the
+"FE not click-tested" flags below).
 
-### Files to re-read cold before extending
+### Other files cold / never read end-to-end in recent sessions
 
-These were auto-merged from main and never read end-to-end this session:
+Carryovers from prior merges + the latest one from main:
+- **Voice report feature (`b2e6a9f`, just merged 2026-05-11)** — adds
+  `client/src/components/voice/{GlobalVoiceFab,VoiceBottomSheet,VoiceReviewCard}.jsx`
+  + `voiceFieldConfig.js` + `hooks/{useAudioRecorder,useSpeechRecognition}.js`
+  + `styles/voice.css` (602 lines) + `server/services/{gemini_extract,gemini_transcribe}.js`
+  + modifications to `App.jsx`, `TopBar.jsx`, `AppContext.jsx`, `ReportWizard.jsx`,
+  `VoiceIntakeModal.jsx`, `api/incidents.js`, `routes/incidents.js`. BE was
+  tested via PR #11 curl smoke; FE not click-tested.
 - `server/services/closure_gates.js` — ISO 45001 / OSHA / ANSI Z10 closure gates
 - `server/services/notifications.js` — backend-side notification creation
-- `server/routes/incidents.js` — backend's witnesses + recordability + stop-work merged
-  alongside main's closure_request / approve / reject / reopen
-- `client/src/pages/incidents/IncidentDetail.jsx` — main's consolidated cards merged with
-  backend's witnesses + edit affordances
+- `client/src/pages/incidents/IncidentDetail.jsx` — main's consolidated cards
 - `client/src/pages/capas/CAPADetail.jsx` — main's hero-card redesign
 - `client/src/pages/incidents/modals/{ClosureChecklistModal,ClosureApprovalModal,ReopenModal}.jsx`
 - `client/src/pages/capas/UpdateProgressModal.jsx`
-- `client/src/components/layout/TopBar.jsx` — also gets hamburger button + label `<span>` wraps from `6051395`
-- **Responsive commit `6051395`** (2026-05-08) — `Sidebar.jsx` becomes a slide-in drawer at ≤768px;
-  `AppContext.jsx` adds `sidebarOpen` / `setSidebarOpen`; `Icon.jsx` adds `menu`;
-  8 page-CSS files get `@media` blocks at 768px + 480px. BE untouched. Diff was read
-  but the live mobile rendering wasn't browser-tested.
-- New onboarding files from main (`SignupOrg.jsx` redesign, `OnboardingFirstSite.jsx`,
-  `components/shared/OnboardingIllustrations.jsx` — 6 SVGs) — read to verify P3-O1
-  framework logic survived the redesign, but never opened in a browser.
+- `client/src/pages/templates/{TemplatesList,TemplateEditor}.jsx`
+- `client/src/pages/inspections/{InspectionsList,InspectionEditor,InspectionReport}.jsx`
+- New onboarding files from earlier main merge (`SignupOrg.jsx` redesign,
+  `OnboardingFirstSite.jsx`, `components/shared/OnboardingIllustrations.jsx`)
+- **Responsive commit `6051395`** — Sidebar mobile drawer + 8 page-CSS
+  media queries. Diff was read; live mobile rendering not tested.
+
 
 ---
 
@@ -85,7 +90,7 @@ These were auto-merged from main and never read end-to-end this session:
 ### Onboarding + data import
 - [ ] **P3-OB1** User onboarding flow — first-login walkthrough, sample-data toggle, role-tailored "what to do first".
 - [x] **P3-OB2** CSV import — users / sites / assets / work_hours **all done** (`e30954d` `57db454` `7388574` `fb8fc8f`).
-- [ ] **P3-OB3** Document versioning — supersede a doc with a new file, audit trail of prior revisions.
+- [x] **P3-OB3** Document versioning — mig 022 `document_versions`, supersede route, immutable history, audit catalog catch-up; FE in preview modal (`7af629b` + `897ac78`).
 
 ### AI assistance
 - [ ] **P3-AI1** Auto-fill investigation (AI + manual) — five-Why suggestions, root-cause prompts, contributing-factors checklist, recommended CAPAs.
@@ -152,6 +157,8 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 | P3-OB2 (work_hours) | Migration `020` widens `activity_log` CHECK; `routes/work_hours.js` adapter mounted at `/api/work-hours`; ISO date validation w/ calendar round-trip; UNIQUE(site_id, period_start) collision detection; second "Import work hours" button on `/admin/sites` | `fb8fc8f` |
 | P3-OB2 (work_hours surfaces) | Mig 021 contractor split; manual CRUD + CSV export at `/api/work-hours`; new `WorkHoursModal` + periods card on SiteDetail (year-group, YoY delta, weighted avg employees); TRIR/DART/LTIR/Severity Rate live from `work_hours`; rate cards on SiteDetail + Dashboard org-wide rollup; dropped `sites.total_hours_worked` form inputs + writes (column kept as legacy/no-op) | `db5c483` `4d15011` `9849e60` `a47615b` `3848029` |
 | Priya admin demo | Seeded admin user in SDS Manager Inc. + first row in Login.jsx DEMO grid | `dd94fe4` |
+| P3-OB3 (BE) | Mig 022 `document_versions` (UUID-named files, immutable rows, per-doc `version_number`, optional notes) + v1 backfill; `POST /:id/versions` (multer, atomic mirror update on `documents.*`, audit `document_superseded`); `GET /:id/versions/:vid/download` (historical, `(vN)` filename suffix); `GET /:id` extended with `versions[]` DESC; audit catalog catch-up (also adds previously-missing `document_updated` / `document_moved`). Workers 403, cross-org 404, oversize notes 400 w/ orphan-file cleanup. | `7af629b` |
+| P3-OB3 (FE) | Preview modal gains version-history section (`.activity-feed`/`.act-item`, latest-first, per-version download, LATEST badge) + supersede icon in modal header that toggles inline form (file + ≤500-char notes, mirrored to audit description). Post-supersede refreshes preview blob + docs grid. `api/documents.js` adds `createDocumentVersion` + `downloadVersion`. No new CSS — reuses `.dpv-references` for the bordered container. Build clean; not click-tested. | `897ac78` |
 
 ## Done — UX backlog
 
@@ -198,14 +205,73 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 ## Quick re-orientation for a fresh session
 
 1. Read this file. Most recent session at the bottom.
-2. `git fetch origin && git status` — `backend` should be at `3848029` (or +1 with this roadmap commit), working tree clean. `origin/main` lags by 8 commits.
-3. Boot servers (BE :3001, FE :5173). Login as elena (multi-framework) for the broadest exercise, or one of the empty test orgs to see framework-gated UI.
-4. For new work in any "re-read cold" file (above), read it top-to-bottom before editing.
-5. Ask the user which P3 item to pick up. Don't guess.
+2. `git fetch origin && git status` — `backend` should be at `9d1faf8`
+   (or +1 if this roadmap commit landed), working tree clean.
+   `origin/main` lags by ~12 backend commits which are awaiting PR #11
+   review/merge.
+3. Boot servers (`cd server && node --watch index.js` BE :3001;
+   `cd client && npm run dev` FE :5173). Login as priya (admin, COO)
+   for the broadest admin exercise, elena (ehs_manager, multi-framework)
+   for broad EHS work, or one of the empty test orgs (acme / riddor-test
+   / sydney-test) to see framework-gated UI + empty-state behaviour.
+4. The auto-memory file `project_state.md` (in your home memory dir)
+   has detailed locked design decisions for the next slice. Read it.
+5. For new work in any cold file (see "Other files cold" below), read
+   it top-to-bottom before editing.
+6. Ask the user which P3 item to pick up if unclear. Don't guess.
 
 ---
 
 ## Recent session log
+
+### 2026-05-11 (later) — P3-OB3 document versioning shipped (BE + FE)
+
+PR #11 merged into main earlier today; backend at the start of the
+session was `6dfd480` (roadmap tick) and clean. Two commits closed
+P3-OB3 end-to-end.
+
+| Area | What changed | Commit |
+|---|---|---|
+| BE: mig 022 + supersede route + audit catalog | New `document_versions` table (UUID-named historical files, immutable rows, per-doc `version_number`, optional notes ≤500 chars). v1 backfill from every existing document so reads always resolve. `POST /:id/versions` does atomic mirror update on `documents.file_url/stored_filename/mime_type/size_bytes` via `db.transaction` so list / download / entity_links keep serving the latest without rewrites. `GET /:id/versions/:vid/download` serves historical with `(vN)` baked into the saved filename. `GET /:id` extended with `versions[]` DESC. Audit catalog adds `document_superseded` and the previously-missing `document_updated` / `document_moved` pairs (PATCH route already wrote those; picker just didn't list them). Curl matrix green: worker 403 / cross-org 404 / oversize-notes 400 with orphan-file cleanup / audit row + count surfaces in `/audit-log/actions`. | `7af629b` |
+| FE: preview-modal version timeline + inline supersede | Preview modal grows two new sections inside `.dpv-references`: Version history (`.activity-feed`/`.act-item`, latest-first, LATEST badge, per-version download via `/versions/:vid/download` with `(vN)` filename suffix, latest hits the existing `/download` so the saved name matches the doc title) and an inline supersede form (file picker + ≤500-char notes mirrored to the audit description). Supersede icon in the modal header is elevated-only and active-only. Post-supersede refreshes the preview blob + docs grid so the new file appears everywhere immediately. `api/documents.js` adds `createDocumentVersion` + `downloadVersion`. No new CSS; light inline styling matches the convention already in this file. Build clean (196 modules transformed). | `897ac78` |
+
+**Decisions confirmed mid-session:**
+- FE placement: preview modal (chosen via AskUserQuestion), not literal
+  per-row inline expand. The original "per-row inline" wording in
+  `project_state.md` was written without knowledge of the Drive-style
+  card-grid + list-view layout — preview modal is the document-detail
+  surface that already exists.
+
+**Honest hallucination flags:**
+- **FE not click-tested in a browser.** Vite build was clean but visual
+  rendering of the supersede form + version timeline inside the modal
+  hasn't been verified. Same caveat as recent FE slices.
+- BE is heavily curl-tested (8 paths exercised across two users + cross-org).
+
+**Pre-existing orphan files in `server/uploads/`** (22 PDFs not attached
+to any DB row): all date from prior sessions / CI runs, NOT introduced
+by P3-OB3 error paths. Mig 022's design retains every uploaded file
+forever; there is no GC for the existing orphans.
+
+### 2026-05-11 — Activity timeline forensics, audit log polish, main merge, PR #11
+
+Two themes shipped + main merged + PR #11 opened. Six commits on backend,
+one merge from main.
+
+| Area | What changed | Commit |
+|---|---|---|
+| AssetDetail Activity | Tab was a hardcoded stub ("will be tracked here"); now renders the real audit trail. `GET /api/assets/:id` returns `asset.activity`. FE reuses Dashboard's `.activity-feed`/`.act-item` classes — no new CSS. | `7531fa5` |
+| SiteDetail Activity | No timeline anywhere previously; new Activity card surfaces both `site_*` and `work_hours_*` entries scoped by site_id (joined via `json_extract(metadata,'$.site_id')` for work_hours rows). Auto-refreshes after Add/Edit/Delete/Export. | `9ab8b16` |
+| UTC timestamp bug | Every server timestamp was off by browser UTC offset (Asia/Dhaka rendered just-now rows as "6h ago"). SQLite's `datetime('now')` returns 'YYYY-MM-DD HH:MM:SS' UTC with no `Z`; JS parsed it as local time. New `parseServerDate()` in `time.js` treats untimezoned strings as UTC. Fixes activity timelines, timeAgo across the app. 7 other direct `new Date(server_str)` call sites remain (cosmetic; logged as a sweep). | `4825251` |
+| Audit log filter bug | Picking "incident.created" visually checked `capa.created` and `investigation.created` because the React key was the bare action name. Composite `entity_type\|action` keys on the FE + new `entity_action_pairs` BE filter that ORs precise pairs. Plus added `organization` + `work_hours` to entity_types dropdown; jargon types relabelled ("Inspection answer set" not "answer_set"). | `974130b` |
+| Audit actions catalog | Picker was DB-distinct only — 17 of 83 known pairs visible. New `audit_actions_catalog.js` (canonical 83 pairs); BE endpoint now returns catalog UNION DB counts so fresh tenants can filter "every CAPA closure" with 0 results instead of "completed" being absent from the dropdown. | `a90a9ed` |
+| Merge from main | Brought in `b2e6a9f` (global voice report, +2982 lines, new `@google/generative-ai` dep) and `bb0fca3` (ReferencedByCard fix). Default merge, zero manual conflicts (only auto-merge on `server/index.js`). Server fresh-restart required after npm install. All my endpoints verified intact post-merge. | `9d1faf8` |
+| PR #11 | Opened backend → main. 12 commits scoped. Click-test punch list in PR body. Awaits review. | — |
+
+**Honest hallucination flags:**
+- Dashboard layout iteration earlier showed my visual-rendering judgement is unreliable. Three swings at the 6-card squeeze (4+2, 3+3, revert) before user said "revert to first design." All FE work this session was build-clean but not browser-tested.
+- The new asset Activity tab + Site Activity card + audit log picker
+  changes haven't been opened in a browser.
 
 ### 2026-05-08 (evening) — work_hours industry-standard surfaces (Sellable tier)
 

@@ -2657,7 +2657,11 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(26, 26, 26, 0.45);
-  z-index: var(--sds-z-modal-backdrop);
+  /* Sits above any other modal (preview modal, edit modal, etc.) since the
+   * "+ Link" affordance can be invoked from inside one. Other modals' backdrops
+   * are at --sds-z-modal (500); this layer needs to outrank them so the picker
+   * doesn't render behind the modal that summoned it. */
+  z-index: 550;
   display: flex;
   align-items: center;
   justify-content: center;
