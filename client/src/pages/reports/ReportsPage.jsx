@@ -587,11 +587,51 @@ function Osha300Report({ siteId }) {
   const canAdd = ELEVATED_ROLES.has(user?.role);
   const [data, setData] = useState(null);
   const [showManual, setShowManual] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const load = () => {
     if (siteId) { setData(null); getOsha300({ site_id: siteId }).then(setData).catch(() => {}); }
   };
   useEffect(load, [siteId]);
+
+  // OSHA Form 300 PDF — 29 CFR 1904.29(b)(4) lets us serve an "equivalent
+  // form" so long as the same information is presented. We re-use the same
+  // GET /reports/osha-300 endpoint with format=pdf so filters stay aligned
+  // with the on-screen table.
+  const downloadPdf = async () => {
+    if (!siteId) return;
+    setDownloading(true);
+    try {
+      const params = new URLSearchParams({ site_id: String(siteId), year: String(data.year), format: 'pdf' }).toString();
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`/api/reports/osha-300?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `Download failed: ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      let filename = `osha-300-${data.year}.pdf`;
+      const cd = resp.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      if (m) filename = m[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      // Surface failure but keep the UI usable.
+      console.error('OSHA 300 PDF download failed:', e);
+      alert(e.message || 'Download failed');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (!data) return <ReportLoading/>;
 
@@ -603,6 +643,14 @@ function Osha300Report({ siteId }) {
           <div className="rpt-panel-sub">{data.site?.name} · YTD {data.year}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={downloadPdf}
+            disabled={downloading || !siteId}
+            title="Download the OSHA 300 Log as a printable PDF (equivalent form per 29 CFR 1904.29(b)(4))"
+          >
+            <Icon name="download" size={14}/>{downloading ? 'Generating…' : 'Download PDF'}
+          </button>
           {canAdd && <button className="btn btn-secondary btn-sm" onClick={() => setShowManual(true)}><Icon name="plus" size={14}/>Manual entry</button>}
           <span className="rpt-auto-badge"><span className="auto-dot"/>Auto-updates</span>
         </div>

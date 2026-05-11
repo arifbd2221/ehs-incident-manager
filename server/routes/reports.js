@@ -4,6 +4,7 @@ import { calculateMetrics } from '../services/metrics.js';
 import { writeActivity, auditCtx } from '../services/activity_log.js';
 import { AUDIT_ACTIONS_CATALOG } from '../services/audit_actions_catalog.js';
 import { verifyChain } from '../db/activity_log_chain.js';
+import { renderOsha300Pdf } from '../services/pdf/osha_300.js';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.get('/site-metrics', (req, res) => {
 });
 
 router.get('/osha-300', (req, res) => {
-  const { site_id, year } = req.query;
+  const { site_id, year, format } = req.query;
   const currentYear = year || new Date().getFullYear();
   const orgId = req.user.org_id;
 
@@ -65,7 +66,45 @@ router.get('/osha-300', (req, res) => {
     return e;
   });
 
-  const site = site_id ? db.prepare('SELECT * FROM sites WHERE id = ?').get(Number(site_id)) : null;
+  const site = site_id ? db.prepare('SELECT * FROM sites WHERE id = ? AND org_id = ?')
+    .get(Number(site_id), orgId) : null;
+  if (site_id && !site) return res.status(404).json({ error: 'Site not found' });
+
+  if (format === 'pdf') {
+    // 29 CFR 1904.30(a): the OSHA 300 Log is kept per-establishment. The
+    // PDF rendering preserves that — without a site_id the renderer would
+    // have to invent an establishment line, which would be confusing to an
+    // inspector. Require it explicitly.
+    if (!site) {
+      return res.status(400).json({ error: 'site_id is required for PDF format (one Log per establishment, 29 CFR 1904.30(a)).' });
+    }
+    const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+    const filename = `osha-300-${(site.establishment_id || site.name || 'site').toString().replace(/[^A-Za-z0-9_.-]/g, '_')}-${currentYear}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    writeActivity({
+      org_id: orgId,
+      entity_type: 'system',
+      entity_id: null,
+      action: 'osha_300_pdf_downloaded',
+      description: `downloaded OSHA 300 PDF for ${site.name} (CY ${currentYear}) — ${entries.length} case(s)`,
+      user_id: req.user.id,
+      metadata: {
+        site_id: site.id,
+        period_year: Number(currentYear),
+        case_count: entries.length,
+      },
+      ...auditCtx(req),
+    });
+
+    return renderOsha300Pdf(res, {
+      year: Number(currentYear),
+      entries,
+      site,
+      orgName: org?.name || '',
+    });
+  }
 
   res.json({
     entries,

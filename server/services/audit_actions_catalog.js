@@ -143,6 +143,7 @@ export const AUDIT_ACTIONS_CATALOG = [
   { entity_type: 'system', action: 'audit_log_exported' },
   { entity_type: 'system', action: 'osha_300a_signed' },
   { entity_type: 'system', action: 'osha_300_manual_entry' },
+  { entity_type: 'system', action: 'osha_300_pdf_downloaded' },
 
   // Regulatory submissions tied to a specific incident (WI-10).
   // entity_type='incident' keeps them on the incident's timeline so the

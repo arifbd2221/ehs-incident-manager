@@ -6,13 +6,13 @@ Live status for what's open, what's done, and how to operate on this codebase. D
 
 ## Current state
 
-- **Branch:** `backend` at `753ec42` (OSHA source materials landed for WI-01/02/03) — preceded by `2e708d0` (WI-D) — plus the docs/memory closure commit landing this turn. Working tree clean (only `PRD.md` left untracked — owner reference doc).
+- **Branch:** `backend` at this turn's WI-01 commit (OSHA 300 PDF renderer + `?format=pdf` route + ReportsPage Download-PDF button). Preceded by `753ec42` (OSHA source PDFs) and `2e708d0` (WI-D). Working tree clean (only `PRD.md` left untracked — owner reference doc).
 - **`origin/main`** at `b3dbb08` (last known). Backend is many commits ahead: WI-A + WI-04 + WI-B + WI-08 + WI-D + OSHA sources. Check `gh pr list` for current PR state.
 - **PR #11** ✅ merged 2026-05-11.
 - **Phase 2:** code complete; F6.2 manual walkthrough open.
 - **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OB2, OB3, OP1, OP2, OP3.
 - **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1. (RG1 superseded by PRD-remediation WI-06 SafeWork NSW.)
-- **PRD-remediation done:** Chunk 1 (setup), Chunk 2 (WI-04), Chunk 3 (WI-10), Chunk 4 (WI-C), Chunk 5 (WI-A), Chunk 6 (WI-B), Chunk 7 (WI-08), Chunk 7a (WI-D).
+- **PRD-remediation done:** Chunk 1 (setup), Chunk 2 (WI-04), Chunk 3 (WI-10), Chunk 4 (WI-C), Chunk 5 (WI-A), Chunk 6 (WI-B), Chunk 7 (WI-08), Chunk 7a (WI-D), **Chunk 8 (WI-01 OSHA 300 PDF)**.
 - **Migrations applied:** 001–026 + letter fixups `014a`, `017a`, `023a`, `023b`, `023c`. Next available: **027**. (024 = WI-C hash chain; 025 = WI-A `affected_persons` + `injuries`; 026 = WI-B `classification_override_requests` + self-approval triggers. WI-08 + WI-D added no schema.)
 - **Demo accounts** (all `password123`): `priya@sdsmanager.com` (admin, SDS Manager Inc., org=1), `elena@sdsmanager.com` (ehs_manager, org=1, multi-framework — owns Sheffield UK site), `marcus`, `james`, `mehta`, `wendy`; plus empty test orgs `acme@sdsmanager.com` (admin, Acme Manufacturing org=2, OSHA US — used for cross-tenant tests), `riddor-test@example.com` (RIDDOR UK), `sydney-test@example.com` (SafeWork NSW AU).
 - **Dev servers:** `cd server && node --watch index.js` (BE :3001) + `cd client && npm run dev` (FE :5173).
@@ -42,10 +42,11 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 | 6 | WI-B Override approval workflow | ✅ `7ee1983` (BE: migration 026 + service + routes + console.warn on direct PATCH + 42-assertion `server/scripts/wib-e2e.sh`), `e660b16` (FE: API client + OverrideRequestModal + RecordabilityVerifyCard pending-state banner + `/approvals` page + sidebar nav for elevated roles). |
 | 7 | WI-08 Deadline countdown UI | ✅ `449539b` (single commit, BE+FE — pure presentation). `server/services/deadlines.js` aggregator; `GET /incidents/:id/deadlines`; `pending_deadlines` + `most_urgent_deadline` attached to list rows + detail payload; `DeadlineBadge` component rendered in IncidentDetail header (all) and IncidentsList rows (most-urgent compact). 19-assertion `server/scripts/wi08-e2e.sh`. |
 | 7a | WI-D Jurisdiction-aware wizard + forms | ✅ `2e708d0` (single FE commit). `jurisdictionForContext({user, siteId, sites})` + `showField()` registry in `client/src/utils/frameworks.js`. Wizard threads jurisdiction to InjuryForm + AffectedPersonModal; "Show all regulatory fields" toggle defaults off. WI-04 "UK RIDDOR edge cases" card + WI-A address/phone/DOB/gender/date_hired rows now jurisdiction-gated. 25-test `node:test` suite at `client/src/utils/frameworks.test.js`. |
-| 8+ | WI-01 OSHA 300 PDF → WI-05 F2508 → WI-06 SafeWork NSW → WI-07 1904.39 → WI-02 300A+ITA → WI-09 Generic PDF | reorder allowed by gate readiness |
+| 8 | WI-01 OSHA 300 PDF | ✅ this turn (single BE+FE commit). `server/services/pdf/osha_300.js` (Form 300 Rev. 04/2004 grid: A..F header cols + G..J classification X-marks + K..L day counts + M1..M6 type X-marks + page-totals strip on final page). `GET /reports/osha-300?format=pdf` branch — requires `site_id` per 29 CFR 1904.30(a) (400 with cite otherwise; 404 cross-tenant). Privacy-case substitution per 29 CFR 1904.29(b)(7) (route-level + defensive in renderer). Audit verb `osha_300_pdf_downloaded` in catalog. FE: Download-PDF btn in `Osha300Report` panel header on ReportsPage. `pdfkit` ^0.18.0 added to `server/package.json` — WI-02/03/09 reuse. |
+| 9+ | WI-03 OSHA 301 PDF → WI-07 1904.39 → WI-05 F2508 → WI-06 SafeWork NSW → WI-02 300A+ITA → WI-09 Generic PDF | reorder allowed by gate readiness |
 
 **Hallucination-risk gates** (memory `feedback_regulatory_truth.md`) — do NOT start without owner-supplied source material in `docs/regulatory-sources/`:
-- WI-01 — ✅ source landed `753ec42` (29 CFR Part 1904 + OSHA-RK-Forms-Package). Unblocked for next session.
+- WI-01 — ✅ DONE. 29 CFR 1904.29 + Form 300 visual reference both cited in `server/services/pdf/osha_300.js`.
 - WI-02 — ✅ partial: 29 CFR Part 1904 covers 1904.41 (ITA). The OSHA ITA CSV upload template itself (column headers) is not in the package PDF; check ITA portal or owner can supply.
 - WI-03 — ✅ source landed `753ec42`. Unblocked.
 - WI-04 — ✅ DONE. Owner-provided SI 2013/1471 + HSE INDG453 used; verbatim text cited in code comments.
@@ -57,25 +58,23 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 
 ## Next session priority
 
-OSHA source PDFs landed `753ec42` — WI-01 / WI-02 / WI-03 / WI-07 are now unblocked. Suggested chunk order:
+WI-01 OSHA 300 PDF landed this turn. `pdfkit` now in the BE; the renderer pattern (`server/services/pdf/osha_300.js`) is the template for the remaining PDF chunks. Suggested order:
 
-- **WI-01 OSHA 300 PDF rendering** — first PDF chunk. Adds `pdfkit` dep. Reads `osha_300_log` rows. New `server/services/pdf/osha_300.js`. Extends `GET /reports/osha-300` for `?format=pdf`. Privacy-case substitution per 29 CFR 1904.29(b)(7) (column already exists from migration 016). Source: pages from `OSHA-RK-Forms-Package.pdf` (visual reference) cross-referenced against 1904.29 in `29 CFR Part 1904.pdf`.
-- **WI-03 OSHA 301 PDF** — depends on WI-01 for the `pdfkit` dep. Per-incident form. Reads from `incidents.type_data.injured_person` + (post-WI-A) `affected_persons` / `injuries`. DOB / date_hired / gender are already captured by WI-04 FE.
+- **WI-03 OSHA 301 PDF** — per-incident form. Reads from `incidents.type_data.injured_person` + (post-WI-A) `affected_persons` / `injuries`. DOB / date_hired / gender already captured by WI-04 FE. New `server/services/pdf/osha_301.js`. Extends `GET /reports/osha-301/:incidentId` for `?format=pdf`. Source: 29 CFR 1904.29 + Form 301 page in `OSHA-RK-Forms-Package.pdf`.
 - **WI-07 OSHA 1904.39 severe-injury notification flow** — 8h (fatality) / 24h (hospitalization, amputation, loss of eye). New `osha_severe_notifications` table; new service; phone-notified-at logging. Plugs into the WI-08 `deadlines.js` aggregator (TODO marker is already in place).
-- **WI-02 OSHA 300A PDF + ITA CSV** — depends on WI-01. ITA CSV column headers need owner clarification (not in the RK package).
+- **WI-02 OSHA 300A PDF + ITA CSV** — reuses `pdfkit`. ITA CSV column headers need owner clarification (not in the RK package).
 - **WI-09 Generic Incident PDF** — universal fallback. No hallucination gate.
 
 **Still gated** (owner needs to supply source material before starting):
 - **WI-05 RIDDOR F2508 PDF** — HSE F2508 visual reference.
 - **WI-06 SafeWork NSW** — WHS Act s.36 / s.37 enumerations + Notify form + ANZSIC code list.
 
-**WI-01 cold files for the next session:**
-- `server/routes/reports.js` lines 44–75 — existing `GET /reports/osha-300` JSON handler. Extend to honour `?format=pdf`.
-- `server/db/schema.sql` `osha_300_log` table — column set the PDF renders from.
-- `server/services/osha_300_helpers.js` — `descriptionForOsha300` + `injuryTypeForOsha300` text formatters reused by the renderer.
-- `client/src/pages/reports/ReportsPage.jsx` — section near the OSHA 300 table where the "Download PDF" button goes.
-- `server/package.json` — adds `pdfkit` (carries the dep for WI-02 / WI-03 / WI-09 too).
-- Source: `docs/regulatory-sources/osha/29 CFR Part 1904 (up to date as of 5-07-2026).pdf` (1904.29 + 1904.29(b)(7) privacy-case rule) + `OSHA-RK-Forms-Package.pdf` (the visual Form 300 layout).
+**WI-03 cold files for the next session:**
+- `server/routes/reports.js` `GET /reports/osha-301/:incidentId` — existing JSON handler. Extend to honour `?format=pdf`. Shape already exposes `employee.{dob,gender,hire_date,address,phone}`, injury / classification / treatment / physician blocks.
+- `server/services/pdf/osha_300.js` — template for the renderer (page margins, `lineBreak: false` pattern, audit logging shape).
+- `server/services/affected_persons.js` — reader for the multi-person model so the 301 picks the primary affected person + their primary injury post-WI-A.
+- `client/src/pages/incidents/IncidentDetail.jsx` — section that surfaces OSHA-recordable status; this is the natural anchor for the "Download 301 PDF" button (per-incident, not per-site like 300).
+- Source: `docs/regulatory-sources/osha/29 CFR Part 1904 (up to date as of 5-07-2026).pdf` (1904.29 — same section as 300, covers 301 explicitly) + `OSHA-RK-Forms-Package.pdf` (Form 301 page).
 
 **Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
 
@@ -192,6 +191,25 @@ Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink
 ---
 
 ## Recent session log
+
+### 2026-05-12 (late night) — WI-01 OSHA 300 PDF shipped (BE renderer + FE Download button)
+
+Chunk 8 closed in a single BE+FE commit. First PDF chunk on the project — `pdfkit` is now on `server/package.json` and the renderer pattern in `server/services/pdf/osha_300.js` is the template WI-02 / WI-03 / WI-09 will copy.
+
+| Commit | Scope |
+|---|---|
+| (this) | `server/services/pdf/osha_300.js` — Form 300 (Rev. 04/2004) US-Letter landscape renderer: 13-column case grid (A case#, B name, C job_title, D date M/D, E location, F description+body-parts, G/H/I/J classification X-marks, K/L day counts, M1..M6 injury-type X-marks), header with Year + Establishment + Address + Org + OMB stamp, footer with "transfer to 300A" reminder + Page X of Y, page-totals strip on the final page. Privacy-case substitution per 29 CFR 1904.29(b)(7). Auto-pagination kept off via `margins.bottom: 0` + explicit absolute coords + `lineBreak: false` so page count = `Math.ceil(N / 12)`. `GET /reports/osha-300?format=pdf` branch — requires `site_id` (1904.30(a) cite in the 400), cross-tenant 404, cross-checks the existing JSON path. Audit verb `osha_300_pdf_downloaded` added to catalog. FE: Download-PDF button in `Osha300Report` panel header (`ReportsPage.jsx`) using the existing auth-fetch + blob-`<a>` pattern from the audit-log CSV export. `pdfkit` ^0.18.0 added to `server/package.json`. roadmap.md + implementation-plan.md updates. |
+
+**Smoke matrix verified end-to-end:**
+- `priya@sdsmanager.com` (admin, SDS Manager Inc. org=1) → Cleveland Plant 2026 → 35 cases, 3 pages, totals row reads `0 / 1 / 0 / 34 / 3 / 2 / 35 / 0 / 0 / 0 / 0 / 0` matching the JSON aggregate.
+- `acme@sdsmanager.com` (admin, Acme Manufacturing org=2) → "kkk" site → 1 case, 1-page PDF, totals + remaining rows correctly blank.
+- `acme@sdsmanager.com` requesting Cleveland (org=1) site_id=1 → 404 (cross-tenant guard).
+- Missing `site_id` → 400 with the 29 CFR 1904.30(a) citation.
+- Synthetic 2-row run with `is_privacy_case=1` on row 2 → column B prints "Privacy Case" and column C is blank, row 1 unchanged. Verified by `pdftotext -layout`.
+
+**Test results:** wi08-e2e 19/19; wi04-e2e 49/49; wib-e2e 42/42; wia-regression 77/78 (F1 unchanged); node:test (riddor + frameworks) 48/48; Vite build clean.
+
+**Servers running.** Branch `backend` at this turn's commit.
 
 ### 2026-05-12 (night) — WI-D jurisdiction-aware wizard shipped + OSHA source PDFs landed
 

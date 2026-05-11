@@ -29,22 +29,25 @@ Defined in `plan-2026-05-11.md` Part 3. Each chunk ends with a ✋ owner checkpo
 | 6 | WI-B Override approval workflow | ✅ Done — `7ee1983` (BE: migration 026 + service + routes + 42-assertion `wib-e2e.sh`), `e660b16` (FE: modal + RecordabilityVerifyCard banner + `/approvals` page) |
 | 7 | WI-08 Deadline countdown UI | ✅ Done — `449539b` (single BE+FE commit: `server/services/deadlines.js` aggregator + `GET /incidents/:id/deadlines` + list/detail attachment + `DeadlineBadge.jsx` rendered in IncidentDetail header & IncidentsList rows + 19-assertion `wi08-e2e.sh`). |
 | 7a | WI-D Jurisdiction-aware wizard + forms | ✅ Done — `2e708d0` (single FE commit: `jurisdictionForContext()` + `showField()` registry in `client/src/utils/frameworks.js`; wizard threads jurisdiction to InjuryForm + AffectedPersonModal with "Show all" override toggle; 25-test `frameworks.test.js`). |
-| **8** | **WI-01 OSHA 300 PDF + WI-03 OSHA 301 PDF + WI-07 OSHA 1904.39 severe-injury flow** | **Next.** OSHA source PDFs landed `753ec42` — hallucination gates cleared. |
-| 8+ | WI-01, WI-05, WI-06, WI-07, WI-02, WI-09 | OSHA 300 PDF → RIDDOR F2508 → SafeWork NSW → OSHA 1904.39 → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
+| 8 | WI-01 OSHA 300 PDF | ✅ Done — single BE+FE commit. `server/services/pdf/osha_300.js` renderer + `?format=pdf` branch on `GET /reports/osha-300` + Download-PDF button on `Osha300Report` in `ReportsPage.jsx`. Privacy-case substitution per 29 CFR 1904.29(b)(7); per-establishment requirement per 1904.30(a). `pdfkit` landed on `server/package.json` (carries the dep for WI-02/03/09). |
+| **9** | **WI-03 OSHA 301 PDF + WI-07 OSHA 1904.39 severe-injury flow** | **Next.** OSHA sources cleared. Reuse `pdfkit` from WI-01. |
+| 9+ | WI-05, WI-06, WI-02, WI-09 | RIDDOR F2508 → SafeWork NSW → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
 
 ---
 
 ## In-scope work items
 
-### WI-01: OSHA Form 300 PDF rendering (29 CFR 1904.29)
+### WI-01: OSHA Form 300 PDF rendering (29 CFR 1904.29) — ✅ DONE
 
-OSHA prescribes the Form 300 layout. Today `GET /reports/osha-300` returns JSON only.
+Shipped 2026-05-12 in a single BE+FE commit.
 
-- New file `server/services/pdf/osha_300.js` — render the prescribed grid from `osha_300_log` rows using `pdfkit`.
-- Privacy-case substitution (`is_privacy_case` → "privacy case" instead of name) per 29 CFR 1904.29(b)(7). Column already exists from migration 016.
-- Extend `GET /reports/osha-300` to honor `?format=pdf`.
-- Add download button in `client/src/pages/reports/ReportsPage.jsx`.
-- Add `pdfkit` to `server/package.json` (first PDF WI to land carries the dependency).
+- **Renderer** `server/services/pdf/osha_300.js` — US-Letter landscape, 13-column case grid matching the official Form 300 (Rev. 04/2004): Step 1 (A case#, B name, C job_title), Step 2 (D date, E location, F description+body-parts), Step 3 (G/H/I/J classification X-marks — exactly one of death/days-away/job-transfer/other-recordable), Step 4 (K/L day counts), Step 5 (M1..M6 injury-type X-marks). Header carries Year + Establishment + Address + Org name + OMB stamp; footer carries the "transfer to 300A" reminder + Page X of Y. Final page renders the page-totals strip. pdfkit auto-pagination disabled via `margins.bottom: 0` (explicit absolute coordinates + `lineBreak: false` on every text call) so the page count matches `Math.ceil(N / 12)`.
+- **Privacy-case substitution** per 29 CFR 1904.29(b)(7): rows with `is_privacy_case=1` render employee_name as "Privacy Case" and job_title blank. Verified against a synthetic 2-row PDF; substitution happens both in the route's existing JSON-shaping pass and defensively inside the renderer's `applyPrivacy()` helper.
+- **Route** `GET /reports/osha-300?format=pdf` — reuses the same SQL + privacy substitution as the JSON branch. **Requires** `site_id` per 29 CFR 1904.30(a) (one Log per establishment) — returns 400 with the cite if missing. Cross-tenant `site_id` returns 404. Successful download writes an `osha_300_pdf_downloaded` activity_log entry (new audit verb in catalog) carrying `site_id`, `period_year`, `case_count`, and the request's IP / user-agent.
+- **FE** — Download-PDF button in the `Osha300Report` panel header (`client/src/pages/reports/ReportsPage.jsx`) alongside the existing Manual-entry button. Authenticated-fetch + blob → `<a download>` pattern (matches the audit-log CSV download). Filename derived from `Content-Disposition` (e.g. `osha-300-12-3456-2026.pdf`). Button disabled while generating; alerts on failure.
+- **Dependency** — `pdfkit` ^0.18.0 added to `server/package.json`. WI-02 / WI-03 / WI-09 will reuse this.
+
+**Equivalent form** notice: 29 CFR 1904.29(b)(4) explicitly permits an "equivalent form" so long as it contains the same information, is as readable, and uses the same instructions. The exact-pixel match to the OSHA fillable PDF is not required; section identifiers (A..M6) and the regulatory citations are preserved verbatim.
 
 **Complexity:** M. **New tables:** none. **Existing columns touched:** none.
 
