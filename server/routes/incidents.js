@@ -32,6 +32,37 @@ const router = Router();
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
 
+// WI-A defensive: the wizard now lifts flat injured_* keys into a nested
+// injured_person sub-record at submit time, but a curl PATCH or older
+// client may still send the flat shape. Mirror the wizard's lift here
+// so both the incidents.type_data stored on disk AND the affected_persons
+// sync see the same complete injured_person object. Mutates typeData in
+// place; safe to call on any PATCH body that includes type_data.
+const FLAT_INJURED_KEYS = [
+  ['injured_name', 'name'],
+  ['injured_job_title', 'job_title'],
+  ['injured_department', 'department'],
+  ['injured_dob', 'dob'],
+  ['injured_gender', 'gender'],
+  ['injured_date_hired', 'date_hired'],
+  ['injured_address', 'address'],
+  ['injured_phone', 'phone'],
+];
+function liftFlatInjuredKeys(typeData) {
+  if (!typeData || typeof typeData !== 'object') return typeData;
+  const hasFlat = FLAT_INJURED_KEYS.some(([flat]) => typeData[flat] !== undefined);
+  if (!hasFlat) return typeData;
+  // Only lift keys actually present in the flat body. Don't default
+  // unspecified keys to null — that would wipe existing fields via the
+  // affected_persons sync downstream.
+  const lifted = { ...(typeData.injured_person || {}) };
+  for (const [flat, nested] of FLAT_INJURED_KEYS) {
+    if (typeData[flat] !== undefined) lifted[nested] = typeData[flat];
+  }
+  typeData.injured_person = lifted;
+  return typeData;
+}
+
 // WI-A: keep the primary affected_person + primary injury in sync with
 // whatever was PATCHed against an existing incident. Called from PATCH
 // /:id. Multi-person edits use /incidents/:id/affected-persons/... and
@@ -1172,6 +1203,7 @@ router.patch('/:id', (req, res) => {
     }
   }
   if (req.body.type_data !== undefined) {
+    liftFlatInjuredKeys(req.body.type_data);
     sets.push('type_data = ?');
     params.push(JSON.stringify(req.body.type_data));
   }

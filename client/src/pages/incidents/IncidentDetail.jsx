@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness, requestClosure, approveClosure, rejectClosure, reopenIncident, forceCloseIncident, getAffectedPersons } from '../../api/incidents';
+import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness, requestClosure, approveClosure, rejectClosure, reopenIncident, forceCloseIncident, getAffectedPersons, deleteAffectedPerson } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
@@ -176,6 +176,10 @@ export default function IncidentDetail() {
 
   const [affectedPersons, setAffectedPersons] = useState([]);
   const [apModalOpen, setApModalOpen] = useState(false);
+  // null = closed; person object = edit mode for that row
+  const [apEditTarget, setApEditTarget] = useState(null);
+  // Index of expanded person row (for fuller-detail toggle), or -1 = all collapsed
+  const [expandedApIdx, setExpandedApIdx] = useState(-1);
 
   const load = () => {
     setLoading(true);
@@ -339,6 +343,17 @@ export default function IncidentDetail() {
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to update witness.');
       throw err;
+    }
+  };
+
+  const handleDeleteAffectedPerson = async (ap) => {
+    if (!window.confirm(`Remove ${ap.name || 'this person'} from the incident? Audit trail keeps the record.`)) return;
+    try {
+      await deleteAffectedPerson(r.id, ap.id);
+      showToast(ap.name ? `${ap.name} removed.` : 'Person removed.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to remove person.');
     }
   };
 
@@ -856,7 +871,10 @@ export default function IncidentDetail() {
                   </div>
                 ) : (
                   <div className="idet-witnesses">
-                    {affectedPersons.map((ap, idx) => (
+                    {affectedPersons.map((ap, idx) => {
+                      const expanded = expandedApIdx === idx;
+                      const hasExtra = ap.dob || ap.gender || ap.address || ap.phone || ap.date_hired || ap.email;
+                      return (
                       <div key={ap.id} className="idet-witness">
                         <div className="idet-witness-head">
                           <div className="idet-witness-info">
@@ -871,6 +889,16 @@ export default function IncidentDetail() {
                                 .filter(Boolean).join(' · ') || '—'}
                             </div>
                           </div>
+                          {canEdit && (
+                            <div className="idet-witness-actions">
+                              <button className="idet-edit-trigger" onClick={() => setApEditTarget(ap)} title="Edit person">
+                                <Icon name="edit" size={11}/>edit
+                              </button>
+                              <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteAffectedPerson(ap)} title="Remove person">
+                                <Icon name="close" size={11}/>remove
+                              </button>
+                            </div>
+                          )}
                         </div>
                         {(ap.injuries || []).length > 0 && (
                           <div className="idet-witness-statement">
@@ -889,8 +917,30 @@ export default function IncidentDetail() {
                             ))}
                           </div>
                         )}
+                        {hasExtra && (
+                          <div className="idet-witness-statement">
+                            <button
+                              className="idet-edit-trigger"
+                              onClick={() => setExpandedApIdx(expanded ? -1 : idx)}
+                              title={expanded ? 'Hide regulatory fields' : 'Show all regulatory fields'}
+                            >
+                              <Icon name={expanded ? 'arrow' : 'arrow'} size={11}/>
+                              {expanded ? 'Hide details' : 'Show details'}
+                            </button>
+                            {expanded && (
+                              <div>
+                                {ap.dob && <div><strong>DOB:</strong> {ap.dob}</div>}
+                                {ap.gender && <div><strong>Gender:</strong> {ap.gender.replace(/_/g, ' ')}</div>}
+                                {ap.date_hired && <div><strong>Date hired:</strong> {ap.date_hired}</div>}
+                                {ap.address && <div><strong>Address:</strong> {ap.address}</div>}
+                                {ap.phone && <div><strong>Phone:</strong> {ap.phone}</div>}
+                                {ap.email && <div><strong>Email:</strong> {ap.email}</div>}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    );})}
                   </div>
                 )}
               </div>
@@ -1008,6 +1058,13 @@ export default function IncidentDetail() {
         open={apModalOpen}
         incident={r}
         onClose={() => setApModalOpen(false)}
+        onSaved={load}
+      />
+      <AffectedPersonModal
+        open={!!apEditTarget}
+        incident={r}
+        person={apEditTarget}
+        onClose={() => setApEditTarget(null)}
         onSaved={load}
       />
 

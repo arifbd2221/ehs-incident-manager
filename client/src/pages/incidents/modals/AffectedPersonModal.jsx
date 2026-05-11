@@ -1,21 +1,29 @@
-// AffectedPersonModal.jsx — WI-A follow-up: add an affected person + one
-// injury to an existing incident.
+// AffectedPersonModal.jsx — WI-A: create OR edit an affected person + their
+// (one) primary injury on an incident.
 //
-// Two intake paths:
-//   - Employee: ComboBox over the org user list; selection auto-fills
-//     name + job_title + email. employment_status defaults to 'employee'.
-//   - Non-employee: free-form fields. employment_status defaults to
-//     'visitor' but the picker exposes all 7 PRD values.
+// Three modes, picked by which props are passed:
+//   - create / POST: pass `incident` (with id + incident_number). Submit
+//     calls createAffectedPerson(incident.id, …).
+//   - edit / PATCH: pass `incident` + `person` (the existing row with
+//     nested injuries[]). Submit calls updateAffectedPerson +
+//     updateInjury (or createInjury for an injury-less existing row).
+//   - collect-only: pass `onCollect` instead of `onSaved`. Submit returns
+//     the payload to the parent — used by the wizard to queue extra
+//     persons before the incident is created. `incident` may be null.
 //
-// Submit calls createAffectedPerson(incidentId, payload) with one nested
-// injury row. Edit + delete UI is deferred — the route layer already
-// supports it; this modal only handles add for now.
+// Employee toggle (intake convenience, create-mode only): ComboBox over
+// the org user list; selection auto-fills name + job_title + email.
 
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
-import { createAffectedPerson } from '../../../api/incidents';
+import {
+  createAffectedPerson,
+  updateAffectedPerson,
+  createInjury,
+  updateInjury,
+} from '../../../api/incidents';
 import { getUsers } from '../../../api/users';
 
 const EMPLOYMENT_STATUSES = [
@@ -48,15 +56,8 @@ const BLANK_FORM = {
   days_away: 0,
 };
 
-// Two modes:
-//   - default (POST mode): caller passes `incident` (must have id +
-//     incident_number). Submit calls createAffectedPerson(incident.id, …).
-//   - collect-only mode: caller passes `onCollect` instead of `onSaved`.
-//     Submit returns the payload to the parent instead of POSTing —
-//     used by the wizard to queue extra persons before the incident is
-//     created. `incident` may be a placeholder ({ incident_number: '—' })
-//     in this mode since there's no id yet.
-export default function AffectedPersonModal({ open, incident, onClose, onSaved, onCollect }) {
+export default function AffectedPersonModal({ open, incident, person, onClose, onSaved, onCollect }) {
+  const isEdit = !!person;
   const [isEmployee, setIsEmployee] = useState('yes'); // 'yes' | 'no'
   const [selectedUserId, setSelectedUserId] = useState('');
   const [form, setForm] = useState(BLANK_FORM);
@@ -64,14 +65,38 @@ export default function AffectedPersonModal({ open, incident, onClose, onSaved, 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  // Reset state when the modal opens/closes.
+  // Reset state when the modal opens/closes. In edit mode, hydrate the
+  // form from the existing person + their first non-deleted injury.
   useEffect(() => {
     if (open) {
-      setIsEmployee('yes');
+      if (isEdit && person) {
+        const inj = (person.injuries || []).find(i => !i.deleted_at) || {};
+        setForm({
+          name: person.name || '',
+          job_title: person.job_title || '',
+          email: person.email || '',
+          phone: person.phone || '',
+          dob: person.dob || '',
+          gender: person.gender || '',
+          employment_status: person.employment_status || 'employee',
+          is_primary: person.is_primary === 1,
+          is_privacy_case: person.is_privacy_case === 1,
+          body_part: inj.body_part || '',
+          injury_type: inj.injury_type || '',
+          mechanism: inj.mechanism || '',
+          treatment: inj.treatment || '',
+          er_treated: inj.er_treated === 1,
+          hospitalized: inj.hospitalized === 1,
+          days_away: inj.days_away || 0,
+        });
+        setIsEmployee('no'); // hide picker — already identified
+      } else {
+        setIsEmployee('yes');
+        setForm(BLANK_FORM);
+      }
       setSelectedUserId('');
-      setForm(BLANK_FORM);
       setError(null);
-      // Lazy-load user list once per open.
+      // Lazy-load user list (only used in create mode but cheap).
       getUsers().then(setUsers).catch(() => setUsers([]));
     }
   }, [open]);
@@ -142,6 +167,24 @@ export default function AffectedPersonModal({ open, incident, onClose, onSaved, 
         // network. Parent stages it for inclusion in createIncident().
         onCollect(payload);
         onClose?.();
+      } else if (isEdit) {
+        // PATCH the person + their primary injury. Injuries[] from the
+        // payload is collapsed to a single primary-injury patch here;
+        // adding multiple distinct injuries is a separate concern.
+        const apPatch = { ...payload };
+        const injPatch = apPatch.injuries?.[0];
+        delete apPatch.injuries;
+        await updateAffectedPerson(incident.id, person.id, apPatch);
+        if (injPatch) {
+          const existingInj = (person.injuries || []).find(i => !i.deleted_at);
+          if (existingInj) {
+            await updateInjury(incident.id, person.id, existingInj.id, injPatch);
+          } else if (hasAnyInjuryField(form)) {
+            await createInjury(incident.id, person.id, injPatch);
+          }
+        }
+        onSaved?.();
+        onClose?.();
       } else {
         await createAffectedPerson(incident.id, payload);
         onSaved?.();
@@ -166,7 +209,7 @@ export default function AffectedPersonModal({ open, incident, onClose, onSaved, 
       <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
         <div className="modal-h">
           <div>
-            <div className="modal-title">Add affected person</div>
+            <div className="modal-title">{isEdit ? 'Edit affected person' : 'Add affected person'}</div>
             <div className="modal-sub">
               {incident?.incident_number ? `Incident ${incident.incident_number}` : 'New incident — staged before submit'}
             </div>
@@ -311,7 +354,7 @@ export default function AffectedPersonModal({ open, incident, onClose, onSaved, 
         <div className="modal-f">
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
           <button type="button" className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Adding…' : 'Add person'}
+            {saving ? (isEdit ? 'Saving…' : 'Adding…') : (isEdit ? 'Save changes' : 'Add person')}
           </button>
         </div>
       </div>
