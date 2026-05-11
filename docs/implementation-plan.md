@@ -22,13 +22,13 @@ Defined in `plan-2026-05-11.md` Part 3. Each chunk ends with a ✋ owner checkpo
 | Chunk | Work item | Notes |
 |---|---|---|
 | 1 | Setup (this doc + plan + compliance-notes + memory + roadmap) | ✅ Done — `8cd3093` |
-| 2 | WI-04 RIDDOR Reg 5 + 11 | Source PDF in repo (`db5c1d4`, `caab857`). **Next session.** |
+| 2 | WI-04 RIDDOR Reg 5 + 11 + Reg 14(3) flag | ✅ Done — `b0f8c53`, `df44eb3`, `3ac058e`. E2E at `server/scripts/wi04-e2e.sh` (49 assertions, all pass). |
 | 3 | WI-10 Activity-log audit consistency | ✅ Done — `67b8c9a` |
 | 4 | WI-C Activity log integrity (hash chain) | ✅ Done — `2301521`, `b3343a0` |
 | 5 | WI-A Multi-person incidents | ✅ Done — `12fbd8d` … `caab857` (wizard, modal, dual-write, address/phone/DOB/gender/date_hired) |
-| 6 | WI-B Override approval workflow | Not started. |
+| **6** | **WI-B Override approval workflow** | **Next.** |
 | 7 | WI-08 Deadline countdown UI | Reads existing + WI-06/WI-07 fields. |
-| **7a** | **WI-D Jurisdiction-aware wizard + forms** | **Owner directive 2026-05-11 evening — show fields by org's compliance_frameworks + site.country. Spec below.** |
+| 7a | WI-D Jurisdiction-aware wizard + forms | Owner directive 2026-05-11 evening — show fields by org's compliance_frameworks + site.country. WI-04 added a "UK RIDDOR edge cases" card that WI-D should hide for non-UK orgs. Spec below. |
 | 8+ | WI-01, WI-05, WI-06, WI-07, WI-02, WI-09 | OSHA 300 PDF → RIDDOR F2508 → SafeWork NSW → OSHA 1904.39 → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
 
 ---
@@ -75,17 +75,24 @@ Form 301 is per-recordable-incident and prescribed. PRD §4.3 fields not current
 
 ---
 
-### WI-04: RIDDOR Regulations 5 + 11 classification logic (RIDDOR 2013, Regs 5, 11)
+### WI-04: RIDDOR Regulations 5 + 11 classification logic (RIDDOR 2013, Regs 5, 11) — ✅ DONE
 
-`server/services/riddor.js` is missing Reg 5 (non-workers — accidents to members of the public taken to hospital) and Reg 11 (gas incidents).
+Shipped 2026-05-12 across three commits + a test/cleanup follow-up. `server/services/riddor.js` now covers Reg 4(1)/(2), Reg 5(a)/(b), Reg 6, Reg 7, Reg 8, Reg 11(1)/(2), Reg 11(3)(a)/(b)/(c) carve-outs, plus the Reg 14(1) medical-procedure exception and the Reg 14(3) road-vehicle exception (both currently gating the Reg 5 path only — the Reg 4 path retains its existing behaviour pending owner approval to extend). Reg paragraph numbers cited verbatim in code comments. Output continues to write to the existing `incidents.riddor_category` / `riddor_ref` columns + `riddor_reports.written_deadline`. No schema changes.
 
-- Add Reg 5 branch keyed on the existing affected-person type field and outcome = hospitalization.
-- Add Reg 11 branch keyed on incident type / dangerous-occurrence subtype = gas.
-- Output value goes into existing `incidents.riddor_category` / `riddor_ref` columns.
+**FE shipped** in the same WI: new `client/src/utils/riddor.js` with `RIDDOR_CATEGORY_LABELS` for the 9 categories, surfaced on `IncidentDetail` header badge + `ReportsPage` RIDDOR table. New "UK RIDDOR edge cases" card on `InjuryForm` captures `on_hospital_premises`, `reg14_medical_procedure_exception`, `reg14_3_road_vehicle_excluded` (computed from a 3-state select with the four Reg 14(3) carve-outs explained), `gas_reporter_role`, `gas_dangerous_fitting`, and the Reg 11(3)(b)/(c) carve-out flags. WI-D will hide this card for non-UK orgs.
 
-**Hallucination-risk gate:** owner-supplied HSE Schedule 1 (diseases) + Schedule 2 (dangerous occurrences) reference required. Annotate gaps in `riddor.js` lines 23 / 45–50 but do not extend without source.
+**Tests:**
+- `server/scripts/riddor-reg5-reg11.test.js` — 23 `node:test` cases (pure functional, no DB) — all pass.
+- `server/scripts/wi04-e2e.sh` — 49 curl + sqlite3 assertions covering every Reg 5/11/14 branch + Reg 4/6/7/8 regressions + country gate + cross-tenant 404 + WI-C hash-chain still verifying + new categories surfacing in `/api/reports/riddor` — all pass.
 
-**Complexity:** S. **New tables:** none.
+**Hallucination-risk gate satisfied:** verbatim regulation text extracted from `docs/regulatory-sources/riddor/uksi_20131471_en.pdf` and cross-referenced against `indg453.pdf`. Reg paragraphs cited inline in `services/riddor.js` so future readers can verify against source.
+
+**Carry-forward TODOs (in code):**
+- Volunteer classification — treated as worker (conservative). Per-incident wizard flag would be ideal; needs owner approval.
+- Reg 14(1)/(3) gating not yet applied to the Reg 4 (worker) path. Extending requires owner approval (changes existing behaviour).
+- PATCH /incidents/:id does not re-run RIDDOR classification — pre-existing limitation, not introduced by WI-04. Adding hospitalization post-creation via affected_persons CRUD won't auto-fire Reg 5(a).
+
+**Complexity:** S. **New tables:** none. **Commits:** `b0f8c53`, `df44eb3`, `3ac058e`.
 
 ---
 

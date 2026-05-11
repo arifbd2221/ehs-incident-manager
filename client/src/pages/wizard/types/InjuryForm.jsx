@@ -398,7 +398,7 @@ export default function InjuryForm({ data, onChange }) {
           <span className="helper" style={{ marginLeft: 8 }}>Only relevant at UK sites; safe to leave blank otherwise.</span>
         </div>
 
-        <div className="field" style={{ marginBottom: 12 }}>
+        <div className="field">
           <label className="label">Accident occurred on hospital premises?</label>
           <select
             className="select"
@@ -412,7 +412,7 @@ export default function InjuryForm({ data, onChange }) {
           <span className="helper">RIDDOR Reg 5(b): for non-workers, only specified injuries on hospital premises are reportable.</span>
         </div>
 
-        <div className="field-row" style={{ marginBottom: 12 }}>
+        <div className="field-row">
           <div className="field">
             <label className="label">Reg 14(1) — medical-procedure exception</label>
             <select
@@ -453,7 +453,7 @@ export default function InjuryForm({ data, onChange }) {
           </div>
         </div>
 
-        <div className="field" style={{ marginBottom: 8 }}>
+        <div className="field">
           <label className="label">Gas-related incident (Reg 11)</label>
           <select
             className="select"
@@ -477,7 +477,7 @@ export default function InjuryForm({ data, onChange }) {
         </div>
 
         {data.gas_reporter_role === 'approved_person' && (
-          <div className="field-row" style={{ marginBottom: 0 }}>
+          <div className="field-row">
             <div className="field">
               <label className="label">Dangerous gas fitting?</label>
               <select

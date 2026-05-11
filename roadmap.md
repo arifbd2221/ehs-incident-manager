@@ -6,16 +6,17 @@ Live status for what's open, what's done, and how to operate on this codebase. D
 
 ## Current state
 
-- **Branch:** `backend` at `f2ff262` (P3-OP1 FE — maintenance tab + global page + KPI + detail modal) plus the PRD-remediation Chunk 1 commit landing this session. Working tree previously clean; this session adds `docs/{plan-2026-05-11,implementation-plan,gap-analysis,compliance-notes}.md` and a roadmap rewrite.
-- **`origin/main`** at `b3dbb08`. Backend is +9 commits ahead (P3-OB3 + P3-OP1).
+- **Branch:** `backend` at `3ac058e` (WI-04 FE: wizard fields + `riddorCategoryLabel` map) plus the test-script + memory/roadmap-update commit landing this turn. Working tree clean (only `PRD.md` left untracked — owner reference doc).
+- **`origin/main`** at `b3dbb08` (last known). Backend is many commits ahead: WI-A end-to-end + WI-04 series. Check `gh pr list` for current PR state.
 - **PR #11** ✅ merged 2026-05-11.
-- **PR #13** open (backend → main).
 - **Phase 2:** code complete; F6.2 manual walkthrough open.
 - **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OB2, OB3, OP1, OP2, OP3.
-- **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1, RG1 (now superseded by PRD-remediation WI-06 SafeWork NSW).
-- **Migrations applied:** 001–023 + letter fixups `014a`, `017a`, `023a`, `023b`, `023c`. Next available: **024**.
-- **Demo accounts** (all `password123`): `priya@sdsmanager.com` (admin, SDS Manager Inc., id=13), `elena@sdsmanager.com` (ehs_manager, multi-framework), `marcus`, `james`, `mehta`, `wendy`; plus empty test orgs `acme@sdsmanager.com` (OSHA US), `riddor-test@example.com` (RIDDOR UK), `sydney-test@example.com` (SafeWork NSW AU).
+- **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1. (RG1 superseded by PRD-remediation WI-06 SafeWork NSW.)
+- **PRD-remediation done:** Chunk 1 (setup), Chunk 2 (WI-04), Chunk 3 (WI-10), Chunk 4 (WI-C), Chunk 5 (WI-A).
+- **Migrations applied:** 001–025 + letter fixups `014a`, `017a`, `023a`, `023b`, `023c`. Next available: **026**. (024 = WI-C hash chain; 025 = WI-A `affected_persons` + `injuries`.)
+- **Demo accounts** (all `password123`): `priya@sdsmanager.com` (admin, SDS Manager Inc., org=1), `elena@sdsmanager.com` (ehs_manager, org=1, multi-framework — owns Sheffield UK site), `marcus`, `james`, `mehta`, `wendy`; plus empty test orgs `acme@sdsmanager.com` (admin, Acme Manufacturing org=2, OSHA US — used for cross-tenant tests), `riddor-test@example.com` (RIDDOR UK), `sydney-test@example.com` (SafeWork NSW AU).
 - **Dev servers:** `cd server && node --watch index.js` (BE :3001) + `cd client && npm run dev` (FE :5173).
+- **Test suites:** `server/scripts/wia-regression.sh` (78, 77 pass + 1 known F1 script bug), `server/scripts/wi04-e2e.sh` (49, all pass), `server/scripts/riddor-reg5-reg11.test.js` (23 `node:test`, all pass).
 
 ---
 
@@ -34,18 +35,18 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 | Chunk | WI | Status |
 |---|---|---|
 | 1 | Setup (docs + memory + roadmap) | ✅ `8cd3093` |
-| 2 | **WI-04 RIDDOR Reg 5 + 11** | **Sources in repo (`db5c1d4` + INDG453). NEXT SESSION.** |
+| 2 | WI-04 RIDDOR Reg 5 + 11 + Reg 14(3) flag | ✅ `b0f8c53` (engine + 20 unit tests), `df44eb3` (Reg 5 reorder ahead of Reg 4 + Reg 14(3) flag), `3ac058e` (FE: wizard fields + `riddorCategoryLabel` map). 49-assertion E2E suite at `server/scripts/wi04-e2e.sh` — all pass. 23-test unit suite at `server/scripts/riddor-reg5-reg11.test.js`. |
 | 3 | WI-10 Activity-log audit consistency | ✅ `67b8c9a` |
 | 4 | WI-C Activity-log integrity (hash chain) | ✅ `2301521`, `b3343a0` |
 | 5 | WI-A Multi-person incidents (full: routes + dual-write + wizard + modal + 7 reg fields + edit/delete + expander) | ✅ `12fbd8d` … `ace8816`. 78-assertion regression suite at `server/scripts/wia-regression.sh` — 77 pass / 1 known test-script bug (witnesses 201). |
-| 6 | WI-B Override approval workflow | |
+| **6** | **WI-B Override approval workflow** | **NEXT.** |
 | 7 | WI-08 Deadline countdown UI | |
-| **7a** | **WI-D Jurisdiction-aware wizard + forms** | **Owner directive 2026-05-11 evening — gate fields by org's compliance_frameworks + site.country. Spec in `docs/implementation-plan.md`.** |
+| 7a | WI-D Jurisdiction-aware wizard + forms | Owner directive 2026-05-11 evening — gate fields by org's compliance_frameworks + site.country. Spec in `docs/implementation-plan.md`. WI-04 added a "UK RIDDOR edge cases" wizard card that WI-D should hide for non-UK orgs. |
 | 8+ | WI-01 OSHA 300 PDF → WI-05 F2508 → WI-06 SafeWork NSW → WI-07 1904.39 → WI-02 300A+ITA → WI-09 Generic PDF | reorder allowed by gate readiness |
 
 **Hallucination-risk gates** (memory `feedback_regulatory_truth.md`) — do NOT start without owner-supplied source material in `docs/regulatory-sources/`:
 - WI-02 — OSHA ITA CSV upload template.
-- WI-04 — ✅ owner provided SI 2013/1471 + HSE INDG453.
+- WI-04 — ✅ DONE. Owner-provided SI 2013/1471 + HSE INDG453 used; verbatim text cited in code comments.
 - WI-05 — HSE F2508 visual reference.
 - WI-06 — WHS Act 2011 (NSW) s.36 / s.37 enumerations, official Notify SafeWork NSW form, ANZSIC code list.
 
@@ -53,18 +54,13 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 
 ## Next session priority
 
-**CHUNK 2 — WI-04 RIDDOR Reg 5 + 11.** Source material is in the repo:
-- `docs/regulatory-sources/riddor/uksi_20131471_en.pdf` — SI 2013/1471 (the regs themselves)
-- `docs/regulatory-sources/riddor/indg453.pdf` — HSE INDG453 plain-English guidance
+**CHUNK 6 — WI-B Recordability override approval workflow.** Spec in `docs/plan-2026-05-11.md` Part 2 and `docs/implementation-plan.md` WI-B section. New `classification_override_requests` table; approve/reject/withdraw routes; self-approval forbidden (`requested_by != decided_by`); existing direct-edit path stays but emits `console.warn`. FE: replace direct "Override" button on `RecordabilityVerifyCard.jsx` with "Request override" modal + global pending-approval queue.
 
-Service-only extension to `server/services/riddor.js` for **Reg 5** (non-workers — accidents to members of the public taken from the accident site to hospital, OR specified injury on hospital premises) and **Reg 11** (gas incidents — fixed-pipe flammable-gas distributors / LPG suppliers receiving notification of death/LOC/hospitalization arising from that gas, 14-day reporting deadline). Output goes into the existing `incidents.riddor_category` / `riddor_ref` columns. No schema changes.
+**Alternatives if WI-B not desired next:**
+- **WI-08 deadline countdown UI** — pure presentation; reads existing `riddor_reports.written_deadline` + future WI-06/WI-07 deadlines. No schema.
+- **WI-D jurisdiction-aware wizard** — FE-heavy, extends `client/src/utils/frameworks.js` with `jurisdictionForContext()` to gate the new WI-04 "UK RIDDOR edge cases" card (currently visible to all orgs) plus the WI-A multi-person fields by org's `compliance_frameworks` + `site.country`.
 
-**Files cold for WI-04:**
-- `server/services/riddor.js` — current Reg 4/6/7/8 logic; lines 23 + 45–50 are the Reg 7 / Reg 8 lists with partial coverage.
-- `server/services/auto_classify.js` — where RIDDOR classification is fired from.
-- `server/routes/incidents.js` — RIDDOR fields persisted on POST/PATCH; the WI-10 audit row + WI-A dual-write hooks are recent additions in this same handler.
-
-**After WI-04, queued for the same session if context allows: WI-D (jurisdiction-aware forms)** — see chunk 7a above and the full spec in `docs/implementation-plan.md`. WI-D is FE-heavy (extends `client/src/utils/frameworks.js` with `jurisdictionForContext()` + gates the wizard form-section visibility). Independent of WI-04, so order can swap if needed. Smoke-test matrix uses the existing empty-org demo accounts: `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
+**Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
 
 ---
 
@@ -179,6 +175,32 @@ Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink
 ---
 
 ## Recent session log
+
+### 2026-05-12 — WI-04 RIDDOR Reg 5 + 11 + 14(3) shipped BE+FE; 49-assertion E2E suite
+
+Chunk 2 closed in three commits + a test-script follow-up:
+
+| Commit | Scope |
+|---|---|
+| `b0f8c53` | Reg 5 + Reg 11 classification branches added to `services/riddor.js` (additive, after the existing Reg 4/6/7/8 logic). Reg paragraph numbers cited verbatim. 20-test `node:test` unit suite at `server/scripts/riddor-reg5-reg11.test.js`. |
+| `df44eb3` | Owner-authorized branch reorder: inside `type === 'injury'`, Reg 6(1) fatality is checked first (applies to both workers and non-workers), then employment_status branches into Reg 5 (non-workers) or Reg 4 (workers). Adds `td.reg14_3_road_vehicle_excluded` flag parallel to the existing Reg 14(1) flag. 23 unit tests, all pass. |
+| `3ac058e` | FE: `client/src/utils/riddor.js` (new) — `RIDDOR_CATEGORY_LABELS` map for the 9 categories. `ReportsPage` RIDDOR table + `IncidentDetail` header now render `riddorCategoryLabel(category)` with the reg paragraph in the tooltip. New "UK RIDDOR edge cases" card on `InjuryForm` capturing `on_hospital_premises`, the two Reg 14 exception flags, and the `gas_reporter_role` + `gas_dangerous_fitting` + Reg 11(3)(b)/(c) carve-out fields. |
+| (this) | E2E test script `server/scripts/wi04-e2e.sh` (49 assertions covering every Reg 5/11/14 branch + Reg 4/6/7/8 regressions + country gate + cross-tenant 404 + WI-C hash-chain still verifying + the new categories surfacing in `/api/reports/riddor`). Wizard inline-style nits cleaned up. roadmap.md + memory updates. |
+
+**Live end-to-end verified** against `elena@sdsmanager.com` + Sheffield Site (UK):
+- Reg 5(a) — visitor + hospitalized → `non_worker_hospitalization`, RIDDOR row, 10-day deadline.
+- Reg 5 negative — visitor, no hospital → not reportable, no row.
+- Reg 11(2) — approved_person + dangerous_fitting → `gas_dangerous_fitting`, RIDDOR row, 14-day deadline.
+
+**Test results:** node:test 23/23; wi04-e2e 49/49; wia-regression 77/78 (F1 unchanged known script bug); Vite build clean.
+
+**Known limitations (TODO comments in code):**
+- Volunteer classification under Reg 5 — treated as worker (conservative); per-incident wizard flag would be ideal.
+- Reg 14(1)/(3) gating currently scoped to the Reg 5 path only; Reg 4 (worker) retains existing behaviour. Extending requires owner approval.
+- PATCH /incidents/:id does NOT re-run RIDDOR classification (pre-existing). Adding hospitalization post-creation won't auto-fire Reg 5(a).
+- The "UK RIDDOR edge cases" wizard card renders for ALL orgs; WI-D should gate by framework.
+
+**Servers running.** Branch `backend` at `3ac058e` + this turn's commit (test-script + tidy-up).
 
 ### 2026-05-11 (late evening) — WI-A end-to-end + WI-D queued + regression suite
 
