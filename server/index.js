@@ -1,7 +1,9 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '.env') });
 import { existsSync } from 'fs';
 import { authMiddleware } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
