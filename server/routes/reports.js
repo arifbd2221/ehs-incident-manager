@@ -302,7 +302,13 @@ router.get('/osha-301/:incidentId', (req, res) => {
       name: td.injured_person?.name || td.affected_person?.name || '',
       job_title: td.injured_person?.job_title || td.affected_person?.job_title || '',
       department: td.injured_person?.department || incident.department || '',
-      hire_date: td.injured_person?.hire_date || '',
+      // Regulatory identity fields per 29 CFR 1904.29.
+      // date_hired is the canonical key (wizard + affected_persons table);
+      // hire_date kept as legacy fallback for any pre-wizard-rewrite data.
+      dob: td.injured_person?.dob || td.affected_person?.dob || '',
+      gender: td.injured_person?.gender || td.affected_person?.gender || '',
+      hire_date: td.injured_person?.date_hired || td.injured_person?.hire_date || '',
+      address: td.injured_person?.address || '',
     },
     incident: {
       date: incident.incident_datetime,

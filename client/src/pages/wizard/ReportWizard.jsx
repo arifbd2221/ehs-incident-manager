@@ -376,6 +376,10 @@ export default function ReportWizard({ onClose, onSubmit }) {
           name: typeDataNoExtras?.injured_name ?? typeDataNoExtras?.injured_person?.name ?? null,
           job_title: typeDataNoExtras?.injured_job_title ?? typeDataNoExtras?.injured_person?.job_title ?? null,
           department: typeDataNoExtras?.injured_department ?? typeDataNoExtras?.injured_person?.department ?? null,
+          // Regulatory identity fields (OSHA 301, RIDDOR F2508, SafeWork NSW).
+          dob: typeDataNoExtras?.injured_dob ?? typeDataNoExtras?.injured_person?.dob ?? null,
+          gender: typeDataNoExtras?.injured_gender ?? typeDataNoExtras?.injured_person?.gender ?? null,
+          date_hired: typeDataNoExtras?.injured_date_hired ?? typeDataNoExtras?.injured_person?.date_hired ?? null,
         },
       };
       const extras = Array.isArray(additional_persons) ? additional_persons : [];
@@ -385,6 +389,9 @@ export default function ReportWizard({ onClose, onSubmit }) {
         const primaryEntry = {
           name: submittedTypeData.injured_person.name,
           job_title: submittedTypeData.injured_person.job_title,
+          dob: submittedTypeData.injured_person.dob,
+          gender: submittedTypeData.injured_person.gender,
+          date_hired: submittedTypeData.injured_person.date_hired,
           employment_status: 'employee',
           is_primary: true,
           injuries: [{

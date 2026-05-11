@@ -126,6 +126,9 @@ export default function InjuryForm({ data, onChange }) {
       injured_name: u?.name ?? data.injured_name ?? '',
       injured_job_title: u?.job_title ?? data.injured_job_title ?? '',
       injured_department: u?.department ?? data.injured_department ?? '',
+      // hire_date is the only regulatory identity field stored on users;
+      // dob + gender are not on the schema so still manual entry.
+      injured_date_hired: u?.hire_date ?? data.injured_date_hired ?? '',
     });
   };
 
@@ -180,6 +183,38 @@ export default function InjuryForm({ data, onChange }) {
           <div className="field"><label className="label">Full name <span className="req">*</span></label><input className="input" value={data.injured_name || ''} onChange={e => onChange({ ...data, injured_name: e.target.value })}/></div>
           <div className="field"><label className="label">Job title</label><input className="input" value={data.injured_job_title || ''} onChange={e => onChange({ ...data, injured_job_title: e.target.value })}/></div>
           <div className="field"><label className="label">Department</label><input className="input" value={data.injured_department || ''} onChange={e => onChange({ ...data, injured_department: e.target.value })}/></div>
+        </div>
+
+        {/* Regulatory identity fields. Required for:
+            - OSHA 301 (29 CFR 1904.29): DOB + gender + date hired
+            - SafeWork NSW notification: DOB + gender
+            - RIDDOR F2508: age (derived from DOB) */}
+        <div className="field-row-3">
+          <div className="field">
+            <label className="label">Date of birth</label>
+            <input className="input" type="date" value={data.injured_dob || ''}
+              onChange={e => onChange({ ...data, injured_dob: e.target.value })}/>
+            <span className="helper">Required for OSHA 301 + SafeWork NSW</span>
+          </div>
+          <div className="field">
+            <label className="label">Gender</label>
+            <select className="select" value={data.injured_gender || ''}
+              onChange={e => onChange({ ...data, injured_gender: e.target.value })}>
+              <option value="">Select…</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="non_binary">Non-binary</option>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+              <option value="other">Other</option>
+            </select>
+            <span className="helper">Required for OSHA 301 + SafeWork NSW</span>
+          </div>
+          <div className="field">
+            <label className="label">Date hired</label>
+            <input className="input" type="date" value={data.injured_date_hired || ''}
+              onChange={e => onChange({ ...data, injured_date_hired: e.target.value })}/>
+            <span className="helper">Required for OSHA 301</span>
+          </div>
         </div>
       </div>
 
