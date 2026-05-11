@@ -27,8 +27,8 @@ Defined in `plan-2026-05-11.md` Part 3. Each chunk ends with a ✋ owner checkpo
 | 4 | WI-C Activity log integrity (hash chain) | ✅ Done — `2301521`, `b3343a0` |
 | 5 | WI-A Multi-person incidents | ✅ Done — `12fbd8d` … `caab857` (wizard, modal, dual-write, address/phone/DOB/gender/date_hired) |
 | 6 | WI-B Override approval workflow | ✅ Done — `7ee1983` (BE: migration 026 + service + routes + 42-assertion `wib-e2e.sh`), `e660b16` (FE: modal + RecordabilityVerifyCard banner + `/approvals` page) |
-| **7** | **WI-08 Deadline countdown UI** | **Next.** Reads existing + WI-06/WI-07 fields. |
-| 7a | WI-D Jurisdiction-aware wizard + forms | Owner directive 2026-05-11 evening — show fields by org's compliance_frameworks + site.country. WI-04 added a "UK RIDDOR edge cases" card that WI-D should hide for non-UK orgs. Spec below. |
+| 7 | WI-08 Deadline countdown UI | ✅ Done — `449539b` (single BE+FE commit: `server/services/deadlines.js` aggregator + `GET /incidents/:id/deadlines` + list/detail attachment + `DeadlineBadge.jsx` rendered in IncidentDetail header & IncidentsList rows + 19-assertion `wi08-e2e.sh`). |
+| **7a** | **WI-D Jurisdiction-aware wizard + forms** | **Next.** Owner directive 2026-05-11 evening — gate fields by org's compliance_frameworks + site.country. WI-04 added a "UK RIDDOR edge cases" card that WI-D should hide for non-UK orgs. Spec below. |
 | 8+ | WI-01, WI-05, WI-06, WI-07, WI-02, WI-09 | OSHA 300 PDF → RIDDOR F2508 → SafeWork NSW → OSHA 1904.39 → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
 
 ---
@@ -152,19 +152,23 @@ Death must be reported within 8 hours; in-patient hospitalization, amputation, o
 
 ---
 
-### WI-08: Regulatory deadline countdown UI (29 CFR 1904.39, RIDDOR Reg 4, WHS Act s.38)
+### WI-08: Regulatory deadline countdown UI (29 CFR 1904.39, RIDDOR Reg 4, WHS Act s.38) — ✅ DONE
 
-Pure presentation layer. Reads existing fields plus the new ones from WI-06 / WI-07.
+Shipped 2026-05-12 (evening) in `449539b` — single BE+FE commit, no schema. Today RIDDOR is the only source the aggregator sees; WI-06 (SafeWork NSW) and WI-07 (OSHA 1904.39) plug into the same `server/services/deadlines.js` helper when they land. TODO markers in code mark the plug-in points.
 
-- `client/src/components/incidents/DeadlineBadge.jsx` — countdown pill.
-- `server/services/regulatory.js` — extend to return an aggregated `pending_deadlines: [{kind, deadline_at, status}]` for an incident, sourced from:
-  - OSHA 1904.39 → from WI-07's `osha_severe_notifications.deadline_at`.
-  - RIDDOR 10-day / 15-day → existing `riddor_reports.written_deadline`.
-  - WHS 48-hour → from WI-06's `safework_nsw_notifications.written_deadline`.
-- New endpoint `GET /incidents/:id/deadlines`.
-- Surfaced in IncidentsList rows and IncidentDetail header.
+Shape returned by `GET /incidents/:id/deadlines` and attached to list + detail payloads:
 
-**Complexity:** S. **New tables:** none. **Depends on:** WI-06, WI-07.
+```
+[{ kind, jurisdiction, label, reg_ref, deadline_at, submitted_at, status }]
+```
+
+`status` is one of: `without_delay`, `overdue`, `due_today`, `due_soon`, `upcoming`, `submitted`. `mostUrgent(deadlines)` ranks in that order (with absolute `deadline_at` as a tie-breaker) and is used by the list rows so each card shows one pill, while the detail header renders all of them.
+
+`DeadlineBadge.jsx` derives color from status (`--sds-error` / `--sds-warning` / `--sds-info` / `--sds-success` tokens), takes a `compact` prop for list-row use, and exposes the full reg paragraph + dates via tooltip.
+
+19-assertion E2E suite at `server/scripts/wi08-e2e.sh` covers: specified-injury phone+written, status flips after `phone_notified_at` / `written_submitted_at`, over-7-day single-entry, disease zero-entry, US non-RIDDOR zero-entry, cross-tenant 404, list-row attachment + ranking.
+
+**Complexity:** S. **New tables:** none. **Depends on:** WI-06, WI-07 — but currently usable without them via the RIDDOR source.
 
 ---
 
