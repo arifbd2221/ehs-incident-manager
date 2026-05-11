@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
 import BodyMap3D from '../../../components/shared/BodyMap3D';
+import AffectedPersonModal from '../../incidents/modals/AffectedPersonModal';
 import '../../../styles/bodymap.css';
 
 const INJURY_TYPES = [
@@ -84,9 +86,22 @@ const PPE_ITEMS = [
 export default function InjuryForm({ data, onChange }) {
   const bodyParts = data.body_parts || [];
   const ppe = data.ppe || [];
+  // WI-A: extras are queued in data.additional_persons (each shaped like
+  // the AffectedPersonModal payload). The wizard hoists this array into
+  // affected_persons on createIncident — the primary stays the inline
+  // form above.
+  const additionalPersons = data.additional_persons || [];
+  const [apModalOpen, setApModalOpen] = useState(false);
 
   const toggleBody = (id) => onChange({ ...data, body_parts: bodyParts.includes(id) ? bodyParts.filter(x => x !== id) : [...bodyParts, id] });
   const togglePpe = (n) => onChange({ ...data, ppe: ppe.includes(n) ? ppe.filter(x => x !== n) : [...ppe, n] });
+
+  const handleCollectAdditional = (payload) => {
+    onChange({ ...data, additional_persons: [...additionalPersons, payload] });
+  };
+  const removeAdditional = (idx) => {
+    onChange({ ...data, additional_persons: additionalPersons.filter((_, i) => i !== idx) });
+  };
 
   return (
     <>
@@ -155,6 +170,74 @@ export default function InjuryForm({ data, onChange }) {
           </div>
         )}
       </div>
+
+      {/* WI-A: additional affected persons (collected before submit, sent
+          as the new affected_persons array shape on createIncident). The
+          inline form above is the primary (Person 1); each entry below
+          becomes Person 2..N. */}
+      <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
+        <div className="card-h">
+          <Icon name="person" size={18} color="var(--sds-brand-primary)"/>
+          Additional affected persons
+          {additionalPersons.length > 0 && (
+            <span className="idet-attach-count">{additionalPersons.length}</span>
+          )}
+          <button
+            type="button"
+            className="idet-attach-add"
+            onClick={() => setApModalOpen(true)}
+          >
+            <Icon name="plus" size={12}/>Add another person
+          </button>
+        </div>
+        {additionalPersons.length === 0 ? (
+          <div className="helper">
+            One person is captured in the form above. Add anyone else affected
+            by this incident — they'll be saved as separate records with their
+            own injuries.
+          </div>
+        ) : (
+          <div className="idet-witnesses">
+            {additionalPersons.map((p, idx) => (
+              <div key={idx} className="idet-witness">
+                <div className="idet-witness-head">
+                  <div className="idet-witness-info">
+                    <div className="idet-witness-name">
+                      <span className="pill pill-gray">Person {idx + 2}</span>
+                      {' '}{p.name || <em>Unnamed</em>}
+                      {p.is_primary && <> <span className="pill pill-info">Primary</span></>}
+                    </div>
+                    <div className="idet-witness-contact">
+                      {[p.job_title, p.employment_status?.replace(/_/g, ' ')]
+                        .filter(Boolean).join(' · ') || '—'}
+                    </div>
+                  </div>
+                  <div className="idet-witness-actions">
+                    <button type="button" className="idet-edit-trigger idet-witness-del"
+                      onClick={() => removeAdditional(idx)}
+                      title="Remove this person">
+                      <Icon name="close" size={11}/>remove
+                    </button>
+                  </div>
+                </div>
+                {(p.injuries || []).length > 0 && p.injuries[0] && (p.injuries[0].body_part || p.injuries[0].injury_type) && (
+                  <div className="idet-witness-statement">
+                    <strong>{[p.injuries[0].body_part, p.injuries[0].injury_type].filter(Boolean).join(' — ')}</strong>
+                    {p.injuries[0].mechanism && <> · {p.injuries[0].mechanism}</>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <AffectedPersonModal
+        open={apModalOpen}
+        incident={null}
+        onClose={() => setApModalOpen(false)}
+        onCollect={handleCollectAdditional}
+      />
 
       <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
         <div className="card-h"><Icon name="shield" size={18} color="var(--sds-brand-primary)"/>PPE worn at time of incident</div>

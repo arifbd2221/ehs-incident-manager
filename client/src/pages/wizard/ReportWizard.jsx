@@ -356,6 +356,58 @@ export default function ReportWizard({ onClose, onSubmit }) {
       // top-level POST body (added in T3.2). Hoist it.
       const bodyParts = Array.isArray(typeData?.body_parts) ? typeData.body_parts : [];
 
+      // WI-A: normalize the wizard's type_data into the shapes the BE expects.
+      //  (1) InjuryForm writes the primary person's identity flat
+      //      (injured_name / injured_job_title / injured_department). The BE
+      //      (osha_300_log auto-insert, RIDDOR, recordability verification)
+      //      reads injured_person.{name,job_title,department}. Lift the
+      //      flat keys into the nested sub-record so existing single-person
+      //      submissions don't end up as "Unknown" on OSHA 300.
+      //  (2) InjuryForm queues extra people in type_data.additional_persons.
+      //      Pull them out, drop the key from the type_data payload, and
+      //      send the new affected_persons[] array shape the BE already
+      //      handles (server/routes/incidents.js POST handler — useArrayShape
+      //      branch + bulkInsertFromArray).
+      const { additional_persons, ...typeDataNoExtras } = typeData || {};
+      const submittedTypeData = {
+        ...typeDataNoExtras,
+        injured_person: {
+          ...(typeDataNoExtras?.injured_person || {}),
+          name: typeDataNoExtras?.injured_name ?? typeDataNoExtras?.injured_person?.name ?? null,
+          job_title: typeDataNoExtras?.injured_job_title ?? typeDataNoExtras?.injured_person?.job_title ?? null,
+          department: typeDataNoExtras?.injured_department ?? typeDataNoExtras?.injured_person?.department ?? null,
+        },
+      };
+      const extras = Array.isArray(additional_persons) ? additional_persons : [];
+      const hasExtras = extras.length > 0;
+      let affectedPersonsPayload = null;
+      if (hasExtras) {
+        const primaryEntry = {
+          name: submittedTypeData.injured_person.name,
+          job_title: submittedTypeData.injured_person.job_title,
+          employment_status: 'employee',
+          is_primary: true,
+          injuries: [{
+            body_part: bodyParts.length ? bodyParts.join(', ') : null,
+            injury_type: typeDataNoExtras?.injury_type ?? null,
+            mechanism: typeDataNoExtras?.mechanism ?? null,
+            object_substance: typeDataNoExtras?.object_substance ?? null,
+            treatment: typeDataNoExtras?.treatment ?? null,
+            physician_name: typeDataNoExtras?.physician_name ?? null,
+            physician_phone: typeDataNoExtras?.physician_phone ?? null,
+            physician_facility: typeDataNoExtras?.facility_name ?? null,
+            er_treated: !!typeDataNoExtras?.er_treated,
+            hospitalized: !!typeDataNoExtras?.hospitalized,
+            hospitalization_date: typeDataNoExtras?.hospitalization_date ?? null,
+          }],
+        };
+        // Don't double-mark primaries — InjuryForm's modal can flag an
+        // extra as is_primary; force it to false here because the inline
+        // form is the canonical primary at intake.
+        const dedupedExtras = extras.map(p => ({ ...p, is_primary: false }));
+        affectedPersonsPayload = [primaryEntry, ...dedupedExtras];
+      }
+
       // Anonymous reporting (per locked decision #10) is disabled for
       // injury/illness — backend rejects, but the toggle is also disabled
       // in the UI for those types. Defensive double-check here.
@@ -382,9 +434,10 @@ export default function ReportWizard({ onClose, onSubmit }) {
         title: title.trim(), type, description,
         incident_datetime: datetime, site_id: Number(siteId),
         asset_id: assetId ? Number(assetId) : null,
-        area, likelihood, consequence, type_data: typeData,
+        area, likelihood, consequence, type_data: submittedTypeData,
         body_parts_affected: bodyParts,
         is_anonymous: allowAnon && isAnonymous ? true : false,
+        ...(affectedPersonsPayload ? { affected_persons: affectedPersonsPayload } : {}),
         ...(voiceExtractionId
           ? {
               voice_extraction_id: voiceExtractionId,

@@ -48,7 +48,15 @@ const BLANK_FORM = {
   days_away: 0,
 };
 
-export default function AffectedPersonModal({ open, incident, onClose, onSaved }) {
+// Two modes:
+//   - default (POST mode): caller passes `incident` (must have id +
+//     incident_number). Submit calls createAffectedPerson(incident.id, …).
+//   - collect-only mode: caller passes `onCollect` instead of `onSaved`.
+//     Submit returns the payload to the parent instead of POSTing —
+//     used by the wizard to queue extra persons before the incident is
+//     created. `incident` may be a placeholder ({ incident_number: '—' })
+//     in this mode since there's no id yet.
+export default function AffectedPersonModal({ open, incident, onClose, onSaved, onCollect }) {
   const [isEmployee, setIsEmployee] = useState('yes'); // 'yes' | 'no'
   const [selectedUserId, setSelectedUserId] = useState('');
   const [form, setForm] = useState(BLANK_FORM);
@@ -129,9 +137,16 @@ export default function AffectedPersonModal({ open, incident, onClose, onSaved }
           days_away: Number(form.days_away) || 0,
         }] : [],
       };
-      await createAffectedPerson(incident.id, payload);
-      onSaved?.();
-      onClose?.();
+      if (onCollect) {
+        // Wizard / batch path: hand the payload back without hitting the
+        // network. Parent stages it for inclusion in createIncident().
+        onCollect(payload);
+        onClose?.();
+      } else {
+        await createAffectedPerson(incident.id, payload);
+        onSaved?.();
+        onClose?.();
+      }
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to add person.');
     } finally {
@@ -145,7 +160,9 @@ export default function AffectedPersonModal({ open, incident, onClose, onSaved }
         <div className="modal-h">
           <div>
             <div className="modal-title">Add affected person</div>
-            <div className="modal-sub">Incident {incident.incident_number}</div>
+            <div className="modal-sub">
+              {incident?.incident_number ? `Incident ${incident.incident_number}` : 'New incident — staged before submit'}
+            </div>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <Icon name="close" size={18}/>
