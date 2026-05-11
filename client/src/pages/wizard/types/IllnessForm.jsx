@@ -1,5 +1,6 @@
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
+import DatePicker from '../../../components/shared/DatePicker';
 
 const ILLNESS_CATEGORIES = [
   { value: '', label: 'Select...' },
@@ -25,7 +26,7 @@ export default function IllnessForm({ data, onChange }) {
           <div className="field"><label className="label">Job title</label><input className="input" value={data.job_title || ''} onChange={e => onChange({ ...data, job_title: e.target.value })}/></div>
         </div>
         <div className="field-row-3">
-          <div className="field"><label className="label">Date of onset</label><input className="input" type="date" value={data.onset_date || ''} onChange={e => onChange({ ...data, onset_date: e.target.value })}/></div>
+          <div className="field"><label className="label">Date of onset</label><DatePicker value={data.onset_date || ''} onChange={v => onChange({ ...data, onset_date: v })} placeholder="Select date" /></div>
           <div className="field"><label className="label">Duration of exposure</label><input className="input" value={data.exposure_duration || ''} onChange={e => onChange({ ...data, exposure_duration: e.target.value })} placeholder="days / months / years"/></div>
           <div className="field"><label className="label">Department</label><input className="input" value={data.department || ''} onChange={e => onChange({ ...data, department: e.target.value })}/></div>
         </div>
@@ -58,7 +59,7 @@ export default function IllnessForm({ data, onChange }) {
         {data.hospitalized && (
           <div className="field" style={{ maxWidth: 240 }}>
             <label className="label">Hospitalization date</label>
-            <input className="input" type="date" value={data.hospitalization_date || ''} onChange={e => onChange({ ...data, hospitalization_date: e.target.value })}/>
+            <DatePicker value={data.hospitalization_date || ''} onChange={v => onChange({ ...data, hospitalization_date: v })} placeholder="Select date" />
           </div>
         )}
       </div>

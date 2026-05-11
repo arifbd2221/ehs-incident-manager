@@ -11,6 +11,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Icon from '../shared/Icon';
 import ComboBox from '../shared/ComboBox';
+import DatePicker from '../shared/DatePicker';
 import SmartTextarea from '../shared/SmartTextarea';
 import { getUsers } from '../../api/users';
 import { getIncidents } from '../../api/incidents';
@@ -231,7 +232,7 @@ export default function NewCapaModal({ onCancel, onCreated }) {
           <div className="field-row">
             <div className="field">
               <label className="label">Due date <span className="req">*</span></label>
-              <input className="input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}/>
+              <DatePicker value={dueDate} onChange={setDueDate} placeholder="Select due date" />
             </div>
             <div className="field">
               <label className="label">Category</label>

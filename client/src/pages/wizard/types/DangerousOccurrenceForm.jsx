@@ -1,5 +1,6 @@
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
+import DatePicker from '../../../components/shared/DatePicker';
 
 const OCCURRENCE_TYPES = [
   { value: '', label: 'Select...' },
@@ -37,11 +38,11 @@ export default function DangerousOccurrenceForm({ data, onChange }) {
           <div className="card-h">Equipment / plant involved</div>
           <div className="field"><label className="label">Equipment name</label><input className="input" value={data.equipment_name || ''} onChange={e => onChange({ ...data, equipment_name: e.target.value })}/></div>
           <div className="field"><label className="label">Manufacturer / model</label><input className="input" value={data.manufacturer || ''} onChange={e => onChange({ ...data, manufacturer: e.target.value })}/></div>
-          <div className="field"><label className="label">Last inspection date</label><input className="input" type="date" value={data.last_inspection || ''} onChange={e => onChange({ ...data, last_inspection: e.target.value })}/></div>
+          <div className="field"><label className="label">Last inspection date</label><DatePicker value={data.last_inspection || ''} onChange={v => onChange({ ...data, last_inspection: v })} placeholder="Select date" /></div>
         </div>
         <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
           <div className="card-h">HSE notification record</div>
-          <div className="field"><label className="label">HSE notified date</label><input className="input" type="date" value={data.hse_notified_date || ''} onChange={e => onChange({ ...data, hse_notified_date: e.target.value })}/></div>
+          <div className="field"><label className="label">HSE notified date</label><DatePicker value={data.hse_notified_date || ''} onChange={v => onChange({ ...data, hse_notified_date: v })} placeholder="Select date" /></div>
           <div className="field"><label className="label">HSE reference number</label><input className="input" value={data.hse_reference || ''} onChange={e => onChange({ ...data, hse_reference: e.target.value })}/></div>
           <div className="field"><label className="label">Person who called HSE</label><input className="input" value={data.hse_caller || ''} onChange={e => onChange({ ...data, hse_caller: e.target.value })}/></div>
         </div>

@@ -1,5 +1,6 @@
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
+import DatePicker from '../../../components/shared/DatePicker';
 import BodyMap3D from '../../../components/shared/BodyMap3D';
 import '../../../styles/bodymap.css';
 
@@ -151,7 +152,7 @@ export default function InjuryForm({ data, onChange }) {
         {data.hospitalized && (
           <div className="field" style={{ maxWidth: 240 }}>
             <label className="label">Hospitalization date</label>
-            <input className="input" type="date" value={data.hospitalization_date || ''} onChange={e => onChange({ ...data, hospitalization_date: e.target.value })}/>
+            <DatePicker value={data.hospitalization_date || ''} onChange={v => onChange({ ...data, hospitalization_date: v })} placeholder="Select date" />
           </div>
         )}
       </div>

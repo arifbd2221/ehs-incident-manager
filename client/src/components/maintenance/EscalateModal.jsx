@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../shared/Icon';
 import ComboBox from '../shared/ComboBox';
+import DatePicker from '../shared/DatePicker';
 import { getUsers } from '../../api/users';
 import { escalateToCapa } from '../../api/maintenance';
 
@@ -134,7 +135,7 @@ export default function EscalateModal({ schedule, event, onClose, onEscalated })
           <div className="field-row">
             <div className="field">
               <label className="label">Due date <span className="req">*</span></label>
-              <input className="input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+              <DatePicker value={dueDate} onChange={setDueDate} placeholder="Select due date" />
             </div>
             <div className="field">
               <label className="label">Priority</label>

@@ -14,6 +14,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../../components/shared/Icon';
+import DatePicker from '../../components/shared/DatePicker';
 import { createWorkHours, updateWorkHours } from '../../api/workHours';
 
 function addDays(isoDate, days) {
@@ -130,23 +131,11 @@ export default function WorkHoursModal({ siteId, siteName, existing, latest, onC
             <div className="field-row">
               <div className="field">
                 <label className="label">Period start <span className="req">*</span></label>
-                <input
-                  className="input"
-                  type="date"
-                  value={form.period_start}
-                  onChange={e => setField('period_start', e.target.value)}
-                  required
-                />
+                <DatePicker value={form.period_start} onChange={v => setField('period_start', v)} placeholder="Select start date" />
               </div>
               <div className="field">
                 <label className="label">Period end <span className="req">*</span></label>
-                <input
-                  className="input"
-                  type="date"
-                  value={form.period_end}
-                  onChange={e => setField('period_end', e.target.value)}
-                  required
-                />
+                <DatePicker value={form.period_end} onChange={v => setField('period_end', v)} placeholder="Select end date" />
                 <span className="helper">First day of the next period (exclusive end).</span>
               </div>
             </div>
