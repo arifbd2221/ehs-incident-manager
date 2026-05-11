@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness, requestClosure, approveClosure, rejectClosure, reopenIncident, forceCloseIncident } from '../../api/incidents';
+import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness, requestClosure, approveClosure, rejectClosure, reopenIncident, forceCloseIncident, getAffectedPersons } from '../../api/incidents';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
@@ -173,9 +173,15 @@ export default function IncidentDetail() {
   const [noteText, setNoteText] = useState('');
   const [postingNote, setPostingNote] = useState(false);
 
+  const [affectedPersons, setAffectedPersons] = useState([]);
+
   const load = () => {
     setLoading(true);
     getIncident(id).then(setIncident).catch(() => {}).finally(() => setLoading(false));
+    // WI-A: pull the new affected_persons + injuries side-table. Runs in
+    // parallel; failures are silent so the existing single-person UI keeps
+    // working even if the new endpoint is temporarily down.
+    getAffectedPersons(id).then(setAffectedPersons).catch(() => setAffectedPersons([]));
   };
   useEffect(load, [id]);
 
@@ -822,6 +828,59 @@ export default function IncidentDetail() {
               </div>
             </div>
           </div>
+
+          {/* Affected persons (WI-A) — read-only multi-person view.
+              Renders only when the side-table has rows; legacy
+              single-person facts in the main column continue to render
+              regardless. Edit UI happens in a follow-up; the route layer
+              already supports CRUD via /incidents/:id/affected-persons. */}
+          {affectedPersons.length > 0 && (
+            <div className="idet-card">
+              <div className="idet-card-h">
+                <div className="hicon hi-person"><Icon name="person" size={16}/></div>
+                Affected persons
+                <span className="idet-attach-count">{affectedPersons.length}</span>
+              </div>
+              <div className="idet-card-body">
+                <div className="idet-witnesses">
+                  {affectedPersons.map(ap => (
+                    <div key={ap.id} className="idet-witness">
+                      <div className="idet-witness-head">
+                        <div className="idet-witness-info">
+                          <div className="idet-witness-name">
+                            {ap.name || <em>Unnamed</em>}
+                            {ap.is_primary === 1 && <> <span className="pill pill-info">Primary</span></>}
+                            {ap.is_privacy_case === 1 && <> <span className="pill pill-warn">Privacy case</span></>}
+                          </div>
+                          <div className="idet-witness-contact">
+                            {[ap.job_title, ap.employment_status?.replace(/_/g, ' ')]
+                              .filter(Boolean).join(' · ') || '—'}
+                          </div>
+                        </div>
+                      </div>
+                      {(ap.injuries || []).length > 0 && (
+                        <div className="idet-witness-statement">
+                          {ap.injuries.map(inj => (
+                            <div key={inj.id}>
+                              <strong>
+                                {[inj.body_part, inj.injury_type].filter(Boolean).join(' — ') || 'Injury'}
+                              </strong>
+                              {inj.mechanism && <> · {inj.mechanism}</>}
+                              {(inj.days_away > 0 || inj.days_restricted > 0) && (
+                                <> · {inj.days_away || 0}d away, {inj.days_restricted || 0}d restricted</>
+                              )}
+                              {inj.hospitalized === 1 && <> · hospitalized</>}
+                              {inj.er_treated === 1 && <> · ER treated</>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Witnesses */}
           <div className="idet-card">

@@ -16,6 +16,11 @@ import { createCapaRow } from './capas.js';
 import { notifyUser, notifyElevatedAtSite, notifyRole } from '../services/notifications.js';
 import { evaluateClosureGates } from '../services/closure_gates.js';
 import { writeActivity, auditCtx } from '../services/activity_log.js';
+import {
+  upsertPrimaryFromLegacy,
+  bulkInsertFromArray,
+  buildLegacyInjuredPerson,
+} from '../services/affected_persons.js';
 
 const router = Router();
 
@@ -167,6 +172,11 @@ router.post('/', async (req, res, next) => {
     voice_user_confirmed,
     voice_user_edited,
     voice_user_rejected,
+    // WI-A: optional multi-person shape. When present, this REPLACES the
+    // legacy type_data.injured_person sub-record for purposes of OSHA
+    // recordability + RIDDOR classification — we synthesize a back-compat
+    // injured_person from the primary entry below.
+    affected_persons,
   } = req.body;
 
   if (!title || !type || !site_id || !incident_datetime) {
@@ -212,9 +222,25 @@ router.post('/', async (req, res, next) => {
   const incidentNumber = nextIncidentNumber();
   const { severity, track } = calculateSeverityAndTrack(likelihood, consequence, type);
 
+  // WI-A dual-write: if the caller supplied affected_persons[], synthesize
+  // type_data.injured_person from the primary entry BEFORE classification
+  // so OSHA recordability + RIDDOR engines see the same shape they
+  // always did. The new tables get the full multi-person data after INSERT.
+  const useArrayShape = Array.isArray(affected_persons) && affected_persons.length > 0;
+  let workingTypeData = type_data || {};
+  if (useArrayShape) {
+    let primaryIdx = affected_persons.findIndex(p => p?.is_primary);
+    if (primaryIdx < 0) primaryIdx = 0;
+    const primary = affected_persons[primaryIdx];
+    workingTypeData = {
+      ...workingTypeData,
+      injured_person: buildLegacyInjuredPerson(primary),
+    };
+  }
+
   const site = db.prepare('SELECT country FROM sites WHERE id = ?').get(site_id);
-  const osha = determineOshaRecordability(type, type_data);
-  const riddor = determineRiddorReportability(type, type_data, site?.country);
+  const osha = determineOshaRecordability(type, workingTypeData);
+  const riddor = determineRiddorReportability(type, workingTypeData, site?.country);
 
   const autoClose = shouldAutoClose(type, severity, track);
   const status = autoClose ? 'Closed' : 'New';
@@ -224,7 +250,7 @@ router.post('/', async (req, res, next) => {
   // scrubbed (user_id NULL, actor "Anonymous" in the description).
   const reportedBy = anonymous ? null : req.user.id;
 
-  const td = type_data || {};
+  const td = workingTypeData || {};
   const erTreated = td.er_treated ? 1 : 0;
   const hospitalized = td.hospitalized ? 1 : 0;
   const hospitalizationDate = td.hospitalization_date || null;
@@ -296,6 +322,34 @@ router.post('/', async (req, res, next) => {
       : `submitted ${incidentNumber} — ${type} · Sev ${severity} · Track ${track}`,
     anonymous ? null : req.user.id,
   );
+
+  // WI-A dual-write: keep affected_persons + injuries tables in sync with
+  // whichever payload shape the caller used. Either path is a no-op when
+  // the incident type has no person data (nearmiss/property/env/unsafe/
+  // observation/dangerous without an injured_person).
+  const dualWriteCtx = {
+    er_treated: erTreated,
+    hospitalized,
+    hospitalization_date: hospitalizationDate,
+    body_parts_affected: bodyPartsJson,
+    osha_privacy_case: 0,
+    osha_days_away: 0,
+    osha_days_restricted: 0,
+    osha_date_of_death: null,
+    description: description || '',
+  };
+  if (useArrayShape) {
+    bulkInsertFromArray({
+      orgId, incidentId, persons: affected_persons, userId: reportedBy,
+    });
+  } else if (workingTypeData?.injured_person || workingTypeData?.affected_person) {
+    upsertPrimaryFromLegacy({
+      orgId, incidentId,
+      typeData: workingTypeData,
+      incidentColumns: dualWriteCtx,
+      userId: reportedBy,
+    });
+  }
 
   if (autoClose) {
     db.prepare(`

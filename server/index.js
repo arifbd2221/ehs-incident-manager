@@ -9,6 +9,7 @@ import { authMiddleware } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.js';
 import incidentRoutes from './routes/incidents.js';
+import affectedPersonsRoutes from './routes/affected_persons.js';
 import investigationRoutes from './routes/investigations.js';
 import capaRoutes from './routes/capas.js';
 import reportRoutes from './routes/reports.js';
@@ -62,6 +63,11 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 
 app.use('/api/incidents', authMiddleware, incidentRoutes);
+// WI-A: multi-person CRUD lives on the same /api/incidents prefix so the
+// REST paths read as /incidents/:id/affected-persons[/:apId[/injuries[/:injuryId]]].
+// Express dispatches to whichever router has a matching route — the two
+// routers don't share paths.
+app.use('/api/incidents', authMiddleware, affectedPersonsRoutes);
 app.use('/api/investigations', authMiddleware, investigationRoutes);
 app.use('/api/capas', authMiddleware, capaRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);

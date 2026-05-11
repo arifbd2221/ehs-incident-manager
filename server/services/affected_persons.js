@@ -467,6 +467,54 @@ export function upsertPrimaryFromLegacy({ orgId, incidentId, typeData, incidentC
   return result;
 }
 
+// Bulk insert for the new POST /incidents shape. Caller supplies an
+// array of affected_persons (each may carry a nested `injuries[]`). One
+// of them becomes is_primary=1 — if the array carries an explicit flag
+// use it, otherwise the first entry. No activity_log row per insert:
+// the parent 'incident.created' row already records the actor +
+// context. Returns {primary, count}.
+export function bulkInsertFromArray({ orgId, incidentId, persons, userId }) {
+  if (!Array.isArray(persons) || persons.length === 0) {
+    return { primary: null, count: 0 };
+  }
+
+  // Pick a primary. If any entry has is_primary truthy, take the first
+  // such; otherwise default to index 0.
+  let primaryIdx = persons.findIndex(p => bool01(p?.is_primary) === 1);
+  if (primaryIdx < 0) primaryIdx = 0;
+
+  const apIds = [];
+  let primaryApId = null;
+
+  db.transaction(() => {
+    persons.forEach((p, idx) => {
+      const apData = normalizeAffectedPersonPatch({
+        ...p,
+        is_primary: idx === primaryIdx ? 1 : 0,
+      });
+      const cols = Object.keys(apData);
+      const placeholders = cols.map(() => '?').join(', ');
+      const values = cols.map(k => apData[k]);
+      const ins = db.prepare(`
+        INSERT INTO affected_persons
+          (org_id, incident_id, created_by, updated_by${cols.length ? ', ' + cols.join(', ') : ''})
+        VALUES (?, ?, ?, ?${cols.length ? ', ' + placeholders : ''})
+      `).run(orgId, incidentId, userId, userId, ...values);
+      const apId = ins.lastInsertRowid;
+      apIds.push(apId);
+      if (idx === primaryIdx) primaryApId = apId;
+
+      const injuries = Array.isArray(p?.injuries) ? p.injuries : [];
+      for (const inj of injuries) {
+        const clean = normalizeInjuryPatch(inj);
+        _insertInjury({ orgId, apId, payload: clean, userId });
+      }
+    });
+  })();
+
+  return { primary: primaryApId, count: apIds.length };
+}
+
 function mapTypeDataToInjuryColumns(typeData, incidentColumns) {
   const td = typeof typeData === 'string' ? safeJsonParse(typeData) : (typeData || {});
   const bodyParts = (() => {
