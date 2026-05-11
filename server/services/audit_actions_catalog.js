@@ -142,4 +142,11 @@ export const AUDIT_ACTIONS_CATALOG = [
   { entity_type: 'system', action: 'voice_extracted' },
   { entity_type: 'system', action: 'audit_log_exported' },
   { entity_type: 'system', action: 'osha_300a_signed' },
+  { entity_type: 'system', action: 'osha_300_manual_entry' },
+
+  // Regulatory submissions tied to a specific incident (WI-10).
+  // entity_type='incident' keeps them on the incident's timeline so the
+  // inspector narrative is "this incident produced this regulatory record".
+  { entity_type: 'incident', action: 'osha_300_auto_entry' },
+  { entity_type: 'incident', action: 'riddor_opened' },
 ];

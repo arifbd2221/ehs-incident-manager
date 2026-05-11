@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
 import { calculateMetrics } from '../services/metrics.js';
-import { writeActivity } from '../services/activity_log.js';
+import { writeActivity, auditCtx } from '../services/activity_log.js';
 import { AUDIT_ACTIONS_CATALOG } from '../services/audit_actions_catalog.js';
 
 const router = Router();
@@ -196,15 +196,25 @@ router.post('/osha-300a/certify', (req, res) => {
     ipAddress, userAgent,
   );
 
-  db.prepare(`
-    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
-    VALUES (?, 'system', NULL, 'osha_300a_signed', ?, ?, ?)
-  `).run(
-    req.user.org_id,
-    `signed OSHA 300A for ${site.name} (CY ${year}) as "${certifier_title.trim()}"`,
-    req.user.id,
-    JSON.stringify({ certification_id: result.lastInsertRowid, site_id: Number(site_id), period_year: Number(year) }),
-  );
+  // Regulatory submission — capture ip + user-agent in the audit row so the
+  // inspector chain-of-custody narrative includes the originating session.
+  // The cert row itself already has ip_address + user_agent columns
+  // (migration 001); the activity_log mirror is the inspector-facing surface.
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'system',
+    entity_id: null,
+    action: 'osha_300a_signed',
+    description: `signed OSHA 300A for ${site.name} (CY ${year}) as "${certifier_title.trim()}"`,
+    user_id: req.user.id,
+    metadata: {
+      certification_id: result.lastInsertRowid,
+      site_id: Number(site_id),
+      period_year: Number(year),
+    },
+    ip: ipAddress,
+    user_agent: userAgent,
+  });
 
   const cert = db.prepare(`
     SELECT rc.id, rc.signed_at, rc.affirmation_text, rc.certifier_title,
@@ -262,6 +272,7 @@ router.post('/osha-300', (req, res) => {
     description: `manually added case #${caseNum} to OSHA 300 log for CY ${year}`,
     user_id: req.user.id,
     metadata: { osha_300_log_id: result.lastInsertRowid, site_id: Number(site_id), year },
+    ...auditCtx(req),
   });
 
   const entry = db.prepare('SELECT * FROM osha_300_log WHERE id = ?').get(result.lastInsertRowid);
@@ -624,6 +635,7 @@ router.get('/audit-log/export.csv', (req, res) => {
       row_count: rows.length,
       hit_hard_limit: rows.length >= AUDIT_EXPORT_HARD_LIMIT,
     },
+    ...auditCtx(req),
   });
 
   const filename = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;

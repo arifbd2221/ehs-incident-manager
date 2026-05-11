@@ -15,6 +15,7 @@ import { injuryTypeForOsha300, descriptionForOsha300 } from '../services/osha_30
 import { createCapaRow } from './capas.js';
 import { notifyUser, notifyElevatedAtSite, notifyRole } from '../services/notifications.js';
 import { evaluateClosureGates } from '../services/closure_gates.js';
+import { writeActivity, auditCtx } from '../services/activity_log.js';
 
 const router = Router();
 
@@ -308,7 +309,7 @@ router.post('/', async (req, res, next) => {
     const maxCase = db.prepare('SELECT MAX(case_number) as m FROM osha_300_log WHERE site_id = ? AND calendar_year = ?').get(site_id, year);
     const caseNum = (maxCase?.m || 0) + 1;
 
-    db.prepare(`
+    const oshaResult = db.prepare(`
       INSERT INTO osha_300_log (org_id, site_id, incident_id, calendar_year, case_number, employee_name, job_title, injury_date, location, description,
         classification_death, classification_days_away, classification_job_transfer, classification_other, injury_type, is_privacy_case)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -325,16 +326,52 @@ router.post('/', async (req, res, next) => {
       injuryTypeForOsha300(type, type_data),
       0,
     );
+
+    // Regulatory-record creation gets its own audit row so inspectors can see
+    // "OSHA 300 entry opened for case #N" alongside the parent incident row.
+    // Anonymous incidents still log user_id=null per the scrub above.
+    writeActivity({
+      org_id: orgId,
+      entity_type: 'incident',
+      entity_id: incidentId,
+      action: 'osha_300_auto_entry',
+      description: `opened OSHA 300 case #${caseNum} (CY ${year}) — ${osha.type}`,
+      user_id: anonymous ? null : req.user.id,
+      metadata: {
+        osha_300_log_id: oshaResult.lastInsertRowid,
+        site_id, calendar_year: year, case_number: caseNum,
+        classification_type: osha.type,
+      },
+      ...auditCtx(req),
+    });
   }
 
   if (riddor.reportable) {
     const riddorNum = nextRiddorNumber();
     const deadline = calculateDeadline(incident_datetime, riddor.writtenDeadlineDays);
 
-    db.prepare(`
+    const riddorResult = db.prepare(`
       INSERT INTO riddor_reports (riddor_number, org_id, site_id, incident_id, event_date, category, description, written_deadline, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     `).run(riddorNum, orgId, site_id, incidentId, incident_datetime, riddor.category, title, deadline);
+
+    // Inspector-visible audit row tied to the parent incident's timeline.
+    writeActivity({
+      org_id: orgId,
+      entity_type: 'incident',
+      entity_id: incidentId,
+      action: 'riddor_opened',
+      description: `opened RIDDOR ${riddorNum} — ${riddor.category}${riddor.phoneRequired ? ' (phone required)' : ` (written by ${deadline?.slice(0, 10)})`}`,
+      user_id: anonymous ? null : req.user.id,
+      metadata: {
+        riddor_report_id: riddorResult.lastInsertRowid,
+        riddor_number: riddorNum,
+        category: riddor.category,
+        phone_required: !!riddor.phoneRequired,
+        written_deadline: deadline,
+      },
+      ...auditCtx(req),
+    });
 
     db.prepare(`
       INSERT INTO notifications (org_id, type, incident_id, title, body, severity, deadline)
