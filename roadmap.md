@@ -1,239 +1,150 @@
 # EHS Incident Management — Roadmap
 
-Live status for what's open, what's done (with commit SHAs), and how to operate
-on this codebase. Done items are one-line entries; `git show <sha>` recovers
-the full detail. Most recent session entries at the bottom.
+Live status for what's open, what's done, and how to operate on this codebase. Done items collapse to commit SHAs — `git show <sha>` recovers the full detail. Most recent session at the bottom.
 
 ---
 
 ## Current state
 
-- **Branch:** `backend` at `f2ff262` (P3-OP1 FE — maintenance tab + global
-  page + KPI + detail modal). Working tree clean.
-- **`origin/main`** at `b3dbb08` (merge of PR #11). Backend is +9 commits
-  ahead — P3-OB3 (`7af629b` `897ac78` `73c1996` `465bddd` `ed6798e`
-  `2d5262a`) + P3-OP1 (`d51f540` `f2ff262`).
-- **PR #11** ✅ merged 2026-05-11 (was: P3-OB2 sellable-tier + audit log fixes).
-- **Phase 2:** code complete (only F6.2 manual demo walkthrough open).
-- **Wave 7:** E7.1 (custom asset fields per category) done.
-- **UX backlog A–H:** done. UX-C body-parts editor deferred (needs BodyMap3D
-  outside the wizard).
-- **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, **OB2** (users + sites + assets + work_hours
-  full industry-standard surfaces — manual CRUD + year-group/YoY + live OSHA 300A + TRIR/DART/LTIR/Severity
-  cards on SiteDetail and Dashboard + CSV export + contractor split),
-  **OB3** (document versioning — mig 022, supersede route, immutable history,
-  preview-modal version timeline + inline supersede),
-  **OP1** (asset maintenance — mig 023+023a/b/c, schedules/events tables,
-  per-schedule assignment, completion events with calibration before/after
-  + attachments + escalate-to-CAPA, AssetDetail Maintenance tab + global
-  /maintenance page + Dashboard PM-compliance KPI), OP2, OP3.
-- **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1, RG1.
-- **Migrations applied:** 001–023 + letter fixups `014a`, `017a`, `023a`,
-  `023b`, `023c`. `020` widens `activity_log` CHECK with `work_hours`.
-  `021` adds nullable contractor split on `work_hours`. `022` adds
-  `document_versions` (UUID-named files, immutable rows, per-doc
-  version_number) + v1 backfill. `023` adds maintenance schedules + events
-  tables, widens `activity_log` with `asset_maintenance`, adds nullable
-  `capas.maintenance_schedule_id` FK. `023a` adds `assigned_to` on
-  schedules. `023b` widens `attachments` CHECK with `maintenance_event`.
-  `023c` adds calibration-specific event fields (before/after/unit/
-  tolerance/reference/certificate) for ISO/IEC 17025 + FDA 21 CFR 211.
-- **Demo accounts** (all `password123`):
-  - `priya@sdsmanager.com` (admin, COO of SDS Manager Inc., id=13) — primary admin test account
-  - `elena@sdsmanager.com` (ehs_manager, multi-framework: OSHA 300/300A/301 + RIDDOR)
-  - `marcus@sdsmanager.com` (supervisor), `james@sdsmanager.com` (ehs_manager Sheffield),
-    `mehta@sdsmanager.com` (ehs_officer), `wendy@sdsmanager.com` (worker)
-  - `acme@sdsmanager.com` — empty Acme Manufacturing org, OSHA-only US (onboarding showcase)
-  - `riddor-test@example.com` — empty UK org, RIDDOR-only
-  - `sydney-test@example.com` — empty AU org, SafeWork-NSW-only (no Reports card yet — RG1 open)
-- **Dev servers:** `cd server && node --watch index.js` (BE :3001) +
-  `cd client && npm run dev` (FE :5173).
-
-### Next session priority
-
-**P3-RG1 — Australian regulator** (decided 2026-05-11 evening, taken
-in a fresh session for context cleanliness). Closes the `safework_nsw`
-framework loop (today: code exists, no Reports card surfaces). Adds
-per-state WHS Acts (NSW WHS s38, Vic OHS Act 2004 s37, etc.); new
-`notifiable_incidents` table tracking phone + written notification
-deadlines.
-
-**CRITICAL constraint for the new session** (also captured in auto-memory
-`feedback_regulatory_truth.md`): regulatory specifics (deadlines, category
-definitions, portal URLs, reference number formats) **must not be invented
-from model memory**. The user is expected to bring a source-of-truth
-document — internal compliance brief, an authoritative regulator-doc
-link, or to direct that values stay as `TODO: legal review` placeholders.
-
-**Files cold for RG1 — must be read end-to-end in Phase 1:**
-
-- `client/src/utils/frameworks.js` — current `frameworkVisibility(user)`
-  gating helper (added 2026-05-08 `2e8daa7`)
-- `client/src/pages/reports/ReportsPage.jsx` — Reports-card render pattern
-  + `requiresFramework` map
-- `server/routes/auth.js` — `VALID_FRAMEWORKS` whitelist
-- `client/src/pages/SignupOrg.jsx` `FRAMEWORKS`
-- `client/src/pages/Settings.jsx` `FRAMEWORK_LABELS`
-- `server/routes/reports.js` — existing osha_300/300a/301 + riddor_f2508
-  endpoints (the shape RG1 will mimic)
-- `server/routes/incidents.js` — where regulatory flags (osha, riddor)
-  get set on creation; figure out the AU-equivalent plug point
-
-**5-touchpoint pattern for adding a framework code** (per architectural
-decisions section above): `auth.js VALID_FRAMEWORKS`, `SignupOrg.jsx
-FRAMEWORKS`, `Settings.jsx FRAMEWORK_LABELS`, `ReportsPage
-requiresFramework`, `frameworks.js`.
-
-**Three open scope questions to ask the user up-front** (do not assume):
-1. Single-state NSW only in v1, or all-AU multi-state (NSW + VIC + QLD +
-   WA + SA + TAS + NT + ACT)?
-2. Auto-classify incidents into notifiable categories (similar to current
-   OSHA recordability auto-detect), or manual flag like RIDDOR today?
-3. Reuse `safework_nsw` framework or expand to per-state codes
-   (`worksafe_vic`, etc.)?
-
-**Other still-open click-test punch list for OP1** (landed after the
-user's mid-session walkthrough): detail modal + tooltips + notification
-deep-link. Quick visual verify recommended before assuming OP1 is fully
-clean.
-
-**Other candidates if RG1 is blocked on source-of-truth:**
-
-- **P3-OB1** — first-login walkthrough + sample-data toggle for empty
-  tenants (acme / riddor-test / sydney-test).
-- **P3-OP4** — recurring inspections / training / walkthroughs. Reuses
-  the OP1 schedule + event pattern; mostly a "wire the existing engine
-  to non-asset entities" slice.
-- **P3-OP5** — risk register / proactive risk assessment. Needs its own
-  scoping pass per the original roadmap note.
-
-### Other files cold / never read end-to-end in recent sessions
-
-Carryovers from prior merges + the latest one from main:
-- **Voice report feature (`b2e6a9f`, just merged 2026-05-11)** — adds
-  `client/src/components/voice/{GlobalVoiceFab,VoiceBottomSheet,VoiceReviewCard}.jsx`
-  + `voiceFieldConfig.js` + `hooks/{useAudioRecorder,useSpeechRecognition}.js`
-  + `styles/voice.css` (602 lines) + `server/services/{gemini_extract,gemini_transcribe}.js`
-  + modifications to `App.jsx`, `TopBar.jsx`, `AppContext.jsx`, `ReportWizard.jsx`,
-  `VoiceIntakeModal.jsx`, `api/incidents.js`, `routes/incidents.js`. BE was
-  tested via PR #11 curl smoke; FE not click-tested.
-- `server/services/closure_gates.js` — ISO 45001 / OSHA / ANSI Z10 closure gates
-- `server/services/notifications.js` — backend-side notification creation
-- `client/src/pages/incidents/IncidentDetail.jsx` — main's consolidated cards
-- `client/src/pages/capas/CAPADetail.jsx` — main's hero-card redesign
-- `client/src/pages/incidents/modals/{ClosureChecklistModal,ClosureApprovalModal,ReopenModal}.jsx`
-- `client/src/pages/capas/UpdateProgressModal.jsx`
-- `client/src/pages/templates/{TemplatesList,TemplateEditor}.jsx`
-- `client/src/pages/inspections/{InspectionsList,InspectionEditor,InspectionReport}.jsx`
-- New onboarding files from earlier main merge (`SignupOrg.jsx` redesign,
-  `OnboardingFirstSite.jsx`, `components/shared/OnboardingIllustrations.jsx`)
-- **Responsive commit `6051395`** — Sidebar mobile drawer + 8 page-CSS
-  media queries. Diff was read; live mobile rendering not tested.
-
+- **Branch:** `backend` at `f2ff262` (P3-OP1 FE — maintenance tab + global page + KPI + detail modal) plus the PRD-remediation Chunk 1 commit landing this session. Working tree previously clean; this session adds `docs/{plan-2026-05-11,implementation-plan,gap-analysis,compliance-notes}.md` and a roadmap rewrite.
+- **`origin/main`** at `b3dbb08`. Backend is +9 commits ahead (P3-OB3 + P3-OP1).
+- **PR #11** ✅ merged 2026-05-11.
+- **PR #13** open (backend → main).
+- **Phase 2:** code complete; F6.2 manual walkthrough open.
+- **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OB2, OB3, OP1, OP2, OP3.
+- **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1, RG1 (now superseded by PRD-remediation WI-06 SafeWork NSW).
+- **Migrations applied:** 001–023 + letter fixups `014a`, `017a`, `023a`, `023b`, `023c`. Next available: **024**.
+- **Demo accounts** (all `password123`): `priya@sdsmanager.com` (admin, SDS Manager Inc., id=13), `elena@sdsmanager.com` (ehs_manager, multi-framework), `marcus`, `james`, `mehta`, `wendy`; plus empty test orgs `acme@sdsmanager.com` (OSHA US), `riddor-test@example.com` (RIDDOR UK), `sydney-test@example.com` (SafeWork NSW AU).
+- **Dev servers:** `cd server && node --watch index.js` (BE :3001) + `cd client && npm run dev` (FE :5173).
 
 ---
 
-## Open work — Phase 3
+## PRD compliance remediation plan (active)
 
-### Onboarding + data import
-- [ ] **P3-OB1** User onboarding flow — first-login walkthrough, sample-data toggle, role-tailored "what to do first".
-- [x] **P3-OB2** CSV import — users / sites / assets / work_hours **all done** (`e30954d` `57db454` `7388574` `fb8fc8f`).
-- [x] **P3-OB3** Document versioning — mig 022 `document_versions`, supersede route, immutable history, audit catalog catch-up; FE in preview modal (`7af629b` + `897ac78`).
+PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11: additive features only; no structural changes to existing tables / columns / enums unless a specific regulation requires it (memory `feedback_no_structural_changes.md`).
 
-### AI assistance
-- [ ] **P3-AI1** Auto-fill investigation (AI + manual) — five-Why suggestions, root-cause prompts, contributing-factors checklist, recommended CAPAs.
-- [ ] **P3-AI2** Prompt-driven autofill — system asks targeted questions ("Was the press locked out?"), AI normalizes free-text answers into structured fields.
-- [ ] **P3-AI3** Video → incident report — extend voice intake to accept video. Pipeline: video → audio → transcript → existing `services/voice_extract.js` → confirmation UX.
+**Docs in `docs/`:**
+- `plan-2026-05-11.md` — authoritative scope + chunk order (verbatim owner directive).
+- `gap-analysis.md` — PRD-vs-codebase audit with file/line cites.
+- `implementation-plan.md` — work-item specs (WI-01 … WI-11, WI-A, WI-B, WI-C).
+- `compliance-notes.md` — operational compliance posture (retention, GDPR, encryption-at-rest, `type_data` load-bearing keys, NSW site preservation, hallucination gates).
 
-### Operational features
-- [x] **P3-OP1** Asset maintenance — schedules + events + per-schedule assignment + calibration before/after + completion attachments + manual escalate-to-CAPA + AssetDetail tab + global `/maintenance` page + Dashboard PM-compliance KPI (`d51f540` + `f2ff262`).
-- [ ] **P3-OP4** Scheduling — recurring inspections, calibrations, training, walkthroughs; calendar view + reminders.
-- [ ] **P3-OP5** Risk register / risk assessment — *proactive*: identify hazards at sites/assets, assess L×C, mitigations, periodic review, link to incidents/CAPAs. Distinct from the post-event 5×5 in `ReportWizard.jsx`. Likely needs `risks` + `risk_assessments` tables, `risk_review_due`, entity_links wiring. Big enough to be its own phase — scope before starting.
+**Chunk order** (stop at every ✋ for owner review):
 
-### Regulatory
-- [ ] **P3-RG1** Australian regulation — third regulator alongside US OSHA + UK HSE. Add `country='AU'` on sites + Safe Work Australia notifiable-incident workflow. Per-state WHS Acts (NSW WHS s38, Vic OHS Act 2004 s37) with different categories (death / serious injury / dangerous incident) and notification deadlines (immediately for death/serious, written follow-up 48h–7d). Schema: likely `notifiable_incidents` table (incident + state + category + phone_notified_at + written_submitted_at + reference_number). New Reports card. Per-state deadline tracking on dashboard. **Closes the `safework_nsw` framework loop** — currently has no Reports card.
-  - When RG1 lands, extend `client/src/utils/frameworks.js` with `showSafework` (one-line addition; pattern shipped 2026-05-08 in `2e8daa7`).
+| Chunk | WI | Status |
+|---|---|---|
+| 1 | Setup (docs + memory + roadmap) | ✅ this session |
+| 2 | **WI-04 RIDDOR Reg 5 + 11** | gated on `docs/regulatory-sources/riddor/` |
+| 3 | WI-10 Activity-log audit consistency | |
+| 4 | WI-C Activity-log integrity (hash chain) | |
+| 5 | WI-A Multi-person incidents (no wizard) | |
+| 6 | WI-B Override approval workflow | |
+| 7 | WI-08 Deadline countdown UI | |
+| 8+ | WI-01 OSHA 300 PDF → WI-05 F2508 → WI-06 SafeWork NSW → WI-07 1904.39 → WI-02 300A+ITA → WI-09 Generic PDF | reorder allowed by gate readiness |
+
+**Hallucination-risk gates** (memory `feedback_regulatory_truth.md`) — do NOT start without owner-supplied source material in `docs/regulatory-sources/`:
+- WI-02 — OSHA ITA CSV upload template.
+- WI-04 — HSE Schedule 1 (diseases) + Schedule 2 (dangerous occurrences).
+- WI-05 — HSE F2508 visual reference.
+- WI-06 — WHS Act 2011 (NSW) s.36 / s.37 enumerations, official Notify SafeWork NSW form, ANZSIC code list.
+
+---
+
+## Next session priority
+
+**CHUNK 2 — WI-04 RIDDOR Reg 5 + 11.** Service-only extension to `server/services/riddor.js` for Reg 5 (non-workers — accidents to members of the public taken to hospital) and Reg 11 (gas incidents). Output goes into the existing `incidents.riddor_category` / `riddor_ref` columns. No schema changes.
+
+**Blocker:** owner must populate `docs/regulatory-sources/riddor/` with authoritative source material before coding. If empty, ask owner to populate or pivot to **CHUNK 3 (WI-10)** which has no hallucination-risk gate.
+
+**Files cold for WI-04:**
+- `server/services/riddor.js` — current Reg 4/6/7/8 logic; lines 23 + 45–50 are the Reg 7 / Reg 8 lists with partial coverage.
+- `server/services/auto_classify.js` — where RIDDOR classification is fired from.
+- `server/routes/incidents.js` — RIDDOR fields persisted on POST/PATCH (~line 290 for `td.injured_person`).
+
+---
+
+## Phase 3 still open (non-PRD)
+
+Items below pre-date the PRD-remediation plan. P3-RG1 has been superseded by **WI-06 SafeWork NSW** (functionally equivalent; just relabeled and tied to the PRD's NSW notification spec).
+
+- **P3-OB1** — first-login walkthrough + sample-data toggle for empty tenants.
+- **P3-AI1** — AI auto-fill investigation (five-Why suggestions, root-cause prompts).
+- **P3-AI2** — prompt-driven autofill (system asks targeted questions, AI normalizes free-text).
+- **P3-AI3** — video → incident report (extend voice intake to accept video).
+- **P3-OP4** — recurring inspections / training / walkthroughs (reuses OP1 schedule + event pattern).
+- **P3-OP5** — risk register / proactive risk assessment (needs its own scoping pass).
+- **F6.2** — manual end-to-end demo walkthrough.
 
 ### Smaller open follow-ups
-- **work_hours deferred items** (sellable-tier + next-tier polish):
-  - **Parent-site rollup** — on a parent site (parent_id hierarchy from P3-N1),
-    show recursive sum of all descendant work_hours. Read-only widget;
-    distinct from per-site rates (rates don't aggregate cleanly through a
-    weighted parent because contractor mix differs). ~30 min.
-  - **Period-overlap warning** — currently `UNIQUE(site_id, period_start)`
-    enforces "no two periods start on the same day"; doesn't catch
-    overlapping ranges (e.g. Jan-Feb + Feb-Mar fine, but Jan-Feb +
-    Jan15-Feb15 is silently accepted). Add overlap check to
-    `validateRow` + the manual POST/PATCH paths.
-  - **Rolling-12-month aggregate** + sparkline on SiteDetail — most enterprise
-    EHS dashboards show a 12-month trend chart. Cheap once we add a
-    `?range=rolling12` mode to `/api/reports/site-metrics`.
-  - **Multi-denominator support** — OSHA 200K is hard-coded. UK HSE / RIDDOR
-    convention uses 100K-employee-hours; ILO uses 1M. Surface as a setting on
-    the org or as a per-card toggle.
-- Body-parts editor for UX-C — BodyMap3D integration outside the wizard.
-- Real invitation/email flow (slice 2 of P3-O1) — needs `invitations` table + token + email service.
+- **work_hours** — parent-site rollup; period-overlap warning; rolling-12-month + sparkline on SiteDetail; multi-denominator (200K / 100K / 1M).
+- Body-parts editor for UX-C — BodyMap3D outside the wizard.
+- Real invitation/email flow (slice 2 of P3-O1) — `invitations` table + token + email.
 - Org rename / archive UI.
-- Per-answer inspection-item logging (P3-A1 deferred #9) — route's `status='in_progress'` guard returns 409 for completed inspections, so successful mutations can't reach an audit-worthy state. Code comment in `inspections_routes.js` documents where to add logging.
-- Verb normalization across activity_log actions (P3-A1 deferred #10) — cosmetic; would touch every existing log call site.
-- F6.2 — manual end-to-end demo walkthrough.
+- Per-answer inspection-item logging (P3-A1 deferred #9).
+- Verb normalization across `activity_log` actions (P3-A1 deferred #10).
 
 ---
 
-## Done — Phase 2
+## Done — high-level summary
 
-Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink CRUD, Incident extensions (body parts, anonymous toggle, stop-work, recordability verification), CAPA polymorphic, Voice intake (Anthropic tool-use), Polish + seed, Custom asset fields per category. Full commit history on `git log`.
+Full commit history via `git log`. Tables below are kept for quick lookup of where a feature landed.
 
-## Done — Phase 3
+### Phase 2 (waves 1–7) — code complete
 
-| Item | Description | Commit(s) |
-|---|---|---|
-| P3-N1 | Site detail page + parent_id hierarchy (mig `015`) | `25ad9af` |
-| P3-N2 | Document folders + DnD | `12862f8` |
-| P3-N3 | Document inline preview | `1873bb2` (main) |
-| P3-L1 | Back-tracking everywhere — `referencesFor()` + `<ReferencedByCard>` + `<AddLinkModal>` | initial + `8b3359d` |
-| P3-L2 | Media on investigations | `e75e8ce` + `77a2eab` |
-| P3-A1 | Activity-log widening (`013`+`014`) + `services/activity_log.js` + audit CSV export + Reports tab | 4 chunks |
-| P3-O1 | Org sign-up + onboarding (mig `018`+`019`); compliance_frameworks multi-select; Reports filter | `b72bd6c` `650a2e8` `8f3b01c` `37e6826` |
-| P3-O2 | Members management — admin-gated CRUD; auth re-checks `is_active` per request; shared validators | `7aafa99` `8f3b01c` |
-| P3-OP2 | Inspection module (mig `008`+`009`) | `918279a` (main) |
-| P3-OP3 | Templates with versioning | `918279a` (main) |
-| OSHA/RIDDOR gating | `frameworkVisibility(user)` helper; gated 6 surfaces (IncidentDetail, InvestigationDetail, InvestigationsPage, Dashboard, ReportWizard) | `2e8daa7` |
-| P3-OB2 (users) | Generic `csv_import.js` engine + users adapter; admin-only; dry-run + atomic commit; Members.jsx button | `e30954d` + `d8d6803` (modal fixes) |
-| P3-OB2 (sites) | Sites adapter (parent_name resolves to parent_id, two-pass for in-file parent refs, cycle/depth re-checked at insert); generic `<ImportModal>` extracted; users adapter consistency fix | `57db454` |
-| P3-OB2 (assets) | Assets adapter (display_id case-insensitive uniqueness; asset_type → category resolution; v1 skips custom_fields); button on AssetsList | `7388574` |
-| P3-OB2 (work_hours) | Migration `020` widens `activity_log` CHECK; `routes/work_hours.js` adapter mounted at `/api/work-hours`; ISO date validation w/ calendar round-trip; UNIQUE(site_id, period_start) collision detection; second "Import work hours" button on `/admin/sites` | `fb8fc8f` |
-| P3-OB2 (work_hours surfaces) | Mig 021 contractor split; manual CRUD + CSV export at `/api/work-hours`; new `WorkHoursModal` + periods card on SiteDetail (year-group, YoY delta, weighted avg employees); TRIR/DART/LTIR/Severity Rate live from `work_hours`; rate cards on SiteDetail + Dashboard org-wide rollup; dropped `sites.total_hours_worked` form inputs + writes (column kept as legacy/no-op) | `db5c483` `4d15011` `9849e60` `a47615b` `3848029` |
-| Priya admin demo | Seeded admin user in SDS Manager Inc. + first row in Login.jsx DEMO grid | `dd94fe4` |
-| P3-OB3 (BE) | Mig 022 `document_versions` (UUID-named files, immutable rows, per-doc `version_number`, optional notes) + v1 backfill; `POST /:id/versions` (multer, atomic mirror update on `documents.*`, audit `document_superseded`); `GET /:id/versions/:vid/download` (historical, `(vN)` filename suffix); `GET /:id` extended with `versions[]` DESC; audit catalog catch-up (also adds previously-missing `document_updated` / `document_moved`). Workers 403, cross-org 404, oversize notes 400 w/ orphan-file cleanup. | `7af629b` |
-| P3-OB3 (FE) | Preview modal gains version-history section (`.activity-feed`/`.act-item`, latest-first, per-version download, LATEST badge) + supersede icon in modal header that toggles inline form (file + ≤500-char notes, mirrored to audit description). Post-supersede refreshes preview blob + docs grid. `api/documents.js` adds `createDocumentVersion` + `downloadVersion`. No new CSS — reuses `.dpv-references` for the bordered container. Build clean; not click-tested. | `897ac78` |
+Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink CRUD, Incident extensions (body parts, anonymous toggle, stop-work, recordability verification), CAPA polymorphic, Voice intake (Anthropic tool-use), Polish + seed, Custom asset fields per category.
 
-## Done — UX backlog
+### Phase 3
 
-| Item | Description | Commit |
-|---|---|---|
-| UX-A | Post-report attachments | `ba14826` |
-| UX-B | Inline notes on activity timeline | `31f8be7` |
-| UX-C | Inline-edit description / area / department + PATCH activity log (body-parts deferred) | `ff465d8` |
-| UX-D | Witness CRUD post-creation | `d87ea04` |
-| UX-E | Severity override modal | `dffaf1f` |
-| UX-F | Global search jump-to in TopBar | (earlier) |
-| UX-G | CAPA due-date color coding | `48ca9b2` |
-| UX-H | Cross-page stop-work banner | `48ca9b2` |
+| Item | Commit(s) |
+|---|---|
+| P3-N1 site detail + parent_id hierarchy (mig `015`) | `25ad9af` |
+| P3-N2 document folders + DnD | `12862f8` |
+| P3-N3 document inline preview | `1873bb2` (main) |
+| P3-L1 back-tracking — `referencesFor()` + `<ReferencedByCard>` + `<AddLinkModal>` | initial + `8b3359d` |
+| P3-L2 media on investigations | `e75e8ce` + `77a2eab` |
+| P3-A1 activity-log widening (`013`+`014`) + `services/activity_log.js` + audit CSV + Reports tab | 4 chunks |
+| P3-O1 org sign-up + onboarding (mig `018`+`019`); `compliance_frameworks` multi-select | `b72bd6c` `650a2e8` `8f3b01c` `37e6826` |
+| P3-O2 members management | `7aafa99` `8f3b01c` |
+| P3-OP2 inspection module (mig `008`+`009`) | `918279a` (main) |
+| P3-OP3 templates with versioning | `918279a` (main) |
+| OSHA/RIDDOR gating | `2e8daa7` |
+| P3-OB2 users / sites / assets / work_hours CSV import | `e30954d` `57db454` `7388574` `fb8fc8f` |
+| P3-OB2 work_hours surfaces (mig `021` contractor split; TRIR/DART/LTIR/Severity; CSV export) | `db5c483` `4d15011` `9849e60` `a47615b` `3848029` |
+| Priya admin demo seed | `dd94fe4` |
+| P3-OB3 document versioning (mig `022`) — BE | `7af629b` |
+| P3-OB3 preview-modal version timeline — FE | `897ac78` |
+| P3-OB3 followups (block supersede on archived + reset file input) | `2d5262a` |
+| P3-OP1 asset maintenance (mig `023` + `023a/b/c`) — BE | `d51f540` |
+| P3-OP1 maintenance tab + `/maintenance` + KPI + detail modal — FE | `f2ff262` |
+
+### UX backlog A–H
+
+| Item | Commit |
+|---|---|
+| UX-A post-report attachments | `ba14826` |
+| UX-B inline notes on activity timeline | `31f8be7` |
+| UX-C inline-edit description/area/department + PATCH log (body-parts deferred) | `ff465d8` |
+| UX-D witness CRUD post-creation | `d87ea04` |
+| UX-E severity override modal | `dffaf1f` |
+| UX-F global search jump-to in TopBar | (earlier) |
+| UX-G CAPA due-date color coding | `48ca9b2` |
+| UX-H cross-page stop-work banner | `48ca9b2` |
 
 ---
 
 ## Architectural decisions worth knowing
 
-- **Single-org-per-user.** `users.email` is globally UNIQUE. No `org_memberships` table, no "active org" concept. JWT carries one `org_id`. Switching orgs would require a schema rebuild (drop UNIQUE on email + add `org_memberships`).
-- **No real invitation flow.** Admin creates users directly via `POST /api/users` with email + initial password, hands credentials off out-of-band.
-- **`primary_regulator` is dead schema.** Replaced by `compliance_frameworks` JSON array. Column kept (SQLite DROP COLUMN is expensive). Never read or write `primary_regulator`.
-- **6 framework codes** whitelisted in `server/routes/auth.js` `VALID_FRAMEWORKS`: `osha_300 / osha_300a / osha_301 / riddor_f2508 / safework_nsw / generic`. Adding a new framework needs touches in: `VALID_FRAMEWORKS`, `client/src/pages/SignupOrg.jsx` `FRAMEWORKS`, `client/src/pages/Settings.jsx` `FRAMEWORK_LABELS`, `client/src/pages/reports/ReportsPage.jsx` `requiresFramework`, and (for incident-side gating) `client/src/utils/frameworks.js`.
-- **Admin-mutation guardrails on users** (`server/routes/users.js`): admin-only allowlist; self-edit block on role + is_active; last-admin lockout. `authMiddleware` re-checks `users.is_active` per request via cached prepared statement — deactivation revokes JWT instantly.
-- **Shared validators** in `server/services/validators.js`: `validEmail()`, `checkLen()`, `checkPassword()` + caps (`NAME_MAX=100, EMAIL_MAX=254, PASSWORD_MIN=8, PASSWORD_MAX=72, NAICS_MAX=32`). New input-accepting routes should import these.
-- **Activity logging:** `server/services/activity_log.js` exposes `writeActivity()` + `diffFields()`. Use for any audit-relevant mutation. `entity_type` CHECK accepts: `incident, investigation, capa, system, template, inspection, asset, document, folder, site, user, link, asset_category, answer_set, organization`.
+- **Single-org-per-user.** `users.email` is globally UNIQUE. No `org_memberships` table. JWT carries one `org_id`.
+- **No real invitation flow.** Admin creates users directly; credentials handed off out-of-band.
+- **`primary_regulator` is dead schema.** Replaced by `compliance_frameworks` JSON array. Never read or write `primary_regulator`.
+- **6 framework codes** whitelisted in `server/routes/auth.js` `VALID_FRAMEWORKS`: `osha_300 / osha_300a / osha_301 / riddor_f2508 / safework_nsw / generic`. Adding a new framework touches `VALID_FRAMEWORKS`, `SignupOrg.jsx FRAMEWORKS`, `Settings.jsx FRAMEWORK_LABELS`, `ReportsPage requiresFramework`, `client/src/utils/frameworks.js`.
+- **Admin-mutation guardrails on users** (`server/routes/users.js`): admin-only allowlist; self-edit block on role + `is_active`; last-admin lockout. `authMiddleware` re-checks `users.is_active` per request — deactivation revokes JWT instantly.
+- **Shared validators** in `server/services/validators.js`: `validEmail()`, `checkLen()`, `checkPassword()` + caps.
+- **Activity logging:** `server/services/activity_log.js` exposes `writeActivity()` + `diffFields()`. Use for any audit-relevant mutation. WI-C will extend the table with hash chain + IP/UA.
 - **List endpoints disagree on search param:** `incidents/investigations/capas/inspections` use `search`; `assets/documents` use `q`. Send both for cross-endpoint search.
-- **Migration collisions** (both branches numbered the same migration in parallel): renumber yours upward and add a letter-suffixed fixup (e.g. `017a_…`) that aliases the legacy filename in `_schema_migrations`. Mirrors `014a_normalize_site_hierarchy_name.sql` and `017a_rename_legacy_org_migrations.sql`. Idempotent on fresh DBs.
+- **Migration collisions:** when both branches ship the same-numbered migration, renumber yours up + add a letter-suffixed fixup (`017a`, `014a` patterns) that aliases the legacy filename in `_schema_migrations`.
+- **`incidents.type_data` JSON has load-bearing keys** for OSHA / RIDDOR / SafeWork NSW reports. See `docs/compliance-notes.md` §2 for the full list. Treat as schema.
+- **Retention compliance** is satisfied by absence of deletion endpoints. See `docs/compliance-notes.md` §1.
 
 ---
 
@@ -243,218 +154,73 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 - Each task = one focused commit + push to `origin/backend`.
 - Always leave dev servers running so the user can click-test.
 - Don't claim FE success without exercising the UI; "Vite transforms cleanly" is not proof.
-- **Never override or overdo UI/UX** — reuse existing classes/tokens; no new CSS or inline styles unless the feature genuinely needs them, in which case ask first. Page-scoped CSS uses prefixes (`idet-`, `invd-`, `dp-`, `tp-`, `ie-`, `sd-`, etc.).
-- **After every multi-step Edit on JSX/JS**, verify the file actually parses — run `cd client && npx vite build` or grep the Vite log for "SyntaxError"/"Failed to" lines, not just timestamp markers.
-- **For merges from main with both backend + UI/UX changes:** prefer default merge with manual resolution over `-X theirs`. The latter silently dropped a `useRef` import on a prior merge.
-- **Read schema before referencing columns.** Don't trust grep summaries for files in the "re-read cold" list above.
+- **Never override or overdo UI/UX** — reuse existing classes/tokens; no new CSS or inline styles unless the feature genuinely needs them; ask first.
+- **After every multi-step Edit on JSX/JS**, verify the file actually parses — run `cd client && npx vite build` or grep the Vite log for SyntaxError lines, not just timestamp markers.
+- **For merges from main** with both backend + UI/UX changes: prefer default merge with manual resolution over `-X theirs`.
+- **Read schema before referencing columns.** Don't trust grep summaries for files in the "cold" list.
+- **PRD-remediation chunks:** stop at every ✋ owner checkpoint. Do not silently expand scope across WIs. Propose schema/multi-file changes before writing them.
 
 ---
 
 ## Quick re-orientation for a fresh session
 
 1. Read this file. Most recent session at the bottom.
-2. `git fetch origin && git status` — `backend` should be at `9d1faf8`
-   (or +1 if this roadmap commit landed), working tree clean.
-   `origin/main` lags by ~12 backend commits which are awaiting PR #11
-   review/merge.
-3. Boot servers (`cd server && node --watch index.js` BE :3001;
-   `cd client && npm run dev` FE :5173). Login as priya (admin, COO)
-   for the broadest admin exercise, elena (ehs_manager, multi-framework)
-   for broad EHS work, or one of the empty test orgs (acme / riddor-test
-   / sydney-test) to see framework-gated UI + empty-state behaviour.
-4. The auto-memory file `project_state.md` (in your home memory dir)
-   has detailed locked design decisions for the next slice. Read it.
-5. For new work in any cold file (see "Other files cold" below), read
-   it top-to-bottom before editing.
-6. Ask the user which P3 item to pick up if unclear. Don't guess.
+2. Read `docs/plan-2026-05-11.md` (authoritative for current workstream).
+3. `git fetch origin && git status` — `backend` should be at the latest commit, working tree clean.
+4. Boot servers (`cd server && node --watch index.js`; `cd client && npm run dev`).
+5. Auto-memory files (`MEMORY.md` index in `~/.claude/projects/.../memory/`) carry locked decisions. Read them — specifically `feedback_no_structural_changes.md`, `project_prd_chunks_2026_05_11.md`, `feedback_regulatory_truth.md`.
+6. Ask the user which chunk to pick up if unclear. Don't guess.
 
 ---
 
 ## Recent session log
 
+### 2026-05-11 (later) — PRD compliance plan locked, Chunk 1 docs landed
+
+User commissioned a PRD-vs-codebase gap analysis. After two scope revisions, locked plan is:
+
+- **Owner directive 1** (no structural changes): only additive work; no refactor of existing tables / columns / enums unless a specific regulation cites it. Memory `feedback_no_structural_changes.md`.
+- **Owner directive 2** (three new additive WIs): WI-A multi-person incidents (new `affected_persons` + `injuries` tables; backfill + dual-write; no wizard), WI-B override approval workflow (new `classification_override_requests`), WI-C activity-log hash chain (explicit per-WI authorization to `ALTER TABLE activity_log ADD COLUMN`).
+- **Chunk execution order** with ✋ checkpoints: 1 docs (this session) → 2 WI-04 RIDDOR Reg 5+11 → 3 WI-10 audit consistency → 4 WI-C hash chain → 5 WI-A multi-person → 6 WI-B override approval → 7 WI-08 deadline countdown → 8+ OSHA/RIDDOR/NSW/generic PDFs.
+
+**Chunk 1 deliverables (this session):**
+
+| Path | Purpose |
+|---|---|
+| `docs/plan-2026-05-11.md` | Verbatim owner directive; authoritative scope |
+| `docs/gap-analysis.md` | PRD-vs-codebase audit (written earlier this session) |
+| `docs/implementation-plan.md` | WI-01…WI-11 + WI-A/B/C specs + chunk order |
+| `docs/compliance-notes.md` | Retention, GDPR Art 17, encryption-at-rest, `type_data` load-bearing keys, NSW site-preservation placement, hallucination gates |
+| Memory `feedback_no_structural_changes.md` | Owner directive 1 |
+| Memory `project_prd_chunks_2026_05_11.md` | Chunk order + open-Q answers + WI-A/B/C summary |
+| `roadmap.md` | Trimmed older session logs; added PRD-remediation section |
+
+**Hallucination flags:** Chunk 1 is documentation only. No code written. Chunk 2 (WI-04 RIDDOR Reg 5/11) is gated on owner populating `docs/regulatory-sources/riddor/` with authoritative material.
+
+**No commits yet** — Chunk 1 awaits ✋ owner review before committing.
+
 ### 2026-05-11 (evening) — P3-OP1 asset maintenance shipped (BE + FE)
 
-User picked OP1 over OB1 / OP5 / RG1 with industry-standard awareness as
-the framing. Closed in one sitting across two commits.
+Closed in one sitting across two commits: `d51f540` (BE: mig 023+023a/b/c, schedules/events, atomic mark-complete, manual escalate-to-CAPA, Dashboard PM-compliance KPI) + `f2ff262` (FE: Maintenance tab, `/maintenance` global page, 4 modals incl. ScheduleDetailModal, generic `.has-tooltip` pattern, notification deep-link `?open=<id>`).
 
-| Area | What changed | Commit |
-|---|---|---|
-| BE foundation | Mig 023 (`asset_maintenance_schedules` + `asset_maintenance_events` tables; widen `activity_log` CHECK with `asset_maintenance`; nullable FK `capas.maintenance_schedule_id`). `routes/maintenance.js` w/ 7 endpoints incl. server-side status compute (`ok` / `due_soon ≤30d` / `overdue` / `inactive`), atomic mark-complete that advances `next_due`, and a manual escalate-to-CAPA that calls a now-extended `createCapaRow`. Dashboard `kpis` payload gains `pmCompliancePct` (last-90-day on-time ratio, reconstructed per-event via correlated subquery) + `maintenanceOverdueCount`. Audit catalog gets 5 new pairs. | `d51f540` |
-| BE extensions (chunks A/B/D) | Mig 023a `assigned_to` FK on schedules; POST/PATCH accept assignee + fire `notifyUser({ type:'maintenance_assigned', action_url:'/maintenance?open=<id>' })` on (re)assignment. Mig 023b widens `attachments` CHECK with `maintenance_event` (audit row rolls up to entity_type='asset_maintenance' on schedule_id; source preserved in metadata). Mig 023c adds calibration_* event columns (FDA 21 CFR 211 + ISO/IEC 17025 baseline). Chunk C (meter-based) was scoped in but the user dropped it; deferred. | `d51f540` |
-| FE foundation | `api/maintenance.js`; `time.js` gains `daysUntil` / `dueStatus` / `dueLabel`. AssetDetail gains a Maintenance tab w/ tab badge + "X overdue" pill. AssetsList gains an 8px red dot on cards + rows for assets with any overdue schedule (single bulk fetch). Dashboard gains `kpi_pm_compliance` (visible by default; click-through to /maintenance). CAPADetail renders "Maintenance — <schedule>" hero badge + side-panel Source row when `maintenance_schedule_id` set. | `f2ff262` |
-| FE global page | `/maintenance` route + Sidebar entry between Assets and Documents + TopBar `PAGE_TIPS`. Page has 3 KPI cards (overdue / due 7d / due 30d) + 4 tabs (overdue / due_soon / on schedule / archived) + site + type filters + "+ New schedule" with required asset picker (ComboBox, lazy-loaded `listAssets`). | `f2ff262` |
-| FE modals | `ScheduleModal` (new + edit; weekly/monthly/quarterly/semi-annual/annual presets + custom days; assignee picker; asset picker auto-renders when invoked without an `assetId`). `CompleteModal` (outcome pass/fail/conditional + notes + date + ≤10 attached files via existing `/api/attachments`; calibration block rendered only when `schedule_type==='calibration'`). `EscalateModal` (pre-fills title from "Address maintenance finding: …" + asset; priority auto-derives from last outcome). `ScheduleDetailModal` (read-only view on row click; standard `.modal-h` + `.field-row` layout matching the rest of the app; fresh `getSchedule` on open; footer routes to other modals; Archive in header as icon-btn). | `f2ff262` |
-| Hover guides | Generic `.has-tooltip` + `data-tooltip` class added to `styles.css` (~30 lines) — generalized from the template-editor pattern so any icon button across the app can opt in. Applied to all 8 action icons on MaintenanceTab + MaintenancePage + the detail-modal Archive button. aria-label on each for screen-reader parity. | `f2ff262` |
-| Notification deep-link | Assignment + reassignment notifications carry `action_url='/maintenance?open=<schedule.id>'`. MaintenancePage reads `?open=<id>` on mount, fetches the schedule, opens the detail modal directly, strips the query param so reload doesn't re-pop. 4 existing notifications from earlier in the session backfilled to `/maintenance` so the user's current notifs still route somewhere instead of doing nothing. | `f2ff262` |
+Locked design decisions: manual-only escalation in v1 (no auto-CAPA on fail); AssetDetail tab + global page (not global only); ship calibration + attachments, drop meter-based.
 
-**Locked design decisions (user choices mid-session):**
-- Manual-only escalation in v1 (no auto-CAPA on fail outcome) — keeps audit
-  trail clean; per-schedule auto-toggle deferred.
-- AssetDetail tab + global `/maintenance` page (rejected "global page only")
-  so the inspector narrative stays tied to the asset.
-- Ship draft as-is on the meter-based / file-attachments / calibration-fields
-  question; subsequently relaxed when user said "do not defer, complete
-  everything in chunks if required" — so attachments + calibration shipped
-  but meter-based was dropped explicitly later.
+Honest flags: Detail modal + tooltips + notification deep-link landed AFTER mid-session click-test; build-clean but not browser-verified. Recent-events timeline in MaintenanceTab fires N requests per asset (1.5 follow-up to bulk). PM-due notifications need cron not yet present in codebase (deferred).
 
-**Industry-standard framing (worth noting for sales decks):** v1 matches
-the Cority/Intelex sellable tier for the EHS-buyer persona — closes ISO
-9001 §7.1.5 / ISO 55001 / OSHA 1910.119 PSM / 1910.178 forklift / FDA 21
-CFR 211 audit narratives. Does NOT match Limble/Fiix/UpKeep for CMMS-first
-buyers (no meter-based, no work-orders, no spare-parts inventory) — that
-market is out of scope.
+### 2026-05-11 (later afternoon) — P3-OB3 document versioning shipped (BE + FE)
 
-**Honest hallucination flags:**
-- Click-test partially done by the user mid-session (created a "yearly
-  maintain" + "inspect" schedule via the UI, both still active in dev DB).
-  The detail-modal rewrite + tooltips + notification deep-link landed AFTER
-  that walkthrough — those are build-clean but not browser-verified.
-- The recent-events timeline in `MaintenanceTab` fires N requests (one per
-  schedule on the asset) to gather events for the "Recent completions"
-  card. Fine for typical 1-5 schedule assets; could be a perf hit on
-  20+ schedule assets. Documented; a single bulk endpoint is the v1.5
-  follow-up.
-- Periodic "PM due in 7 days" notifications need a cron infrastructure
-  not yet present in this codebase — user explicitly deferred. Only
-  immediate-event notifications (assignment / reassignment) fire today.
+`7af629b` (BE: mig 022, supersede route, audit catalog catch-up) + `897ac78` (FE: preview-modal version timeline + inline supersede) + `2d5262a` (followups: block supersede on archived + reset file input).
 
-### 2026-05-11 (later) — P3-OB3 document versioning shipped (BE + FE)
+### 2026-05-11 — Activity timeline forensics, audit-log polish, main merge, PR #11
 
-PR #11 merged into main earlier today; backend at the start of the
-session was `6dfd480` (roadmap tick) and clean. Two commits closed
-P3-OB3 end-to-end.
+Six commits + main merge. Key fixes: UTC timestamp bug (`4825251` — `parseServerDate()` in `time.js`); audit-log filter composite-key bug (`974130b`); audit-actions catalog (`a90a9ed`); merge from main brought voice report + ReferencedByCard fix (`9d1faf8`).
 
-| Area | What changed | Commit |
-|---|---|---|
-| BE: mig 022 + supersede route + audit catalog | New `document_versions` table (UUID-named historical files, immutable rows, per-doc `version_number`, optional notes ≤500 chars). v1 backfill from every existing document so reads always resolve. `POST /:id/versions` does atomic mirror update on `documents.file_url/stored_filename/mime_type/size_bytes` via `db.transaction` so list / download / entity_links keep serving the latest without rewrites. `GET /:id/versions/:vid/download` serves historical with `(vN)` baked into the saved filename. `GET /:id` extended with `versions[]` DESC. Audit catalog adds `document_superseded` and the previously-missing `document_updated` / `document_moved` pairs (PATCH route already wrote those; picker just didn't list them). Curl matrix green: worker 403 / cross-org 404 / oversize-notes 400 with orphan-file cleanup / audit row + count surfaces in `/audit-log/actions`. | `7af629b` |
-| FE: preview-modal version timeline + inline supersede | Preview modal grows two new sections inside `.dpv-references`: Version history (`.activity-feed`/`.act-item`, latest-first, LATEST badge, per-version download via `/versions/:vid/download` with `(vN)` filename suffix, latest hits the existing `/download` so the saved name matches the doc title) and an inline supersede form (file picker + ≤500-char notes mirrored to the audit description). Supersede icon in the modal header is elevated-only and active-only. Post-supersede refreshes the preview blob + docs grid so the new file appears everywhere immediately. `api/documents.js` adds `createDocumentVersion` + `downloadVersion`. No new CSS; light inline styling matches the convention already in this file. Build clean (196 modules transformed). | `897ac78` |
+### Earlier sessions (compressed — `git log` for detail)
 
-**Decisions confirmed mid-session:**
-- FE placement: preview modal (chosen via AskUserQuestion), not literal
-  per-row inline expand. The original "per-row inline" wording in
-  `project_state.md` was written without knowledge of the Drive-style
-  card-grid + list-view layout — preview modal is the document-detail
-  surface that already exists.
-
-**Honest hallucination flags:**
-- **FE not click-tested in a browser.** Vite build was clean but visual
-  rendering of the supersede form + version timeline inside the modal
-  hasn't been verified. Same caveat as recent FE slices.
-- BE is heavily curl-tested (8 paths exercised across two users + cross-org).
-
-**Pre-existing orphan files in `server/uploads/`** (22 PDFs not attached
-to any DB row): all date from prior sessions / CI runs, NOT introduced
-by P3-OB3 error paths. Mig 022's design retains every uploaded file
-forever; there is no GC for the existing orphans.
-
-### 2026-05-11 — Activity timeline forensics, audit log polish, main merge, PR #11
-
-Two themes shipped + main merged + PR #11 opened. Six commits on backend,
-one merge from main.
-
-| Area | What changed | Commit |
-|---|---|---|
-| AssetDetail Activity | Tab was a hardcoded stub ("will be tracked here"); now renders the real audit trail. `GET /api/assets/:id` returns `asset.activity`. FE reuses Dashboard's `.activity-feed`/`.act-item` classes — no new CSS. | `7531fa5` |
-| SiteDetail Activity | No timeline anywhere previously; new Activity card surfaces both `site_*` and `work_hours_*` entries scoped by site_id (joined via `json_extract(metadata,'$.site_id')` for work_hours rows). Auto-refreshes after Add/Edit/Delete/Export. | `9ab8b16` |
-| UTC timestamp bug | Every server timestamp was off by browser UTC offset (Asia/Dhaka rendered just-now rows as "6h ago"). SQLite's `datetime('now')` returns 'YYYY-MM-DD HH:MM:SS' UTC with no `Z`; JS parsed it as local time. New `parseServerDate()` in `time.js` treats untimezoned strings as UTC. Fixes activity timelines, timeAgo across the app. 7 other direct `new Date(server_str)` call sites remain (cosmetic; logged as a sweep). | `4825251` |
-| Audit log filter bug | Picking "incident.created" visually checked `capa.created` and `investigation.created` because the React key was the bare action name. Composite `entity_type\|action` keys on the FE + new `entity_action_pairs` BE filter that ORs precise pairs. Plus added `organization` + `work_hours` to entity_types dropdown; jargon types relabelled ("Inspection answer set" not "answer_set"). | `974130b` |
-| Audit actions catalog | Picker was DB-distinct only — 17 of 83 known pairs visible. New `audit_actions_catalog.js` (canonical 83 pairs); BE endpoint now returns catalog UNION DB counts so fresh tenants can filter "every CAPA closure" with 0 results instead of "completed" being absent from the dropdown. | `a90a9ed` |
-| Merge from main | Brought in `b2e6a9f` (global voice report, +2982 lines, new `@google/generative-ai` dep) and `bb0fca3` (ReferencedByCard fix). Default merge, zero manual conflicts (only auto-merge on `server/index.js`). Server fresh-restart required after npm install. All my endpoints verified intact post-merge. | `9d1faf8` |
-| PR #11 | Opened backend → main. 12 commits scoped. Click-test punch list in PR body. Awaits review. | — |
-
-**Honest hallucination flags:**
-- Dashboard layout iteration earlier showed my visual-rendering judgement is unreliable. Three swings at the 6-card squeeze (4+2, 3+3, revert) before user said "revert to first design." All FE work this session was build-clean but not browser-tested.
-- The new asset Activity tab + Site Activity card + audit log picker
-  changes haven't been opened in a browser.
-
-### 2026-05-08 (evening) — work_hours industry-standard surfaces (Sellable tier)
-
-Five focused commits closing P3-OB2 at sellable tier — what every serious EHS
-buyer expects (TRIR/DART/LTIR/Severity rate cards, live OSHA 300A, contractor
-split, year-group/YoY, CSV export). Decisions locked at start: Sellable tier
-scope, drop `sites.total_hours_worked` reads + form inputs, weighted-by-period
-avg employees. Per-employee timesheet shape considered and rejected (industry
-standard is per-site aggregate).
-
-| Area | What changed | Commit |
-|---|---|---|
-| BE: manual CRUD + mig 021 + CSV export | Mig 021 adds `contractor_hours_worked` + `contractor_avg_employees` (nullable) on `work_hours`. Validation factored out of the CSV adapter into module-level helpers (`validateRow`, `parseNonNegInt`, `loadExistingKeys`, `isIsoDate`). Manual routes: `GET/POST/PATCH/DELETE /api/work-hours` + `GET /api/work-hours/export.csv` — all elevated, all org-scoped via the site, all `writeActivity()` audited. CSV import + template extended with optional contractor columns. 16 curl tests including UNIQUE collision, cross-org 404, calendar-round-trip date check, period_end > period_start, PATCH UNIQUE-self-exclude, worker-role 403 on POST/PATCH/DELETE with GET allowed. | `db5c483` |
-| FE: api module + modal + SiteDetail rebuild | `client/src/api/workHours.js` (manual CRUD + export client). `client/src/pages/admin/WorkHoursModal.jsx` (new, `createPortal` per `.page` transform constraint). On Add when prior periods exist, fields auto-fill from latest period; dates advance by same duration ("copy from prior period" UX). SiteDetail.jsx work hours section rebuilt: year-grouped periods table with subtotal rows + weighted avg employees + contractor totals + YoY ▲/▼ delta pill computed against prior year. Per-period Edit/Delete affordances (elevated only). Export CSV uses fetch+blob+click pattern (axios doesn't ride plain anchors). Reuses `.tbl/.modal-*/.field/.btn/.pill/.icon-btn/.stat-grid` — no new CSS. | `4d15011` |
-| BE: switch metrics + reports to live SUM | metrics.js drops `sites.total_hours_worked` read; computes weighted avg employees by `julianday()` period length, contractor totals (separate fields, never folded into TRIR), and adds LTIR field. Divide-by-zero now correctly returns 0 (was producing astronomical rates with `\|\| 1` fallback). reports.js `/osha-300a` returns live SUM in `total_hours_worked` response key (FE shape preserved). New `GET /api/reports/site-metrics` for embed components. SiteDetail.jsx adds "Safety performance" card with year picker + 4 stat-cards (TRIR/DART/LTIR/Severity Rate) + caption row citing OSHA 200K denominator + hours/period/contractor context. Verified site 1/2026 with 3 cases / 171,164 hours: TRIR=3.51, DART=1.17, LTIR=1.17, SR=3.51 — match hand-computed 200K rates. | `9849e60` |
-| Cache cleanup: drop form inputs + writes | sites.js POST/PATCH/CSV-import drop `total_hours_worked` from accepted body, INSERT, audit fields, updatable allowlist, template, parse, INSERT. Sites.jsx form input + initial state + populate + PATCH payload + table column + inline calc strip removed. OnboardingFirstSite.jsx field removed. SiteDetail.jsx sub-sites column swaps "Hours/yr" for "Time zone" (was about to show stale 0). Schema column kept as legacy (DROP COLUMN expensive on SQLite); seed.js writes are harmless no-ops. Final grep: no remaining reads in routes/ or services/. | `a47615b` |
-| Dashboard org-wide rate cards | `calculateOrgMetrics(orgId, year)` sums hours + cases across every org site, applies OSHA 200K denominator once at the org level (averaging per-site rates would weight a 50-emp sub-site equally with a 500-emp plant — wrong). dashboard.js drops the legacy single-site code path. Dashboard.jsx adds 2 new KPI widgets (kpi_ltir reuses `.kpi-dart` accent, kpi_severity reuses `.kpi-overdue`); 6 cards total. DART/LTIR/Severity foot lines now show backing case/days context. Verified Priya's org: 298,020 hours / 3 cases / 1 days-away → TRIR=2.01 DART=0.67 LTIR=0.67 SR=2.01 (matches DB). Empty tenant (acme) returns all 0 — no NaN. | `3848029` |
-
-**BE testing depth (high):** every route exercised end-to-end with curl across
-20+ test cases. All metrics hand-verified against SQL aggregations.
-
-**FE testing depth (medium-low):** every commit `npx vite build` clean
-(189 modules transformed), Vite proxy routes work end-to-end (curl through 5173
-returns BE responses). Did NOT click-test in a browser. Honest hallucination
-risk: medium on FE — five files modified across two pages and a new modal
-without browser verification of the rendered output. Punch list for next
-session in "Next session priority" above.
-
-**PR #11 not yet opened.** Slice ready for backend → main once user
-click-tests.
-
-### 2026-05-08 (afternoon) — OSHA/RIDDOR gating + Priya admin + P3-OB2 (full) + main merges
-
-Long session, ~3hr. Nine commits + two PRs round-tripped. P3-OB2 closed in full
-(users + sites + assets + work_hours all on the shared engine).
-
-| Area | What changed | Commit |
-|---|---|---|
-| OSHA/RIDDOR gating | New `client/src/utils/frameworks.js` mirrors ReportsPage's defensive-fallback pattern. Gates 6 surfaces by org's `compliance_frameworks`. | `2e8daa7` |
-| Roadmap compress | 330 → 195 lines. Done items become one-line entries with commit SHAs. | `3c18b63` |
-| Priya admin demo | Seeded admin in SDS Manager Inc. + first row in Login.jsx DEMO grid. Direct-inserted into running dev DB (id=13) so it works without SEED_FORCE rebuild. | `dd94fe4` |
-| P3-OB2 users | New `server/services/csv_import.js` engine; users adapter inline in `routes/users.js`. Strict template, admin-only, dry-run + atomic commit. New dep `csv-parse@^6.2.1`. ImportUsersModal on `/admin/members`. | `e30954d` |
-| ImportUsersModal fixes | File re-pick (clear input value after read), close-during-commit guarded by `safeClose`. | `d8d6803` |
-| Merge from main (PR #10's pre-cursor) | UI/UX overhaul (`fd3d165`): signup wizard redesign + 567-line OnboardingIllustrations + 509-line members.css + members page redesign + eye/eyeOff toggle. Design precedence to main on conflicts; backend functionality preserved (Priya kept as DEMO admin since main's `admin@sdsmanager.com` reference points at non-existent user). | `1849051` |
-| PR #9 (backend → main) | Round-tripped. | merge `669be3c` |
-| P3-OB2 sites + ImportModal generic | Sites adapter mounted on the engine. Modal extracted to `client/src/components/shared/ImportModal.jsx` parameterized by `{title, subtitle, helperText, templateUrl, templateFilename, importFn, entityNoun}`. Members + Sites both use it now. Users adapter consistency fix bundled (mixed-error duplicate detection). | `57db454` |
-| P3-OB2 assets | Assets adapter — display_id case-insensitive uniqueness, asset_type → category resolution, custom fields skipped in v1. AssetsList "Import CSV" button between "Asset types" and "+ New asset". | `7388574` |
-| PR #10 (backend → main) | Round-tripped. Maintainer also pushed `6051395` "responsive: full mobile/tablet support" between PR #10 merge and my fast-forward — fast-forwarded into backend post-merge. | merge `7a8f72e` + ff `6051395` |
-| Roadmap tick | OB2 done for users + sites + assets; session entry added; old "(later)" mini-entry merged in. | `beeda7b` |
-| P3-OB2 work_hours | Migration `020` widens `activity_log` CHECK; `routes/work_hours.js` adapter mounted at `/api/work-hours`; ISO date format with calendar round-trip (Feb 30 rejected); UNIQUE(site_id, period_start) collision detection (in-file + against DB); second "Import work hours" button on `/admin/sites`; full activity log with thousands-formatted hours descriptions. **Closes P3-OB2 entirely.** Per-site aggregate (industry standard) — per-employee was considered and rejected. | `fb8fc8f` |
-
-**BE testing depth (high):** every adapter exercised end-to-end with curl
-across 26+ test cases including CRLF / BOM / Unicode / quoted commas /
-case-insensitive collisions / cross-org isolation / atomic rollback /
-20-row batch / late conflict simulation / role gating. All green.
-
-**FE testing depth (medium):** maintainer click-test passed for /admin/members,
-/admin/sites, /assets after PR #10 merge. Wider responsive verification
-(mobile/tablet at 768/480 breakpoints from `6051395`) not done by me.
-
-**Hallucination-risk notes for next session:**
-- `6051395` responsive commit: read the diff, didn't browser-test.
-- The `<ImportModal>` is the modal pattern for any future bulk operations —
-  reuse before re-implementing.
-- `csv_import.js` engine is the canonical place to extend for new entities.
-  Adapter pattern: `{entityName, headers, validateRow, insertRow, onAllInserted}`.
-
-### 2026-05-08 — Reports framework filter + merge-from-main + PR #8
-
-Two pieces of work + one round-trip PR.
-
-| Area | What changed | Commit |
-|---|---|---|
-| Reports cards filter by `compliance_frameworks` (closes P3-O1/O2 follow-up) | Each regulator card declares `requiresFramework` (`osha_300/300a/301/riddor_f2508`); `useMemo`-based `visibleReports` + tab-fallback effect; empty-state copy when no cards visible; defensive fallback for missing/empty frameworks. | `37e6826` |
-| Merge from `origin/main` | 8 commits (OSHA compliance fields + 301 form + notifications, tiered closure workflow + ISO 45001 gates, hooks fix, animated logo, CAPA hero redesign, IncidentDetail consolidation, ReferencedByCard inline). UI/UX wins on conflicting hunks; backend logic preserved. | `8c9ac40` |
-| Migration collision resolved | Renumbered backend's `016` → `018` and `017` → `019`; new `017a_rename_legacy_org_migrations.sql` aliases legacy names in `_schema_migrations`. Idempotent on fresh DBs. | `8c9ac40` |
-| PR #8 (backend → main) | Merged, fast-forward-pulled. `origin/backend == origin/main == 36a564f` at end of session. | merge `36a564f` |
-
-Two manual conflicts: `Register.jsx` (kept backend's invite-only stub) and
-`ReportsPage.jsx` (merged main's new osha301 card with backend's `requiresFramework` gate).
-
-**Honest hallucination report:** BE low risk (curl-tested per user/org). FE
-medium-high risk — heavy main-side refactors auto-merged but never opened in a
-browser. See "Files to re-read cold" in Current state.
-
-### Earlier sessions (compressed)
-
-- **2026-05-07 (later evening)** — P3-O1 (org sign-up + onboarding showcase, mig `018`+`019`) + P3-O2 (members management) + audit-fix pass (auth re-checks `is_active`, shared validators). Commits `b72bd6c` / `650a2e8` / `7aafa99` / `8f3b01c`.
-- **2026-05-07** — UX-C/D/E + P3-L1 closure (link/unlink + missing CSS). Merged 7 commits from main (investigations redesign, ComboBox/SmartTextarea, accessibility). Commits `f313722` / `dffaf1f` / `ff465d8` / `d87ea04` / `8b3359d`.
-- **2026-05-06 (afternoon → evening)** — P3-N2 doc folders + seed-PDF fix + investigation link-modal repair + P3-L2 media on investigations. PRs #5 + #6. Folded in main's templates/inspections + Drive-style preview + premium UI overhaul. Commits `12862f8` / `e75e8ce` / `77a2eab` / `ab2313f`.
-- **2026-05-06 (earlier)** — P3-N1 site detail + hierarchy (mig `015`), P3-L1 prototype, P3-A1 four chunks (foundation / admin gaps / export endpoint / polish). Pulled main's dashboard customization + assets/incidents redesigns. Roadmap items P3-AI3 / P3-OP5 / P3-RG1 added.
-- **Earlier** — Phase 2 waves 1–7, UX-A/B/F/G/H. All commit history visible via `git log`.
+- **2026-05-08 evening** — work_hours industry-standard surfaces (Sellable tier): mig 021 contractor split; manual CRUD + CSV; TRIR/DART/LTIR/Severity rate cards on SiteDetail + Dashboard. `db5c483` `4d15011` `9849e60` `a47615b` `3848029`.
+- **2026-05-08 afternoon** — OSHA/RIDDOR gating + Priya admin demo + P3-OB2 users/sites/assets/work_hours + two main merges + PR #9 + PR #10. `2e8daa7` `dd94fe4` `e30954d` `d8d6803` `1849051` `57db454` `7388574` `7a8f72e` `6051395` `fb8fc8f`.
+- **2026-05-08** — Reports framework filter + main merge + PR #8. `37e6826` `8c9ac40` `36a564f`.
+- **2026-05-07 (later evening)** — P3-O1 org sign-up + P3-O2 members + audit-fix pass. `b72bd6c` `650a2e8` `7aafa99` `8f3b01c`.
+- **2026-05-07** — UX-C/D/E + P3-L1 closure. `f313722` `dffaf1f` `ff465d8` `d87ea04` `8b3359d`.
+- **2026-05-06** — P3-N2 + P3-L2 + P3-N1 + P3-L1 prototype + P3-A1 four chunks. Roadmap items P3-AI3 / P3-OP5 / P3-RG1 added (RG1 now superseded by WI-06).
+- **Earlier** — Phase 2 waves 1–7, UX-A/B/F/G/H. Full history via `git log`.
