@@ -1,6 +1,9 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../shared/Icon';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 function AnimatedLogo() {
   return (
@@ -29,6 +32,10 @@ const NAV = [
   { id: 'templates', path: '/templates', icon: 'clipboard', label: 'Templates', color: '#8b5cf6' },
   { id: 'inspections', path: '/inspections', icon: 'shield', label: 'Inspections', color: '#00897B' },
   { id: 'reports', path: '/reports', icon: 'reports', label: 'Reports', color: '#5C6BC0' },
+  // WI-B: Approvals queue for recordability override requests. Hidden for
+  // workers via the elevatedOnly flag; the underlying endpoint already
+  // returns 403 to non-elevated roles, so this is just hiding noise.
+  { id: 'approvals', path: '/approvals', icon: 'shield', label: 'Approvals', color: '#ED6C02', elevatedOnly: true },
   { id: 'sites', path: '/admin/sites', icon: 'factory', label: 'Sites', color: '#78909C' },
   { id: 'members', path: '/admin/members', icon: 'people', label: 'Members', color: '#9575CD' },
 ];
@@ -37,6 +44,9 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { sidebarOpen, setSidebarOpen } = useApp();
+  const { user } = useAuth();
+  const isElevated = ELEVATED_ROLES.has(user?.role);
+  const visibleNav = NAV.filter(item => !item.elevatedOnly || isElevated);
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';
@@ -53,7 +63,7 @@ export default function Sidebar() {
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
         <AnimatedLogo />
-        {NAV.map(it => (
+        {visibleNav.map(it => (
           <div key={it.id} className={`nav-item ${isActive(it.path) ? 'active' : ''}`} style={{ '--nav-color': it.color }} onClick={() => go(it.path)}>
             <Icon name={it.icon} size={22} />
             <div className="lbl">{it.label}</div>

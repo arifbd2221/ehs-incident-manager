@@ -1,0 +1,107 @@
+/* approvals.css — WI-B classification override approval queue page.
+   All classes prefixed with `apr-` per the project naming convention
+   (CLAUDE.md "Page-scoped classes: 2-4 letter prefix"). */
+
+.apr-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--sds-space-md);
+  margin-bottom: var(--sds-space-md);
+}
+
+.apr-h {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sds-space-sm);
+  color: var(--sds-fg-heading);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.apr-count {
+  margin-left: var(--sds-space-sm);
+}
+
+.apr-sub {
+  margin: var(--sds-space-xs) 0 0;
+  max-width: 720px;
+}
+
+.apr-empty {
+  text-align: center;
+  padding: var(--sds-space-xl);
+}
+
+.apr-error {
+  border-left: 3px solid var(--sds-error);
+  color: var(--sds-error);
+}
+
+.apr-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+}
+
+.apr-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-md);
+}
+
+.apr-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sds-space-md);
+  align-items: flex-start;
+}
+
+.apr-row-title {
+  flex: 1;
+  font-size: 14px;
+  color: var(--sds-fg-primary);
+  line-height: 1.5;
+}
+
+.apr-row-meta {
+  margin-top: var(--sds-space-xs);
+  font-size: 12px;
+}
+
+.apr-tag {
+  margin-right: var(--sds-space-sm);
+}
+
+.apr-reason {
+  background: var(--sds-bg-surface-alt);
+  padding: var(--sds-space-sm) var(--sds-space-md);
+  border-radius: var(--sds-radius-md);
+}
+
+.apr-reason .form-label {
+  margin-bottom: var(--sds-space-xs);
+}
+
+.apr-reason-body {
+  white-space: pre-wrap;
+  color: var(--sds-fg-primary);
+  font-size: 13px;
+}
+
+.apr-self {
+  font-style: italic;
+}
+
+.apr-decide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sds-space-sm);
+}
+
+.apr-actions {
+  display: flex;
+  gap: var(--sds-space-sm);
+  justify-content: flex-end;
+}
