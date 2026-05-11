@@ -11,7 +11,7 @@ import SmartTextarea from '../../components/shared/SmartTextarea';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
-import { frameworkVisibility } from '../../utils/frameworks';
+import { frameworkVisibility, jurisdictionForContext } from '../../utils/frameworks';
 import InjuryForm from './types/InjuryForm';
 import IllnessForm from './types/IllnessForm';
 import NearMissForm from './types/NearMissForm';
@@ -332,6 +332,15 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const TypeSection = TYPE_FORMS[type];
   const siteName = sites.find(s => String(s.id) === siteId)?.name || '—';
   const typeName = typeOf(type)?.name || type;
+
+  // WI-D: which regulatory regimes apply to this incident-in-progress.
+  // Re-computed on every render (cheap: just a few set ops). The
+  // jurisdiction array feeds InjuryForm + AffectedPersonModal so they
+  // hide field rows that don't apply to the org × site combo.
+  const jurisdiction = useMemo(
+    () => jurisdictionForContext({ user, siteId, sites }),
+    [user, siteId, sites],
+  );
 
   const canContinue = step === 0 ? title.trim().length > 0 : true;
 
@@ -820,7 +829,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     </div>
                     {typeName} — type-specific details
                   </div>
-                  {TypeSection && <TypeSection data={typeData} onChange={setTypeData} />}
+                  {TypeSection && <TypeSection data={typeData} onChange={setTypeData} jurisdiction={jurisdiction} />}
                 </div>
 
                 <div className="wiz-risk-section">

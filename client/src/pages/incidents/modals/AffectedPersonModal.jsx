@@ -25,6 +25,7 @@ import {
   updateInjury,
 } from '../../../api/incidents';
 import { getUsers } from '../../../api/users';
+import { showField } from '../../../utils/frameworks';
 
 const EMPLOYMENT_STATUSES = [
   { value: 'employee', label: 'Employee' },
@@ -56,8 +57,25 @@ const BLANK_FORM = {
   days_away: 0,
 };
 
-export default function AffectedPersonModal({ open, incident, person, onClose, onSaved, onCollect }) {
+export default function AffectedPersonModal({
+  open,
+  incident,
+  person,
+  jurisdiction,                  // WI-D: optional. Wizard passes the array; IncidentDetail leaves undefined (show all).
+  showAllRegulatoryFields = true, // WI-D: post-creation edits default to "show all". The wizard explicitly threads its toggle.
+  onClose,
+  onSaved,
+  onCollect,
+}) {
   const isEdit = !!person;
+  // WI-D: when invoked from IncidentDetail (no jurisdiction prop) we
+  // surface every field — auditors editing after the fact often need
+  // access to the full record. When the wizard threads a jurisdiction
+  // array, gate the same field keys as InjuryForm.
+  const see = (key) => {
+    if (jurisdiction === undefined) return true;
+    return showField(key, jurisdiction, showAllRegulatoryFields);
+  };
   const [isEmployee, setIsEmployee] = useState('yes'); // 'yes' | 'no'
   const [selectedUserId, setSelectedUserId] = useState('');
   const [form, setForm] = useState(BLANK_FORM);
@@ -268,6 +286,10 @@ export default function AffectedPersonModal({ open, incident, person, onClose, o
               </div>
             </div>
 
+            {/* Employment status is always visible — it drives Reg 5
+                (non-worker vs worker) classification regardless of which
+                jurisdictions the org operates under. DOB gates on
+                injured_dob (same registry as InjuryForm). */}
             <div className="field-row">
               <div className="field">
                 <label className="label">Employment status</label>
@@ -275,21 +297,27 @@ export default function AffectedPersonModal({ open, incident, person, onClose, o
                   {EMPLOYMENT_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </div>
-              <div className="field">
-                <label className="label">Date of birth</label>
-                <input className="input" type="date" value={form.dob} onChange={e => setField('dob', e.target.value)} />
-              </div>
+              {see('injured_dob') && (
+                <div className="field">
+                  <label className="label">Date of birth</label>
+                  <input className="input" type="date" value={form.dob} onChange={e => setField('dob', e.target.value)} />
+                </div>
+              )}
             </div>
 
+            {/* Email + phone row — phone gates on injured_phone
+                (RIDDOR / NSW only). Email is non-regulatory; always shown. */}
             <div className="field-row">
               <div className="field">
                 <label className="label">Email</label>
                 <input className="input" type="email" value={form.email} onChange={e => setField('email', e.target.value)} />
               </div>
-              <div className="field">
-                <label className="label">Phone</label>
-                <input className="input" value={form.phone} onChange={e => setField('phone', e.target.value)} />
-              </div>
+              {see('injured_phone') && (
+                <div className="field">
+                  <label className="label">Phone</label>
+                  <input className="input" value={form.phone} onChange={e => setField('phone', e.target.value)} />
+                </div>
+              )}
             </div>
 
             <div className="field">

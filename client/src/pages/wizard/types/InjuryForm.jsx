@@ -4,6 +4,7 @@ import ComboBox from '../../../components/shared/ComboBox';
 import BodyMap3D from '../../../components/shared/BodyMap3D';
 import AffectedPersonModal from '../../incidents/modals/AffectedPersonModal';
 import { getUsers } from '../../../api/users';
+import { showField } from '../../../utils/frameworks';
 import '../../../styles/bodymap.css';
 
 const INJURY_TYPES = [
@@ -84,7 +85,14 @@ const PPE_ITEMS = [
   )},
 ];
 
-export default function InjuryForm({ data, onChange }) {
+export default function InjuryForm({ data, onChange, jurisdiction = ['US-OSHA', 'UK-RIDDOR', 'AU-NSW'] }) {
+  // WI-D: when invoked outside the wizard (test harnesses, future callers)
+  // the prop is undefined and we default to showing every jurisdiction's
+  // fields so we never accidentally hide data capture. Inside the wizard
+  // ReportWizard passes the computed list.
+  const [showAllRegulatoryFields, setShowAllRegulatoryFields] = useState(false);
+  const see = (key) => showField(key, jurisdiction, showAllRegulatoryFields);
+
   const bodyParts = data.body_parts || [];
   const ppe = data.ppe || [];
   // WI-A: extras are queued in data.additional_persons (each shaped like
@@ -145,7 +153,21 @@ export default function InjuryForm({ data, onChange }) {
   return (
     <>
       <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
-        <div className="card-h"><Icon name="person" size={18} color="var(--sds-brand-primary)"/>Injured person</div>
+        <div className="card-h">
+          <Icon name="person" size={18} color="var(--sds-brand-primary)"/>Injured person
+          {/* WI-D: reporter can override jurisdiction gating when the
+              situation calls for it (e.g., a US org with a one-off UK
+              claimant). Defaults off so the form stays focused on the
+              fields the org's frameworks actually require. */}
+          <label className="helper" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={showAllRegulatoryFields}
+              onChange={e => setShowAllRegulatoryFields(e.target.checked)}
+            />
+            Show all regulatory fields
+          </label>
+        </div>
 
         <div className="field">
           <label className="label">Is this person an employee?</label>
@@ -188,55 +210,71 @@ export default function InjuryForm({ data, onChange }) {
         {/* Contact details. Required for:
             - OSHA 301 (29 CFR 1904.29): address
             - RIDDOR F2508: address + phone
-            - SafeWork NSW notification: address + phone */}
-        <div className="field-row">
-          <div className="field">
-            <label className="label">Address</label>
-            <input className="input" value={data.injured_address || ''}
-              onChange={e => onChange({ ...data, injured_address: e.target.value })}
-              placeholder="123 Main St, City ST 12345"/>
-            <span className="helper">Required for OSHA 301 + RIDDOR + SafeWork NSW</span>
+            - SafeWork NSW notification: address + phone
+            WI-D: each field gates on its FIELD_REQUIRED_BY entry; the
+            whole row collapses when neither field would render. */}
+        {(see('injured_address') || see('injured_phone')) && (
+          <div className="field-row">
+            {see('injured_address') && (
+              <div className="field">
+                <label className="label">Address</label>
+                <input className="input" value={data.injured_address || ''}
+                  onChange={e => onChange({ ...data, injured_address: e.target.value })}
+                  placeholder="123 Main St, City ST 12345"/>
+                <span className="helper">Required for OSHA 301 + RIDDOR + SafeWork NSW</span>
+              </div>
+            )}
+            {see('injured_phone') && (
+              <div className="field">
+                <label className="label">Phone</label>
+                <input className="input" type="tel" value={data.injured_phone || ''}
+                  onChange={e => onChange({ ...data, injured_phone: e.target.value })}
+                  placeholder="(555) 123-4567"/>
+                <span className="helper">Required for RIDDOR + SafeWork NSW</span>
+              </div>
+            )}
           </div>
-          <div className="field">
-            <label className="label">Phone</label>
-            <input className="input" type="tel" value={data.injured_phone || ''}
-              onChange={e => onChange({ ...data, injured_phone: e.target.value })}
-              placeholder="(555) 123-4567"/>
-            <span className="helper">Required for RIDDOR + SafeWork NSW</span>
-          </div>
-        </div>
+        )}
 
         {/* Regulatory identity fields. Required for:
             - OSHA 301 (29 CFR 1904.29): DOB + gender + date hired
             - SafeWork NSW notification: DOB + gender
             - RIDDOR F2508: age (derived from DOB) */}
-        <div className="field-row-3">
-          <div className="field">
-            <label className="label">Date of birth</label>
-            <input className="input" type="date" value={data.injured_dob || ''}
-              onChange={e => onChange({ ...data, injured_dob: e.target.value })}/>
-            <span className="helper">Required for OSHA 301 + SafeWork NSW</span>
+        {(see('injured_dob') || see('injured_gender') || see('injured_date_hired')) && (
+          <div className="field-row-3">
+            {see('injured_dob') && (
+              <div className="field">
+                <label className="label">Date of birth</label>
+                <input className="input" type="date" value={data.injured_dob || ''}
+                  onChange={e => onChange({ ...data, injured_dob: e.target.value })}/>
+                <span className="helper">Required for OSHA 301 + SafeWork NSW</span>
+              </div>
+            )}
+            {see('injured_gender') && (
+              <div className="field">
+                <label className="label">Gender</label>
+                <select className="select" value={data.injured_gender || ''}
+                  onChange={e => onChange({ ...data, injured_gender: e.target.value })}>
+                  <option value="">Select…</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                  <option value="non_binary">Non-binary</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                  <option value="other">Other</option>
+                </select>
+                <span className="helper">Required for OSHA 301 + SafeWork NSW</span>
+              </div>
+            )}
+            {see('injured_date_hired') && (
+              <div className="field">
+                <label className="label">Date hired</label>
+                <input className="input" type="date" value={data.injured_date_hired || ''}
+                  onChange={e => onChange({ ...data, injured_date_hired: e.target.value })}/>
+                <span className="helper">Required for OSHA 301</span>
+              </div>
+            )}
           </div>
-          <div className="field">
-            <label className="label">Gender</label>
-            <select className="select" value={data.injured_gender || ''}
-              onChange={e => onChange({ ...data, injured_gender: e.target.value })}>
-              <option value="">Select…</option>
-              <option value="female">Female</option>
-              <option value="male">Male</option>
-              <option value="non_binary">Non-binary</option>
-              <option value="prefer_not_to_say">Prefer not to say</option>
-              <option value="other">Other</option>
-            </select>
-            <span className="helper">Required for OSHA 301 + SafeWork NSW</span>
-          </div>
-          <div className="field">
-            <label className="label">Date hired</label>
-            <input className="input" type="date" value={data.injured_date_hired || ''}
-              onChange={e => onChange({ ...data, injured_date_hired: e.target.value })}/>
-            <span className="helper">Required for OSHA 301</span>
-          </div>
-        </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24 }}>
@@ -360,6 +398,8 @@ export default function InjuryForm({ data, onChange }) {
       <AffectedPersonModal
         open={apModalOpen}
         incident={null}
+        jurisdiction={jurisdiction}
+        showAllRegulatoryFields={showAllRegulatoryFields}
         onClose={() => setApModalOpen(false)}
         onCollect={handleCollectAdditional}
       />
@@ -389,8 +429,10 @@ export default function InjuryForm({ data, onChange }) {
       </div>
 
       {/* UK RIDDOR edge cases — feeds server/services/riddor.js Reg 5 + Reg 11
-          + Reg 14 branches. Always rendered; WI-D will hide for non-UK
-          jurisdictions. Reporters at OSHA-only sites can ignore. */}
+          + Reg 14 branches. WI-D gates this card on jurisdiction; reporters
+          can still open it via the "Show all regulatory fields" toggle on
+          the Injured-person card when the situation calls for it. */}
+      {see('riddor_edge_cases') && (
       <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
         <div className="card-h">
           <Icon name="shield" size={18} color="var(--sds-brand-primary)"/>
@@ -511,6 +553,7 @@ export default function InjuryForm({ data, onChange }) {
           </div>
         )}
       </div>
+      )}
     </>
   );
 }
