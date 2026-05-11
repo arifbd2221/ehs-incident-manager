@@ -47,17 +47,10 @@ test('Reg 5(a) visitor variant: visitor taken to hospital → reportable', () =>
   assert.equal(r.category, 'non_worker_hospitalization');
 });
 
-test('Reg 5(b): specified injury on hospital premises (non-worker) → reportable (caught by Reg 4 branch first)', () => {
-  // KNOWN IMPERFECTION: the existing Reg 4(1) branch matches any
-  // type='injury' with a specified injury_type, regardless of
-  // employment_status. It runs BEFORE the new Reg 5 branch (the user
-  // directive forbids modifying existing branches). So a non-worker
-  // with a specified injury on hospital premises is currently labelled
-  // 'specified_injury' (Reg 4 terminology) rather than the technically
-  // correct 'non_worker_specified_injury' (Reg 5(b)). The incident is
-  // still correctly flagged as reportable — only the category label
-  // and the responsible-person attribution are imprecise.
-  // TODO: future WI may revisit the branch order with owner approval.
+test('Reg 5(b): specified injury on hospital premises (non-worker) → reportable as non_worker_specified_injury', () => {
+  // Owner-authorized branch reorder (2026-05-12): the non-worker check
+  // runs BEFORE the Reg 4(1) specified-injury check, so a visitor with a
+  // Fracture on hospital premises is now correctly classified under Reg 5(b).
   const td = {
     injured_person: { employment_status: 'visitor' },
     on_hospital_premises: true,
@@ -66,12 +59,53 @@ test('Reg 5(b): specified injury on hospital premises (non-worker) → reportabl
   };
   const r = determineRiddorReportability('injury', td, 'UK');
   assert.equal(r.reportable, true);
-  // Either category is acceptable until the imperfection is resolved.
-  assert.ok(
-    r.category === 'specified_injury' || r.category === 'non_worker_specified_injury',
-    `expected specified_injury or non_worker_specified_injury, got ${r.category}`,
-  );
+  assert.equal(r.category, 'non_worker_specified_injury');
+  assert.equal(r.phoneRequired, true);
   assert.equal(r.writtenDeadlineDays, 10);
+});
+
+test('Reg 5 negative: non-worker with specified injury, NOT on hospital premises, NOT hospitalized → not reportable', () => {
+  // Behaviour gained from the owner-authorized branch reorder: previously
+  // this case fell through to Reg 4(1) `specified_injury` (incorrect:
+  // Reg 4 only applies to "any person at work"). Now Reg 5 owns the
+  // non-worker path and correctly returns not-reportable because neither
+  // 5(a) (taken to hospital) nor 5(b) (specified injury on hospital
+  // premises) applies.
+  const td = {
+    injured_person: { employment_status: 'member_of_public' },
+    injury_type: 'Fracture',
+    hospitalized: false,
+    on_hospital_premises: false,
+  };
+  const r = determineRiddorReportability('injury', td, 'UK');
+  assert.equal(r.reportable, false);
+});
+
+test('Reg 14(3) exception: non-worker hospitalized from a road-vehicle accident with no carve-out → not reportable', () => {
+  // Wizard sets `reg14_3_road_vehicle_excluded === true` after determining
+  // none of the Reg 14(3)(a)–(d) carve-outs apply (train accident,
+  // substance exposure, loading/unloading, roadside work).
+  const td = {
+    injured_person: { employment_status: 'member_of_public' },
+    hospitalized: true,
+    reg14_3_road_vehicle_excluded: true,
+  };
+  const r = determineRiddorReportability('injury', td, 'UK');
+  assert.equal(r.reportable, false);
+});
+
+test('Reg 14(3) carve-out: non-worker hospitalized at roadside work site → reportable (wizard did NOT exclude)', () => {
+  // If a Reg 14(3) carve-out applies (e.g. (d) roadside work), the wizard
+  // sets the flag to false and the engine treats the incident as a normal
+  // Reg 5 case.
+  const td = {
+    injured_person: { employment_status: 'member_of_public' },
+    hospitalized: true,
+    reg14_3_road_vehicle_excluded: false,
+  };
+  const r = determineRiddorReportability('injury', td, 'UK');
+  assert.equal(r.reportable, true);
+  assert.equal(r.category, 'non_worker_hospitalization');
 });
 
 test('Reg 5(b) negative: non-specified injury on hospital premises → not reportable', () => {
