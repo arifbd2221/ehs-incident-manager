@@ -6,17 +6,17 @@ Live status for what's open, what's done, and how to operate on this codebase. D
 
 ## Current state
 
-- **Branch:** `backend` at `449539b` (WI-08 chunk 7 BE+FE) plus the docs/memory/roadmap commit landing this turn. Working tree clean (only `PRD.md` left untracked — owner reference doc).
-- **`origin/main`** at `b3dbb08` (last known). Backend is many commits ahead: WI-A end-to-end + WI-04 + WI-B + WI-08. Check `gh pr list` for current PR state.
+- **Branch:** `backend` at `753ec42` (OSHA source materials landed for WI-01/02/03) — preceded by `2e708d0` (WI-D) — plus the docs/memory closure commit landing this turn. Working tree clean (only `PRD.md` left untracked — owner reference doc).
+- **`origin/main`** at `b3dbb08` (last known). Backend is many commits ahead: WI-A + WI-04 + WI-B + WI-08 + WI-D + OSHA sources. Check `gh pr list` for current PR state.
 - **PR #11** ✅ merged 2026-05-11.
 - **Phase 2:** code complete; F6.2 manual walkthrough open.
 - **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OB2, OB3, OP1, OP2, OP3.
 - **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1. (RG1 superseded by PRD-remediation WI-06 SafeWork NSW.)
-- **PRD-remediation done:** Chunk 1 (setup), Chunk 2 (WI-04), Chunk 3 (WI-10), Chunk 4 (WI-C), Chunk 5 (WI-A), Chunk 6 (WI-B), Chunk 7 (WI-08).
-- **Migrations applied:** 001–026 + letter fixups `014a`, `017a`, `023a`, `023b`, `023c`. Next available: **027**. (024 = WI-C hash chain; 025 = WI-A `affected_persons` + `injuries`; 026 = WI-B `classification_override_requests` + self-approval triggers. WI-08 added no schema.)
+- **PRD-remediation done:** Chunk 1 (setup), Chunk 2 (WI-04), Chunk 3 (WI-10), Chunk 4 (WI-C), Chunk 5 (WI-A), Chunk 6 (WI-B), Chunk 7 (WI-08), Chunk 7a (WI-D).
+- **Migrations applied:** 001–026 + letter fixups `014a`, `017a`, `023a`, `023b`, `023c`. Next available: **027**. (024 = WI-C hash chain; 025 = WI-A `affected_persons` + `injuries`; 026 = WI-B `classification_override_requests` + self-approval triggers. WI-08 + WI-D added no schema.)
 - **Demo accounts** (all `password123`): `priya@sdsmanager.com` (admin, SDS Manager Inc., org=1), `elena@sdsmanager.com` (ehs_manager, org=1, multi-framework — owns Sheffield UK site), `marcus`, `james`, `mehta`, `wendy`; plus empty test orgs `acme@sdsmanager.com` (admin, Acme Manufacturing org=2, OSHA US — used for cross-tenant tests), `riddor-test@example.com` (RIDDOR UK), `sydney-test@example.com` (SafeWork NSW AU).
 - **Dev servers:** `cd server && node --watch index.js` (BE :3001) + `cd client && npm run dev` (FE :5173).
-- **Test suites:** `server/scripts/wia-regression.sh` (78, 77 pass + 1 known F1 script bug), `server/scripts/wi04-e2e.sh` (49, all pass), `server/scripts/wib-e2e.sh` (42, all pass), `server/scripts/wi08-e2e.sh` (19, all pass), `server/scripts/riddor-reg5-reg11.test.js` (23 `node:test`, all pass).
+- **Test suites:** `server/scripts/wia-regression.sh` (78, 77 pass + 1 known F1 script bug), `server/scripts/wi04-e2e.sh` (49, all pass), `server/scripts/wib-e2e.sh` (42, all pass), `server/scripts/wi08-e2e.sh` (19, all pass), `server/scripts/riddor-reg5-reg11.test.js` (23 `node:test`, all pass), `client/src/utils/frameworks.test.js` (25 `node:test`, all pass).
 
 ---
 
@@ -41,26 +41,35 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 | 5 | WI-A Multi-person incidents (full: routes + dual-write + wizard + modal + 7 reg fields + edit/delete + expander) | ✅ `12fbd8d` … `ace8816`. 78-assertion regression suite at `server/scripts/wia-regression.sh` — 77 pass / 1 known test-script bug (witnesses 201). |
 | 6 | WI-B Override approval workflow | ✅ `7ee1983` (BE: migration 026 + service + routes + console.warn on direct PATCH + 42-assertion `server/scripts/wib-e2e.sh`), `e660b16` (FE: API client + OverrideRequestModal + RecordabilityVerifyCard pending-state banner + `/approvals` page + sidebar nav for elevated roles). |
 | 7 | WI-08 Deadline countdown UI | ✅ `449539b` (single commit, BE+FE — pure presentation). `server/services/deadlines.js` aggregator; `GET /incidents/:id/deadlines`; `pending_deadlines` + `most_urgent_deadline` attached to list rows + detail payload; `DeadlineBadge` component rendered in IncidentDetail header (all) and IncidentsList rows (most-urgent compact). 19-assertion `server/scripts/wi08-e2e.sh`. |
-| 7a | WI-D Jurisdiction-aware wizard + forms | Owner directive 2026-05-11 evening — gate fields by org's compliance_frameworks + site.country. Spec in `docs/implementation-plan.md`. WI-04 added a "UK RIDDOR edge cases" wizard card that WI-D should hide for non-UK orgs. |
+| 7a | WI-D Jurisdiction-aware wizard + forms | ✅ `2e708d0` (single FE commit). `jurisdictionForContext({user, siteId, sites})` + `showField()` registry in `client/src/utils/frameworks.js`. Wizard threads jurisdiction to InjuryForm + AffectedPersonModal; "Show all regulatory fields" toggle defaults off. WI-04 "UK RIDDOR edge cases" card + WI-A address/phone/DOB/gender/date_hired rows now jurisdiction-gated. 25-test `node:test` suite at `client/src/utils/frameworks.test.js`. |
 | 8+ | WI-01 OSHA 300 PDF → WI-05 F2508 → WI-06 SafeWork NSW → WI-07 1904.39 → WI-02 300A+ITA → WI-09 Generic PDF | reorder allowed by gate readiness |
 
 **Hallucination-risk gates** (memory `feedback_regulatory_truth.md`) — do NOT start without owner-supplied source material in `docs/regulatory-sources/`:
-- WI-02 — OSHA ITA CSV upload template.
+- WI-01 — ✅ source landed `753ec42` (29 CFR Part 1904 + OSHA-RK-Forms-Package). Unblocked for next session.
+- WI-02 — ✅ partial: 29 CFR Part 1904 covers 1904.41 (ITA). The OSHA ITA CSV upload template itself (column headers) is not in the package PDF; check ITA portal or owner can supply.
+- WI-03 — ✅ source landed `753ec42`. Unblocked.
 - WI-04 — ✅ DONE. Owner-provided SI 2013/1471 + HSE INDG453 used; verbatim text cited in code comments.
-- WI-05 — HSE F2508 visual reference.
-- WI-06 — WHS Act 2011 (NSW) s.36 / s.37 enumerations, official Notify SafeWork NSW form, ANZSIC code list.
+- WI-05 — HSE F2508 visual reference — **still gated**.
+- WI-06 — WHS Act 2011 (NSW) s.36 / s.37 enumerations, official Notify SafeWork NSW form, ANZSIC code list — **still gated**.
+- WI-07 — no hallucination gate; 1904.39 is in `29 CFR Part 1904.pdf` (now in repo).
 
 ---
 
 ## Next session priority
 
-Choose from the queued chunks (no hallucination gates outstanding for any of these):
+OSHA source PDFs landed `753ec42` — WI-01 / WI-02 / WI-03 / WI-07 are now unblocked. Suggested chunk order:
 
-- **WI-D jurisdiction-aware wizard** — FE-heavy. Extends `client/src/utils/frameworks.js` with `jurisdictionForContext({user, siteId, sites})` to gate the WI-04 "UK RIDDOR edge cases" card (currently visible to all orgs) plus the WI-A multi-person fields by org's `compliance_frameworks` + `site.country`. Spec in `docs/implementation-plan.md` WI-D section. Independent of WI-04/WI-08 (those engines already work) so order doesn't matter beyond owner preference.
-- **WI-01 OSHA 300 PDF rendering** — first PDF chunk; needs `pdfkit` dependency added to `server/package.json`. Spec in `docs/implementation-plan.md` WI-01 section. Reads `osha_300_log` rows; new `server/services/pdf/osha_300.js`; extends `GET /reports/osha-300` for `?format=pdf`.
-- **WI-03 OSHA 301 PDF** — same idiom as WI-01 but per-incident. Depends on WI-01 for the `pdfkit` dep.
-- **P3-OB1 first-login walkthrough + sample-data toggle** — onboarding polish for empty tenants. Non-regulatory.
-- **WI-06 SafeWork NSW** — hallucination-gated, needs owner-supplied WHS Act s.36 / s.37 enumerations + official Notify form + ANZSIC code list (none in repo yet).
+- **WI-01 OSHA 300 PDF rendering** — first PDF chunk. Adds `pdfkit` dep. Reads `osha_300_log` rows. New `server/services/pdf/osha_300.js`. Extends `GET /reports/osha-300` for `?format=pdf`. Privacy-case substitution per 29 CFR 1904.29(b)(7) (column already exists from migration 016). Source: pages from `OSHA-RK-Forms-Package.pdf` (visual reference) cross-referenced against 1904.29 in `29 CFR Part 1904.pdf`.
+- **WI-03 OSHA 301 PDF** — depends on WI-01 for the `pdfkit` dep. Per-incident form. Reads from `incidents.type_data.injured_person` + (post-WI-A) `affected_persons` / `injuries`. DOB / date_hired / gender are already captured by WI-04 FE.
+- **WI-07 OSHA 1904.39 severe-injury notification flow** — 8h (fatality) / 24h (hospitalization, amputation, loss of eye). New `osha_severe_notifications` table; new service; phone-notified-at logging. Plugs into the WI-08 `deadlines.js` aggregator (TODO marker is already in place).
+- **WI-02 OSHA 300A PDF + ITA CSV** — depends on WI-01. ITA CSV column headers need owner clarification (not in the RK package).
+- **WI-09 Generic Incident PDF** — universal fallback. No hallucination gate.
+
+**Still gated** (owner needs to supply source material before starting):
+- **WI-05 RIDDOR F2508 PDF** — HSE F2508 visual reference.
+- **WI-06 SafeWork NSW** — WHS Act s.36 / s.37 enumerations + Notify form + ANZSIC code list.
+
+**Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
 
 **Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
 
@@ -179,6 +188,20 @@ Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink
 ---
 
 ## Recent session log
+
+### 2026-05-12 (night) — WI-D jurisdiction-aware wizard shipped + OSHA source PDFs landed
+
+Chunk 7a closed in one FE commit + docs follow-up. Owner also dropped OSHA source PDFs into `docs/regulatory-sources/osha/` which unblocks WI-01 / WI-02 / WI-03 / WI-07 for upcoming chunks.
+
+| Commit | Scope |
+|---|---|
+| `2e708d0` | **WI-D**. `client/src/utils/frameworks.js` gains `jurisdictionForContext({user, siteId, sites})` + `FIELD_REQUIRED_BY` registry + `showField(key, jurisdictions, showAll)`. `ReportWizard.jsx` computes jurisdiction once site is picked (useMemo) and threads it to InjuryForm. `InjuryForm.jsx` gates the WI-A identity rows (address/phone, DOB/gender/date_hired) + WI-04 "UK RIDDOR edge cases" card; "Show all regulatory fields" override toggle in the Injured-person card header (default off). `AffectedPersonModal.jsx` accepts optional `jurisdiction` prop; falls back to showing every field when called from IncidentDetail post-creation. 25-test `node:test` suite at `client/src/utils/frameworks.test.js` covering jurisdictionForContext + showField + the four demo-account integration scenarios. |
+| `753ec42` | **OSHA source materials**: `29 CFR Part 1904 (up to date as of 5-07-2026).pdf` (42pp regulation text, covers 1904.29 / 32 / 33 / 39 / 41) + `OSHA-RK-Forms-Package.pdf` (visual reference for Forms 300 / 300A / 301). Unblocks WI-01 / WI-02 / WI-03 / WI-07. |
+| (this) | roadmap.md + docs/implementation-plan.md + memory updates. Chunk 7a marked done; next-session priority refreshed with OSHA chunk queue. |
+
+**Test matrix:** frameworks.test.js 25/25; wi08 19/19; wib 42/42; wi04 49/49; riddor unit 23/23; wia 77/78 (F1 unchanged); Vite build clean.
+
+**Servers running.** Branch `backend` at `753ec42` + this turn's docs commit.
 
 ### 2026-05-12 (evening) — WI-08 regulatory-deadline countdown UI shipped (BE aggregator + FE badge); 19-assertion E2E suite
 

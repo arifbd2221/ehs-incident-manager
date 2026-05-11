@@ -28,7 +28,8 @@ Defined in `plan-2026-05-11.md` Part 3. Each chunk ends with a ✋ owner checkpo
 | 5 | WI-A Multi-person incidents | ✅ Done — `12fbd8d` … `caab857` (wizard, modal, dual-write, address/phone/DOB/gender/date_hired) |
 | 6 | WI-B Override approval workflow | ✅ Done — `7ee1983` (BE: migration 026 + service + routes + 42-assertion `wib-e2e.sh`), `e660b16` (FE: modal + RecordabilityVerifyCard banner + `/approvals` page) |
 | 7 | WI-08 Deadline countdown UI | ✅ Done — `449539b` (single BE+FE commit: `server/services/deadlines.js` aggregator + `GET /incidents/:id/deadlines` + list/detail attachment + `DeadlineBadge.jsx` rendered in IncidentDetail header & IncidentsList rows + 19-assertion `wi08-e2e.sh`). |
-| **7a** | **WI-D Jurisdiction-aware wizard + forms** | **Next.** Owner directive 2026-05-11 evening — gate fields by org's compliance_frameworks + site.country. WI-04 added a "UK RIDDOR edge cases" card that WI-D should hide for non-UK orgs. Spec below. |
+| 7a | WI-D Jurisdiction-aware wizard + forms | ✅ Done — `2e708d0` (single FE commit: `jurisdictionForContext()` + `showField()` registry in `client/src/utils/frameworks.js`; wizard threads jurisdiction to InjuryForm + AffectedPersonModal with "Show all" override toggle; 25-test `frameworks.test.js`). |
+| **8** | **WI-01 OSHA 300 PDF + WI-03 OSHA 301 PDF + WI-07 OSHA 1904.39 severe-injury flow** | **Next.** OSHA source PDFs landed `753ec42` — hallucination gates cleared. |
 | 8+ | WI-01, WI-05, WI-06, WI-07, WI-02, WI-09 | OSHA 300 PDF → RIDDOR F2508 → SafeWork NSW → OSHA 1904.39 → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
 
 ---
@@ -241,7 +242,9 @@ Shipped 2026-05-12 in two commits + a docs/memory follow-up.
 
 **Complexity:** L. **New tables:** none. **Existing schema touched:** `activity_log` (additive columns + triggers). **Chunk:** 4.
 
-### WI-D: Jurisdiction-aware wizard + forms (authorized 2026-05-11, evening)
+### WI-D: Jurisdiction-aware wizard + forms — ✅ DONE 2026-05-12 (night) — `2e708d0`
+
+Shipped in a single FE commit (no schema). The spec below is preserved for reference / future framework additions.
 
 **Problem.** The wizard currently asks every reporter for the union of OSHA + RIDDOR + SafeWork NSW identity fields, regardless of which jurisdictions the org operates under. A US-only org sees RIDDOR-specific labels they don't need; a UK-only org sees OSHA fields. Reports surface already gates by `org.compliance_frameworks` (`client/src/utils/frameworks.js` → `frameworkVisibility(user)`), but the wizard does not. The user wants intake to mirror the org's regulatory posture.
 
