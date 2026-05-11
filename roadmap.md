@@ -37,7 +37,7 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 | 2 | **WI-04 RIDDOR Reg 5 + 11** | **Sources in repo (`db5c1d4` + INDG453). NEXT SESSION.** |
 | 3 | WI-10 Activity-log audit consistency | ✅ `67b8c9a` |
 | 4 | WI-C Activity-log integrity (hash chain) | ✅ `2301521`, `b3343a0` |
-| 5 | WI-A Multi-person incidents (full: routes + dual-write + wizard + modal + 7 reg fields) | ✅ `12fbd8d` … `caab857` |
+| 5 | WI-A Multi-person incidents (full: routes + dual-write + wizard + modal + 7 reg fields + edit/delete + expander) | ✅ `12fbd8d` … `ace8816`. 78-assertion regression suite at `server/scripts/wia-regression.sh` — 77 pass / 1 known test-script bug (witnesses 201). |
 | 6 | WI-B Override approval workflow | |
 | 7 | WI-08 Deadline countdown UI | |
 | **7a** | **WI-D Jurisdiction-aware wizard + forms** | **Owner directive 2026-05-11 evening — gate fields by org's compliance_frameworks + site.country. Spec in `docs/implementation-plan.md`.** |
@@ -179,6 +179,39 @@ Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink
 ---
 
 ## Recent session log
+
+### 2026-05-11 (late evening) — WI-A end-to-end + WI-D queued + regression suite
+
+Long session closing out WI-A in full (chunks A1 → polish → retro fixes) plus
+queuing WI-D as the next FE workstream. 14 commits on backend:
+
+| Commit | Scope |
+|---|---|
+| `8cd3093` | Chunk 1 — docs (gap-analysis, plan, compliance-notes, regulatory-sources scaffold), roadmap trim |
+| `67b8c9a` | WI-10 regulatory-submission audit consistency |
+| `2301521` | WI-C 4a — migration 024 + hash-chain helper + triggers |
+| `b3343a0` | WI-C 4c — writeActivity column writes + audit-log verify endpoint |
+| `db5c1d4` | RIDDOR 2013 SI 1471 source PDF |
+| `12fbd8d` | WI-A A1 — migration 025 + backfill (4 incidents) |
+| `035ec28` | WI-A A2 — affected_persons service module + audit verbs |
+| `b565fdd` | WI-A A3+A4+A5 — CRUD routes + POST dual-write + FE read view |
+| `640a7e1` | WI-A follow-up — PATCH /incidents/:id dual-write |
+| `ed16914` | WI-A FE — add-person modal + employee picker + per-row numbering |
+| `f844f2e` | WI-A wizard — multi-person intake + flat→nested lift |
+| `6afc25d` | WI-A UX fixes — modal scroll + z-index + employee picker on primary |
+| `33c5424` | WI-A — DOB / gender / date_hired on wizard primary |
+| `caab857` | WI-A — address + phone on wizard primary |
+| `1f1f1fa` | WI-D queued (jurisdiction-aware wizard) + INDG453 RIDDOR guidance |
+| `ace8816` | WI-A polish — edit/delete UI + fuller card + PATCH flat→nested |
+
+**Regression suite landed:** `server/scripts/wia-regression.sh` — 78 curl
+assertions covering POST shapes, PATCH matrix, AP/injury CRUD, WI-C hash
+chain integrity, append-only trigger enforcement, reports endpoints,
+adjacent paths. Run before any future change to incidents/affected_persons/
+activity_log code paths.
+
+**Servers stopped at session end.** Last commit `ace8816`. Working tree
+clean (only untracked file is owner-supplied `PRD.md`).
 
 ### 2026-05-11 (later) — PRD compliance plan locked, Chunk 1 docs landed
 
