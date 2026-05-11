@@ -8,28 +8,30 @@ the full detail. Most recent session entries at the bottom.
 
 ## Current state
 
-- **Branch:** `backend` at `9d1faf8` (merge from `origin/main`). Equal to
-  `origin/backend`. Working tree clean.
-- **`origin/main`** at `bb0fca3`. Main's two new commits since `6051395`:
-  global voice report feature (`b2e6a9f`, +2982 lines, new
-  `@google/generative-ai` server dep) and a small ReferencedByCard
-  double-modal fix. Both merged into backend cleanly (no manual conflicts).
-- **PR #11** open: backend → main — "P3-OB2 sellable-tier work_hours +
-  audit log timeline fixes" — 12 commits. Awaits click-test approval.
-  `https://github.com/arifbd2221/ehs-incident-manager/pull/11`.
+- **Branch:** `backend` at `897ac78` (P3-OB3 FE — version history + supersede
+  in preview modal). Equal to `origin/backend`. Working tree clean.
+- **`origin/main`** at `b3dbb08` (merge of PR #11). All previously-pending
+  backend work has landed on main; backend is now +2 commits ahead with the
+  P3-OB3 BE + FE slice (`7af629b`, `897ac78`).
+- **PR #11** ✅ merged 2026-05-11 (was: P3-OB2 sellable-tier + audit log fixes).
 - **Phase 2:** code complete (only F6.2 manual demo walkthrough open).
 - **Wave 7:** E7.1 (custom asset fields per category) done.
 - **UX backlog A–H:** done. UX-C body-parts editor deferred (needs BodyMap3D
   outside the wizard).
 - **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, **OB2** (users + sites + assets + work_hours
   full industry-standard surfaces — manual CRUD + year-group/YoY + live OSHA 300A + TRIR/DART/LTIR/Severity
-  cards on SiteDetail and Dashboard + CSV export + contractor split), OP2, OP3.
-- **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, OB3, RG1.
-- **Migrations applied:** 001–021 + letter fixups `014a`, `017a`. `017a` aliases
+  cards on SiteDetail and Dashboard + CSV export + contractor split),
+  **OB3** (document versioning — mig 022, supersede route, immutable history,
+  preview-modal version timeline + inline supersede), OP2, OP3.
+- **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, RG1.
+- **Migrations applied:** 001–022 + letter fixups `014a`, `017a`. `017a` aliases
   the legacy backend names in `_schema_migrations` — idempotent on fresh DBs.
   `020` widens `activity_log` CHECK to accept `entity_type='work_hours'`.
   `021` adds nullable `contractor_hours_worked` + `contractor_avg_employees`
   on `work_hours` (ISO 45001 / Cority parity).
+  `022` adds `document_versions` (UUID-named historical files, immutable
+  rows, per-doc version_number, optional notes) and backfills v1 from
+  every existing document.
 - **Demo accounts** (all `password123`):
   - `priya@sdsmanager.com` (admin, COO of SDS Manager Inc., id=13) — primary admin test account
   - `elena@sdsmanager.com` (ehs_manager, multi-framework: OSHA 300/300A/301 + RIDDOR)
@@ -43,75 +45,19 @@ the full detail. Most recent session entries at the bottom.
 
 ### Next session priority
 
-**P3-OB3 — document versioning.** Supersede a doc with a new file, keep an
-immutable audit trail of prior revisions. Industry standard for ISO 9001
-+ OSHA records management. Inspectors on 1903 visits routinely ask "what
-did this SDS / SOP / certificate say on date X" — must be answerable.
+**Pick one with the user:**
 
-**Locked design decisions** (the auto-memory file `project_state.md` has
-the full rationale — read before starting):
+- **P3-OB1** — first-login walkthrough + sample-data toggle. Onboarding
+  for empty tenants (acme / riddor-test / sydney-test) is the natural
+  closing slice for the OB-series.
+- **P3-OP1** — asset maintenance schedules / due dates / overdue → CAPA
+  escalation. Largest sellable-tier gap on the asset surface.
+- **P3-RG1** — Australian regulator. Closes the `safework_nsw` framework
+  loop (currently has no Reports card). Per-state WHS deadline tracking.
+  Schema work + new Reports surface.
 
-1. New `document_versions` table (mig 022). Each version is an immutable
-   row. The `documents` table keeps name/type/number stable; file-shaped
-   fields move to versions. Backfill v1 from each existing document so
-   reads always resolve to ≥1 version.
-2. Keep every uploaded file on disk forever — never overwrite, never
-   delete. Inspector defensibility.
-3. References (entity_links) auto-follow to the latest version. No
-   version-pinning in v1.
-4. Elevated-role gate (same as existing upload).
-5. UX placement: inline expandable section on `DocumentsList.jsx`
-   per-row. NOT a new DocumentDetail page. Reuse `.activity-feed` /
-   `.act-item` styles, no new CSS.
-
-**Files to read END TO END before any edit** — none are warm:
-
-- `server/db/migrations/001_phase2_tables.sql` (documents table top)
-- `server/routes/documents.js`
-- `server/middleware/upload.js` (multer storage path + naming convention)
-- `server/routes/attachments.js` (sister polymorphic table; pattern
-  reference, NOT the same model)
-- `server/routes/folders.js`
-- `client/src/api/documents.js`
-- `client/src/pages/documents/DocumentsList.jsx`
-- `server/services/audit_actions_catalog.js` (extend with
-  `document_superseded`)
-
-**Proposed shape** (verify against current schema first):
-
-```sql
--- mig 022
-CREATE TABLE document_versions (
-  id PK,
-  document_id FK documents(id) NOT NULL,
-  version_number INTEGER NOT NULL,
-  file_url, stored_filename, mime_type, size_bytes,
-  uploaded_by FK users(id) NOT NULL,
-  notes TEXT,                  -- "Updated cover image"
-  created_at,
-  UNIQUE(document_id, version_number)
-);
--- + INSERT v1 backfill for every existing document row.
-```
-
-```
-POST /api/documents/:id/versions          → multer upload, +1 version,
-                                            writes document_superseded
-GET  /api/documents/:id                   → extended: include versions[]
-                                            (DESC by version_number)
-GET  /api/documents/:id/download          → still serves LATEST
-GET  /api/documents/:id/versions/:vid/download → serves historical
-```
-
-**Start order:** read every file in the list above → confirm decisions
-still hold with the user → BE commit (mig + supersede route + GET
-extension + audit catalog) → curl-test thoroughly → push → STOP and
-report → user confirms API surface → FE commit (inline version list
-on DocumentsList row) → push.
-
-**After this slice, P3-OB3 is closed.** Next roadmap candidate:
-P3-OB1 (first-login walkthrough), P3-OP1 (asset maintenance), or
-P3-RG1 (AU regulator) — pick with the user.
+Click-test punch list still open for backend's recent work (per the
+"FE not click-tested" flags below).
 
 ### Other files cold / never read end-to-end in recent sessions
 
@@ -144,7 +90,7 @@ Carryovers from prior merges + the latest one from main:
 ### Onboarding + data import
 - [ ] **P3-OB1** User onboarding flow — first-login walkthrough, sample-data toggle, role-tailored "what to do first".
 - [x] **P3-OB2** CSV import — users / sites / assets / work_hours **all done** (`e30954d` `57db454` `7388574` `fb8fc8f`).
-- [ ] **P3-OB3** Document versioning — supersede a doc with a new file, audit trail of prior revisions.
+- [x] **P3-OB3** Document versioning — mig 022 `document_versions`, supersede route, immutable history, audit catalog catch-up; FE in preview modal (`7af629b` + `897ac78`).
 
 ### AI assistance
 - [ ] **P3-AI1** Auto-fill investigation (AI + manual) — five-Why suggestions, root-cause prompts, contributing-factors checklist, recommended CAPAs.
@@ -211,6 +157,8 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 | P3-OB2 (work_hours) | Migration `020` widens `activity_log` CHECK; `routes/work_hours.js` adapter mounted at `/api/work-hours`; ISO date validation w/ calendar round-trip; UNIQUE(site_id, period_start) collision detection; second "Import work hours" button on `/admin/sites` | `fb8fc8f` |
 | P3-OB2 (work_hours surfaces) | Mig 021 contractor split; manual CRUD + CSV export at `/api/work-hours`; new `WorkHoursModal` + periods card on SiteDetail (year-group, YoY delta, weighted avg employees); TRIR/DART/LTIR/Severity Rate live from `work_hours`; rate cards on SiteDetail + Dashboard org-wide rollup; dropped `sites.total_hours_worked` form inputs + writes (column kept as legacy/no-op) | `db5c483` `4d15011` `9849e60` `a47615b` `3848029` |
 | Priya admin demo | Seeded admin user in SDS Manager Inc. + first row in Login.jsx DEMO grid | `dd94fe4` |
+| P3-OB3 (BE) | Mig 022 `document_versions` (UUID-named files, immutable rows, per-doc `version_number`, optional notes) + v1 backfill; `POST /:id/versions` (multer, atomic mirror update on `documents.*`, audit `document_superseded`); `GET /:id/versions/:vid/download` (historical, `(vN)` filename suffix); `GET /:id` extended with `versions[]` DESC; audit catalog catch-up (also adds previously-missing `document_updated` / `document_moved`). Workers 403, cross-org 404, oversize notes 400 w/ orphan-file cleanup. | `7af629b` |
+| P3-OB3 (FE) | Preview modal gains version-history section (`.activity-feed`/`.act-item`, latest-first, per-version download, LATEST badge) + supersede icon in modal header that toggles inline form (file + ≤500-char notes, mirrored to audit description). Post-supersede refreshes preview blob + docs grid. `api/documents.js` adds `createDocumentVersion` + `downloadVersion`. No new CSS — reuses `.dpv-references` for the bordered container. Build clean; not click-tested. | `897ac78` |
 
 ## Done — UX backlog
 
@@ -275,6 +223,35 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 ---
 
 ## Recent session log
+
+### 2026-05-11 (later) — P3-OB3 document versioning shipped (BE + FE)
+
+PR #11 merged into main earlier today; backend at the start of the
+session was `6dfd480` (roadmap tick) and clean. Two commits closed
+P3-OB3 end-to-end.
+
+| Area | What changed | Commit |
+|---|---|---|
+| BE: mig 022 + supersede route + audit catalog | New `document_versions` table (UUID-named historical files, immutable rows, per-doc `version_number`, optional notes ≤500 chars). v1 backfill from every existing document so reads always resolve. `POST /:id/versions` does atomic mirror update on `documents.file_url/stored_filename/mime_type/size_bytes` via `db.transaction` so list / download / entity_links keep serving the latest without rewrites. `GET /:id/versions/:vid/download` serves historical with `(vN)` baked into the saved filename. `GET /:id` extended with `versions[]` DESC. Audit catalog adds `document_superseded` and the previously-missing `document_updated` / `document_moved` pairs (PATCH route already wrote those; picker just didn't list them). Curl matrix green: worker 403 / cross-org 404 / oversize-notes 400 with orphan-file cleanup / audit row + count surfaces in `/audit-log/actions`. | `7af629b` |
+| FE: preview-modal version timeline + inline supersede | Preview modal grows two new sections inside `.dpv-references`: Version history (`.activity-feed`/`.act-item`, latest-first, LATEST badge, per-version download via `/versions/:vid/download` with `(vN)` filename suffix, latest hits the existing `/download` so the saved name matches the doc title) and an inline supersede form (file picker + ≤500-char notes mirrored to the audit description). Supersede icon in the modal header is elevated-only and active-only. Post-supersede refreshes the preview blob + docs grid so the new file appears everywhere immediately. `api/documents.js` adds `createDocumentVersion` + `downloadVersion`. No new CSS; light inline styling matches the convention already in this file. Build clean (196 modules transformed). | `897ac78` |
+
+**Decisions confirmed mid-session:**
+- FE placement: preview modal (chosen via AskUserQuestion), not literal
+  per-row inline expand. The original "per-row inline" wording in
+  `project_state.md` was written without knowledge of the Drive-style
+  card-grid + list-view layout — preview modal is the document-detail
+  surface that already exists.
+
+**Honest hallucination flags:**
+- **FE not click-tested in a browser.** Vite build was clean but visual
+  rendering of the supersede form + version timeline inside the modal
+  hasn't been verified. Same caveat as recent FE slices.
+- BE is heavily curl-tested (8 paths exercised across two users + cross-org).
+
+**Pre-existing orphan files in `server/uploads/`** (22 PDFs not attached
+to any DB row): all date from prior sessions / CI runs, NOT introduced
+by P3-OB3 error paths. Mig 022's design retains every uploaded file
+forever; there is no GC for the existing orphans.
 
 ### 2026-05-11 — Activity timeline forensics, audit log polish, main merge, PR #11
 
