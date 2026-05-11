@@ -97,6 +97,13 @@ export const AUDIT_ACTIONS_CATALOG = [
   { entity_type: 'asset', action: 'asset_archived' },
   { entity_type: 'asset', action: 'assets_imported' },
 
+  // Asset maintenance (P3-OP1)
+  { entity_type: 'asset_maintenance', action: 'maintenance_schedule_created' },
+  { entity_type: 'asset_maintenance', action: 'maintenance_schedule_updated' },
+  { entity_type: 'asset_maintenance', action: 'maintenance_schedule_deleted' },
+  { entity_type: 'asset_maintenance', action: 'maintenance_completed' },
+  { entity_type: 'asset_maintenance', action: 'maintenance_escalated' },
+
   // Asset categories + custom fields
   { entity_type: 'asset_category', action: 'asset_category_created' },
   { entity_type: 'asset_category', action: 'asset_category_updated' },
