@@ -171,10 +171,33 @@ router.post('/', upload.single('file'), (req, res) => {
   const finalName = (name && name.trim()) || req.file.originalname;
   const fileUrl = `/uploads/${req.file.filename}`;
 
-  const result = db.prepare(`
-    INSERT INTO documents (document_number, org_id, name, document_type, file_url, stored_filename, mime_type, size_bytes, uploaded_by, folder_id, active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-  `).run(number, req.user.org_id, finalName, document_type, fileUrl, req.file.filename, req.file.mimetype, req.file.size, req.user.id, folderId);
+  // Insert the document AND its v1 row atomically — every document must have
+  // ≥1 row in document_versions so the OB3 supersede flow + history reads
+  // are consistent for new uploads, not just for the mig-022 backfilled ones.
+  const apply = db.transaction(() => {
+    const docResult = db.prepare(`
+      INSERT INTO documents (document_number, org_id, name, document_type, file_url, stored_filename, mime_type, size_bytes, uploaded_by, folder_id, active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `).run(number, req.user.org_id, finalName, document_type, fileUrl, req.file.filename, req.file.mimetype, req.file.size, req.user.id, folderId);
+
+    db.prepare(`
+      INSERT INTO document_versions
+        (document_id, version_number, file_url, stored_filename,
+         mime_type, size_bytes, uploaded_by)
+      VALUES (?, 1, ?, ?, ?, ?, ?)
+    `).run(docResult.lastInsertRowid, fileUrl, req.file.filename, req.file.mimetype, req.file.size, req.user.id);
+
+    return docResult.lastInsertRowid;
+  });
+
+  let docId;
+  try {
+    docId = apply();
+  } catch (err) {
+    try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
+    throw err;
+  }
+  const result = { lastInsertRowid: docId };
 
   const doc = db.prepare(`
     SELECT d.*, u.name as uploaded_by_name, u.initials as uploaded_by_initials
