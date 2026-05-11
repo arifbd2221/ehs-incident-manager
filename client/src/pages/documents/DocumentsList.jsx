@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
-import { listDocuments, uploadDocument, updateDocument, deleteDocument } from '../../api/documents';
+import { listDocuments, getDocument, uploadDocument, updateDocument, deleteDocument, createDocumentVersion, downloadVersion } from '../../api/documents';
+import { timeAgo } from '../../utils/time';
 import { listFolders, createFolder, updateFolder, deleteFolder } from '../../api/folders';
 import { getSites } from '../../api/auth';
 import api from '../../api/client';
@@ -97,6 +98,14 @@ export default function DocumentsList() {
   const [previewDoc, setPreviewDoc] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [versions, setVersions] = useState([]);             // [{version_number, …}]
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [supersedeOpen, setSupersedeOpen] = useState(false);
+  const [supersedeFile, setSupersedeFile] = useState(null);
+  const [supersedeNotes, setSupersedeNotes] = useState('');
+  const [supersedeBusy, setSupersedeBusy] = useState(false);
+  const [supersedeErr, setSupersedeErr] = useState('');
+  const supersedeInputRef = useRef(null);
 
   // Folder + site state. currentFolderId = null → root view.
   const [sites, setSites] = useState([]);
@@ -466,10 +475,28 @@ export default function DocumentsList() {
     }
   };
 
+  const loadVersions = async (docId) => {
+    setVersionsLoading(true);
+    try {
+      const detail = await getDocument(docId);
+      setVersions(detail.versions || []);
+    } catch {
+      setVersions([]);
+    } finally {
+      setVersionsLoading(false);
+    }
+  };
+
   const handlePreview = async (doc) => {
     setPreviewDoc(doc);
     setPreviewLoading(true);
     setPreviewUrl(null);
+    setVersions([]);
+    setSupersedeOpen(false);
+    setSupersedeFile(null);
+    setSupersedeNotes('');
+    setSupersedeErr('');
+    loadVersions(doc.id);
     try {
       const res = await api.get(`/documents/${doc.id}/download`, { responseType: 'blob' });
       const blob = new Blob([res.data], { type: doc.mime_type || 'application/octet-stream' });
@@ -486,6 +513,83 @@ export default function DocumentsList() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewDoc(null);
     setPreviewUrl(null);
+    setVersions([]);
+    setSupersedeOpen(false);
+    setSupersedeFile(null);
+    setSupersedeNotes('');
+    setSupersedeErr('');
+  };
+
+  // Historical-version download. Latest version takes the existing
+  // /download path so the saved filename matches the document title;
+  // older versions go through the per-version route which suffixes "(vN)".
+  const handleDownloadVersion = async (version) => {
+    if (!previewDoc) return;
+    try {
+      const isLatest = versions.length > 0 && version.id === versions[0].id;
+      const res = isLatest
+        ? await api.get(`/documents/${previewDoc.id}/download`, { responseType: 'blob' })
+        : await downloadVersion(previewDoc.id, version.id);
+      const blob = new Blob([res.data]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Echo "(vN)" for historical so the file on the user's disk is self-describing.
+      const baseName = previewDoc.name || version.stored_filename;
+      const lastDot = baseName.lastIndexOf('.');
+      a.download = isLatest
+        ? baseName
+        : lastDot > 0
+          ? `${baseName.slice(0, lastDot)} (v${version.version_number})${baseName.slice(lastDot)}`
+          : `${baseName} (v${version.version_number})`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Download failed');
+    }
+  };
+
+  const openSupersede = () => {
+    setSupersedeOpen(true);
+    setSupersedeFile(null);
+    setSupersedeNotes('');
+    setSupersedeErr('');
+  };
+  const closeSupersede = () => {
+    setSupersedeOpen(false);
+    setSupersedeFile(null);
+    setSupersedeNotes('');
+    setSupersedeErr('');
+  };
+
+  const submitSupersede = async (e) => {
+    e?.preventDefault();
+    if (!previewDoc || !supersedeFile) {
+      setSupersedeErr('Pick a file first');
+      return;
+    }
+    setSupersedeBusy(true);
+    setSupersedeErr('');
+    try {
+      await createDocumentVersion(previewDoc.id, { file: supersedeFile, notes: supersedeNotes.trim() });
+      // Refresh versions list, the preview blob, and the underlying docs list
+      // (its top-level mirror fields just changed).
+      await loadVersions(previewDoc.id);
+      try {
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        const res = await api.get(`/documents/${previewDoc.id}/download`, { responseType: 'blob' });
+        const blob = new Blob([res.data], { type: previewDoc.mime_type || 'application/octet-stream' });
+        setPreviewUrl(URL.createObjectURL(blob));
+      } catch { /* preview refresh is best-effort */ }
+      refresh();
+      closeSupersede();
+    } catch (err) {
+      setSupersedeErr(err.response?.data?.error || 'Supersede failed');
+    } finally {
+      setSupersedeBusy(false);
+    }
   };
 
   return (
@@ -954,6 +1058,15 @@ export default function DocumentsList() {
                 <span className="dpv-meta-pill">{fmtSize(previewDoc.size_bytes)}</span>
               </div>
               <div className="dpv-header-right">
+                {canEdit && previewDoc.active && (
+                  <button
+                    className="dpv-action"
+                    onClick={openSupersede}
+                    title="Supersede with a new version"
+                  >
+                    <Icon name="upload" size={18} />
+                  </button>
+                )}
                 <button className="dpv-action" onClick={() => handleDownload(previewDoc)} title="Download">
                   <Icon name="download" size={18} />
                 </button>
@@ -1010,6 +1123,91 @@ export default function DocumentsList() {
             {/* References (P3-L1 follow-up) */}
             <div className="dpv-references">
               <ReferencedByCard entityType="document" entityId={previewDoc.id} />
+            </div>
+
+            {/* Version history (P3-OB3). Immutable revisions, latest first. */}
+            <div className="dpv-references">
+              <div className="card-h" style={{ padding: 0, marginBottom: 8, fontSize: 13 }}>
+                <Icon name="clock" size={14} /> Version history
+                {versions.length > 0 && (
+                  <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--sds-fg-tertiary)' }}>
+                    {versions.length} version{versions.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+
+              {/* Inline supersede form — toggled by the header's upload button. */}
+              {supersedeOpen && (
+                <form
+                  onSubmit={submitSupersede}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12, padding: 12, background: 'var(--sds-bg-surface)', border: '1px solid var(--sds-border)', borderRadius: 'var(--sds-radius-md)' }}
+                >
+                  <input
+                    ref={supersedeInputRef}
+                    type="file"
+                    onChange={e => setSupersedeFile(e.target.files[0] || null)}
+                    style={{ fontSize: 12 }}
+                  />
+                  <textarea
+                    className="input"
+                    placeholder="What changed? (optional — shown in the audit trail)"
+                    value={supersedeNotes}
+                    onChange={e => setSupersedeNotes(e.target.value)}
+                    maxLength={500}
+                    rows={2}
+                    style={{ fontSize: 12, resize: 'vertical' }}
+                  />
+                  {supersedeErr && (
+                    <span className="helper" style={{ color: 'var(--sds-error)' }}>{supersedeErr}</span>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={closeSupersede} disabled={supersedeBusy}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={supersedeBusy || !supersedeFile}>
+                      {supersedeBusy ? 'Uploading…' : 'Supersede'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {versionsLoading ? (
+                <div className="helper">Loading history…</div>
+              ) : versions.length === 0 ? (
+                <div className="helper">No version history yet.</div>
+              ) : (
+                <div className="activity-feed" style={{ padding: 0 }}>
+                  {versions.map((v, i) => {
+                    const isLatest = i === 0;
+                    return (
+                      <div className="act-item" key={v.id}>
+                        <div className={`act-dot ${isLatest ? 'act-create' : 'act-system'}`}>
+                          <Icon name={isLatest ? 'file' : 'clock'} size={16} />
+                        </div>
+                        <div className="act-body">
+                          <div className="act-who">
+                            v{v.version_number}
+                            {isLatest && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, color: 'var(--sds-brand-primary)' }}>LATEST</span>}
+                            <button
+                              className="icon-btn"
+                              style={{ float: 'right', width: 28, height: 28 }}
+                              onClick={() => handleDownloadVersion(v)}
+                              title={`Download v${v.version_number}`}
+                            >
+                              <Icon name="download" size={14} />
+                            </button>
+                          </div>
+                          <div className="act-desc">
+                            {v.uploaded_by_name || 'Unknown'}
+                            {v.notes ? ` — ${v.notes}` : (isLatest && versions.length === 1 ? ' — original upload' : '')}
+                          </div>
+                          <div className="act-when">{timeAgo(v.created_at)}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Footer */}
