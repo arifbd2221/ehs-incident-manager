@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../shared/Icon';
 import { useApp } from '../../context/AppContext';
@@ -29,19 +30,27 @@ const NAV = [
   { id: 'templates', path: '/templates', icon: 'clipboard', label: 'Templates', color: '#8b5cf6' },
   { id: 'inspections', path: '/inspections', icon: 'shield', label: 'Inspections', color: '#00897B' },
   { id: 'reports', path: '/reports', icon: 'reports', label: 'Reports', color: '#5C6BC0' },
+  { id: 'learn', path: '/learn', icon: 'help', label: 'Learn', color: '#8b5cf6' },
+];
+
+const SETTINGS_CHILDREN = [
   { id: 'sites', path: '/admin/sites', icon: 'factory', label: 'Sites', color: '#78909C' },
   { id: 'members', path: '/admin/members', icon: 'people', label: 'Members', color: '#9575CD' },
+  { id: 'profile', path: '/profile', icon: 'person', label: 'Profile', color: '#78909C' },
 ];
 
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { sidebarOpen, setSidebarOpen } = useApp();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
+
+  const settingsActive = SETTINGS_CHILDREN.some(c => isActive(c.path));
 
   const go = (path) => {
     navigate(path);
@@ -60,9 +69,29 @@ export default function Sidebar() {
           </div>
         ))}
         <div style={{ flex: 1 }} />
-        <div className={`nav-item ${isActive('/profile') ? 'active' : ''}`} style={{ '--nav-color': '#78909C' }} onClick={() => go('/profile')}>
-          <Icon name="person" size={22} />
-          <div className="lbl">Profile</div>
+        <div className="nav-settings-group">
+          <div
+            className={`nav-item ${settingsActive && !settingsOpen ? 'active' : ''} ${settingsOpen ? 'settings-expanded' : ''}`}
+            style={{ '--nav-color': '#78909C' }}
+            onClick={() => setSettingsOpen(o => !o)}
+            aria-expanded={settingsOpen}
+          >
+            <Icon name="tune" size={22} />
+            <div className="lbl">Settings</div>
+            <span className={`nav-settings-chevron ${settingsOpen ? 'open' : ''}`}>
+              <Icon name="arrow" size={10} />
+            </span>
+          </div>
+          <div className={`nav-settings-panel ${settingsOpen ? 'open' : ''}`}>
+            <div className="nav-settings-inner">
+              {SETTINGS_CHILDREN.map(it => (
+                <div key={it.id} className={`nav-item nav-sub-item ${isActive(it.path) ? 'active' : ''}`} style={{ '--nav-color': it.color }} onClick={() => go(it.path)}>
+                  <Icon name={it.icon} size={18} />
+                  <div className="lbl">{it.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </aside>
     </>

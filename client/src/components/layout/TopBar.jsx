@@ -64,6 +64,11 @@ const PAGE_TIPS = {
     { icon: 'plus', text: 'Admins can add new members with an initial password (handed off out-of-band)' },
     { icon: 'shield', text: 'Role and active-status changes are written to the activity log for audit' },
   ],
+  '/learn': [
+    { icon: 'help', text: 'Each story walks through a real incident scenario from report to closure' },
+    { icon: 'shield', text: 'Practice risk classification with interactive exercises inside each story' },
+    { icon: 'check', text: 'Your progress is saved automatically — pick up where you left off' },
+  ],
 };
 
 const SHORTCUTS = [

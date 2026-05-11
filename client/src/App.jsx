@@ -29,6 +29,7 @@ import TemplateEditor from './pages/templates/TemplateEditor';
 import InspectionsList from './pages/inspections/InspectionsList';
 import InspectionEditor from './pages/inspections/InspectionEditor';
 import InspectionReport from './pages/inspections/InspectionReport';
+import LearnPage from './pages/learn/LearnPage';
 import ReportWizard from './pages/wizard/ReportWizard';
 import GlobalVoiceFab from './components/voice/GlobalVoiceFab';
 
@@ -86,6 +87,7 @@ export default function App() {
         <Route path="/inspections" element={<InspectionsList />} />
         <Route path="/inspections/:id" element={<InspectionEditor />} />
         <Route path="/inspections/:id/report" element={<InspectionReport />} />
+        <Route path="/learn" element={<LearnPage />} />
         <Route path="/profile" element={<Settings />} />
       </Route>
     </Routes>
