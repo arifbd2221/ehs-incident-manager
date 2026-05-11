@@ -6,17 +6,17 @@ Live status for what's open, what's done, and how to operate on this codebase. D
 
 ## Current state
 
-- **Branch:** `backend` at `3ac058e` (WI-04 FE: wizard fields + `riddorCategoryLabel` map) plus the test-script + memory/roadmap-update commit landing this turn. Working tree clean (only `PRD.md` left untracked — owner reference doc).
-- **`origin/main`** at `b3dbb08` (last known). Backend is many commits ahead: WI-A end-to-end + WI-04 series. Check `gh pr list` for current PR state.
+- **Branch:** `backend` at `e660b16` (WI-B chunk 6 FE) plus the docs/memory/roadmap commit landing this turn. Working tree clean (only `PRD.md` left untracked — owner reference doc).
+- **`origin/main`** at `b3dbb08` (last known). Backend is many commits ahead: WI-A end-to-end + WI-04 series + WI-B series. Check `gh pr list` for current PR state.
 - **PR #11** ✅ merged 2026-05-11.
 - **Phase 2:** code complete; F6.2 manual walkthrough open.
 - **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OB2, OB3, OP1, OP2, OP3.
 - **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1. (RG1 superseded by PRD-remediation WI-06 SafeWork NSW.)
-- **PRD-remediation done:** Chunk 1 (setup), Chunk 2 (WI-04), Chunk 3 (WI-10), Chunk 4 (WI-C), Chunk 5 (WI-A).
-- **Migrations applied:** 001–025 + letter fixups `014a`, `017a`, `023a`, `023b`, `023c`. Next available: **026**. (024 = WI-C hash chain; 025 = WI-A `affected_persons` + `injuries`.)
+- **PRD-remediation done:** Chunk 1 (setup), Chunk 2 (WI-04), Chunk 3 (WI-10), Chunk 4 (WI-C), Chunk 5 (WI-A), Chunk 6 (WI-B).
+- **Migrations applied:** 001–026 + letter fixups `014a`, `017a`, `023a`, `023b`, `023c`. Next available: **027**. (024 = WI-C hash chain; 025 = WI-A `affected_persons` + `injuries`; 026 = WI-B `classification_override_requests` + self-approval triggers.)
 - **Demo accounts** (all `password123`): `priya@sdsmanager.com` (admin, SDS Manager Inc., org=1), `elena@sdsmanager.com` (ehs_manager, org=1, multi-framework — owns Sheffield UK site), `marcus`, `james`, `mehta`, `wendy`; plus empty test orgs `acme@sdsmanager.com` (admin, Acme Manufacturing org=2, OSHA US — used for cross-tenant tests), `riddor-test@example.com` (RIDDOR UK), `sydney-test@example.com` (SafeWork NSW AU).
 - **Dev servers:** `cd server && node --watch index.js` (BE :3001) + `cd client && npm run dev` (FE :5173).
-- **Test suites:** `server/scripts/wia-regression.sh` (78, 77 pass + 1 known F1 script bug), `server/scripts/wi04-e2e.sh` (49, all pass), `server/scripts/riddor-reg5-reg11.test.js` (23 `node:test`, all pass).
+- **Test suites:** `server/scripts/wia-regression.sh` (78, 77 pass + 1 known F1 script bug), `server/scripts/wi04-e2e.sh` (49, all pass), `server/scripts/wib-e2e.sh` (42, all pass), `server/scripts/riddor-reg5-reg11.test.js` (23 `node:test`, all pass).
 
 ---
 
@@ -39,8 +39,8 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 | 3 | WI-10 Activity-log audit consistency | ✅ `67b8c9a` |
 | 4 | WI-C Activity-log integrity (hash chain) | ✅ `2301521`, `b3343a0` |
 | 5 | WI-A Multi-person incidents (full: routes + dual-write + wizard + modal + 7 reg fields + edit/delete + expander) | ✅ `12fbd8d` … `ace8816`. 78-assertion regression suite at `server/scripts/wia-regression.sh` — 77 pass / 1 known test-script bug (witnesses 201). |
-| **6** | **WI-B Override approval workflow** | **NEXT.** |
-| 7 | WI-08 Deadline countdown UI | |
+| 6 | WI-B Override approval workflow | ✅ `7ee1983` (BE: migration 026 + service + routes + console.warn on direct PATCH + 42-assertion `server/scripts/wib-e2e.sh`), `e660b16` (FE: API client + OverrideRequestModal + RecordabilityVerifyCard pending-state banner + `/approvals` page + sidebar nav for elevated roles). |
+| **7** | **WI-08 Deadline countdown UI** | **NEXT.** Pure presentation; reads existing `riddor_reports.written_deadline` + future WI-06/07 fields. No schema. |
 | 7a | WI-D Jurisdiction-aware wizard + forms | Owner directive 2026-05-11 evening — gate fields by org's compliance_frameworks + site.country. Spec in `docs/implementation-plan.md`. WI-04 added a "UK RIDDOR edge cases" wizard card that WI-D should hide for non-UK orgs. |
 | 8+ | WI-01 OSHA 300 PDF → WI-05 F2508 → WI-06 SafeWork NSW → WI-07 1904.39 → WI-02 300A+ITA → WI-09 Generic PDF | reorder allowed by gate readiness |
 
@@ -54,11 +54,16 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 
 ## Next session priority
 
-**CHUNK 6 — WI-B Recordability override approval workflow.** Spec in `docs/plan-2026-05-11.md` Part 2 and `docs/implementation-plan.md` WI-B section. New `classification_override_requests` table; approve/reject/withdraw routes; self-approval forbidden (`requested_by != decided_by`); existing direct-edit path stays but emits `console.warn`. FE: replace direct "Override" button on `RecordabilityVerifyCard.jsx` with "Request override" modal + global pending-approval queue.
+**CHUNK 7 — WI-08 Deadline countdown UI.** Pure presentation. Reads existing `riddor_reports.written_deadline` + future WI-06/WI-07 deadlines once those ship. Spec in `docs/implementation-plan.md` WI-08 section.
 
-**Alternatives if WI-B not desired next:**
-- **WI-08 deadline countdown UI** — pure presentation; reads existing `riddor_reports.written_deadline` + future WI-06/WI-07 deadlines. No schema.
-- **WI-D jurisdiction-aware wizard** — FE-heavy, extends `client/src/utils/frameworks.js` with `jurisdictionForContext()` to gate the new WI-04 "UK RIDDOR edge cases" card (currently visible to all orgs) plus the WI-A multi-person fields by org's `compliance_frameworks` + `site.country`.
+- New `client/src/components/incidents/DeadlineBadge.jsx` — countdown pill (red < 24h, amber < 72h, green > 72h, gray when past).
+- `server/services/regulatory.js` extended to return aggregated `pending_deadlines: [{kind, deadline_at, status}]`. Sources: OSHA 1904.39 (after WI-07), RIDDOR 10-day/15-day (existing on `riddor_reports.written_deadline`), WHS 48-hour (after WI-06).
+- New endpoint `GET /incidents/:id/deadlines`.
+- Surfaced in `IncidentsList` rows and `IncidentDetail` header.
+
+**Alternatives if WI-08 not desired next:**
+- **WI-D jurisdiction-aware wizard** — FE-heavy, extends `client/src/utils/frameworks.js` with `jurisdictionForContext()` to gate the WI-04 "UK RIDDOR edge cases" card (currently visible to all orgs) plus the WI-A multi-person fields by org's `compliance_frameworks` + `site.country`.
+- **WI-01 OSHA 300 PDF rendering** — first hallucination-gated PDF chunk; needs `pdfkit` dependency added.
 
 **Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
 
@@ -175,6 +180,29 @@ Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink
 ---
 
 ## Recent session log
+
+### 2026-05-12 (later) — WI-B override approval workflow shipped BE+FE; 42-assertion E2E suite
+
+Chunk 6 closed in two BE/FE commits + a docs/memory follow-up:
+
+| Commit | Scope |
+|---|---|
+| `7ee1983` | BE: migration 026 (`classification_override_requests` table + indexes incl. partial-UNIQUE on pending + two BEFORE INSERT/UPDATE triggers blocking `requested_by = decided_by`). Service module `server/services/classification_overrides.js` owns all state transitions with activity_log writes. Routes split into two routers (`incidentScopedRouter` + `globalRouter`) keeping URL space unambiguous. `console.warn` added to `PATCH /incidents/:id` when `osha_recordable`/`riddor_reportable` flipped directly. 4 audit verbs added to catalog. 42-assertion `server/scripts/wib-e2e.sh` — all pass. |
+| `e660b16` | FE: `client/src/api/override_requests.js` (6 client wrappers). `OverrideRequestModal.jsx` (generic — works for both `osha_recordable` and `riddor_reportable`). `RecordabilityVerifyCard.jsx` rewritten to show pending-state banner inline with Approve/Reject (for elevated non-requester) or Withdraw (for requester); "Request override" button alongside "Re-verify". `/approvals` page with `apr-` prefixed CSS for the global pending queue. Sidebar nav item added with `elevatedOnly: true` flag — hidden for workers. |
+| (this) | roadmap.md + memory updates; Chunk 7 (WI-08) queued as next. |
+
+**Live end-to-end verified** (backend via wib-e2e.sh; frontend Vite-built + page-loads checked):
+- Create request flow + 5 failure modes (missing reason, unknown field, duplicate pending, no-op proposed value, cross-tenant 404).
+- Self-approval blocked at route AND DB trigger level (verified by raw SQLite UPDATE attempt failing with the trigger's RAISE message).
+- Approve flips boolean + writes audit row with field_diffs.
+- Reject leaves boolean unchanged + writes audit row.
+- Withdraw blocks non-requester; allows requester.
+- WI-C hash chain still verifies after all mutations.
+- Worker → global queue 403; elevated → pending queue with new row.
+
+**Test results:** wib-e2e 42/42; wi04-e2e 49/49; node:test 23/23; wia-regression 77/78 (F1 unchanged known script bug); Vite build clean.
+
+**Servers running.** Branch `backend` at `e660b16` + this turn's docs commit.
 
 ### 2026-05-12 — WI-04 RIDDOR Reg 5 + 11 + 14(3) shipped BE+FE; 49-assertion E2E suite
 

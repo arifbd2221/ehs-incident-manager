@@ -26,8 +26,8 @@ Defined in `plan-2026-05-11.md` Part 3. Each chunk ends with a ✋ owner checkpo
 | 3 | WI-10 Activity-log audit consistency | ✅ Done — `67b8c9a` |
 | 4 | WI-C Activity log integrity (hash chain) | ✅ Done — `2301521`, `b3343a0` |
 | 5 | WI-A Multi-person incidents | ✅ Done — `12fbd8d` … `caab857` (wizard, modal, dual-write, address/phone/DOB/gender/date_hired) |
-| **6** | **WI-B Override approval workflow** | **Next.** |
-| 7 | WI-08 Deadline countdown UI | Reads existing + WI-06/WI-07 fields. |
+| 6 | WI-B Override approval workflow | ✅ Done — `7ee1983` (BE: migration 026 + service + routes + 42-assertion `wib-e2e.sh`), `e660b16` (FE: modal + RecordabilityVerifyCard banner + `/approvals` page) |
+| **7** | **WI-08 Deadline countdown UI** | **Next.** Reads existing + WI-06/WI-07 fields. |
 | 7a | WI-D Jurisdiction-aware wizard + forms | Owner directive 2026-05-11 evening — show fields by org's compliance_frameworks + site.country. WI-04 added a "UK RIDDOR edge cases" card that WI-D should hide for non-UK orgs. Spec below. |
 | 8+ | WI-01, WI-05, WI-06, WI-07, WI-02, WI-09 | OSHA 300 PDF → RIDDOR F2508 → SafeWork NSW → OSHA 1904.39 → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
 
@@ -210,9 +210,24 @@ New `affected_persons` + `injuries` tables that supplement (not replace) the leg
 
 **Complexity:** L. **New tables:** 2. **Existing schema touched:** none. **Chunk:** 5.
 
-### WI-B: Recordability override approval workflow
+### WI-B: Recordability override approval workflow — ✅ DONE
 
-New `classification_override_requests` table. Approve/reject/withdraw routes. Self-approval forbidden. Existing direct-edit path stays but emits `console.warn`. `RecordabilityVerifyCard` rewrite + global pending-queue panel.
+Shipped 2026-05-12 in two commits + a docs/memory follow-up.
+
+**BE (`7ee1983`):**
+- Migration 026 — `classification_override_requests` table per spec (id, incident_id, org_id, jurisdiction, field, current_value, proposed_value, reason, status, requested_by, requested_at, decided_by, decided_at, decision_note). Three indexes including the partial UNIQUE on `(incident_id, field) WHERE status='pending'`. Two BEFORE triggers (INSERT + UPDATE) raising `ABORT` when `requested_by = decided_by`.
+- Service module `server/services/classification_overrides.js` with `OVERRIDABLE_FIELDS` allowlist (currently `osha_recordable`, `riddor_reportable`) plus state-transition helpers (`createRequest`, `approveRequest`, `rejectRequest`, `withdrawRequest`). All transitions wrap the boolean flip + activity_log write in a single transaction.
+- Route file `server/routes/override_requests.js` exports two Routers — `incidentScopedRouter` (`POST/GET /:id/override-requests` mounted at `/api/incidents`) and `globalRouter` (`GET /?status=pending`, `GET /:rid`, `POST /:rid/{approve,reject,withdraw}` mounted at `/api/override-requests`). Splitting avoids path collisions from mounting one router at two prefixes.
+- `console.warn` added to `routes/incidents.js` PATCH handler when `osha_recordable` / `riddor_reportable` are flipped directly — measures usage without forbidding the path (per spec).
+- 4 audit verbs added to `audit_actions_catalog.js`.
+- 42-assertion E2E suite at `server/scripts/wib-e2e.sh` covering create paths + global queue + self-approval guard (route + DB trigger) + approve/reject/withdraw + WI-C hash chain still verifying.
+
+**FE (`e660b16`):**
+- `client/src/api/override_requests.js` — 6 client wrappers.
+- `OverrideRequestModal.jsx` — generic across overridable fields; auto-derives proposed_value as NOT current.
+- `RecordabilityVerifyCard.jsx` rewritten to show inline pending-state banner with Approve/Reject (elevated non-requester) or Withdraw (requester) buttons alongside the existing Re-verify flow.
+- `/approvals` page at `client/src/pages/approvals/ApprovalsPage.jsx` with `apr-` prefixed CSS — global pending queue for elevated roles; non-elevated users see a permission notice.
+- Sidebar nav item with `elevatedOnly: true` flag hides Approvals for workers.
 
 **Complexity:** M. **New tables:** 1. **Existing schema touched:** none. **Chunk:** 6.
 
