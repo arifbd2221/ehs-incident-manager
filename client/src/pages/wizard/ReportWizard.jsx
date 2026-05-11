@@ -8,6 +8,7 @@ import api from '../../api/client';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
+import DatePicker from '../../components/shared/DatePicker';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -333,7 +334,22 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const siteName = sites.find(s => String(s.id) === siteId)?.name || '—';
   const typeName = typeOf(type)?.name || type;
 
-  const canContinue = step === 0 ? title.trim().length > 0 : true;
+  const step0Valid = title.trim().length > 0 && !!siteId && !!datetime;
+  const step1Valid = (() => {
+    const d = typeData;
+    const typeReqs = {
+      injury: () => !!d.injured_name?.trim(),
+      illness: () => !!d.affected_name?.trim() && !!d.illness_category,
+      nearmiss: () => !!d.primary_hazard,
+      property: () => !!d.equipment_name?.trim(),
+      env: () => !!d.substance_name?.trim(),
+      unsafe: () => !!d.primary_hazard,
+      observation: () => true,
+      dangerous: () => true,
+    };
+    return (typeReqs[type] || (() => true))() && likelihood > 0 && consequence > 0;
+  })();
+  const canContinue = step === 0 ? step0Valid : step === 1 ? step1Valid : true;
 
   const addFiles = (newFiles) => {
     const list = Array.from(newFiles);
@@ -560,7 +576,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                   <div className="field-row-3">
                     <div className="field">
                       <label className="label">Date &amp; time <span className="req">*</span></label>
-                      <input className="input" type="datetime-local" value={datetime} onChange={e => setDatetime(e.target.value)} />
+                      <DatePicker value={datetime} onChange={setDatetime} showTime placeholder="Select date & time" />
                     </div>
                     <div className="field">
                       <label className="label">

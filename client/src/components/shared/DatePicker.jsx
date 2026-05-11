@@ -3,14 +3,31 @@ import { createPortal } from 'react-dom';
 import Icon from './Icon';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+const DAYS_HDR = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 
-export default function DatePicker({ value, onChange, placeholder = 'Select date' }) {
+function parseDate(value) {
+  if (!value) return null;
+  const raw = value.length > 10 ? value : value + 'T00:00:00';
+  const d = new Date(raw);
+  return isNaN(d) ? null : d;
+}
+
+function parseDatePart(value) {
+  return value ? value.slice(0, 10) : '';
+}
+
+function parseTimePart(value) {
+  if (!value || value.length <= 10) return '12:00';
+  return value.slice(11, 16) || '12:00';
+}
+
+export default function DatePicker({ value, onChange, placeholder = 'Select date', showTime = false }) {
   const [open, setOpen] = useState(false);
   const [viewDate, setViewDate] = useState(() => {
-    if (value) { const d = new Date(value + 'T00:00:00'); return isNaN(d) ? new Date() : d; }
-    return new Date();
+    const d = parseDate(value);
+    return d || new Date();
   });
+  const [time, setTime] = useState(() => parseTimePart(value));
   const triggerRef = useRef(null);
   const popRef = useRef(null);
   const [pos, setPos] = useState({ top: 0, left: 0, flip: false });
@@ -18,7 +35,7 @@ export default function DatePicker({ value, onChange, placeholder = 'Select date
   const updatePos = useCallback(() => {
     const r = triggerRef.current?.getBoundingClientRect();
     if (!r) return;
-    const popH = popRef.current?.offsetHeight || 320;
+    const popH = popRef.current?.offsetHeight || 360;
     const spaceBelow = window.innerHeight - r.bottom - 10;
     const flip = spaceBelow < popH && r.top > popH;
     const top = flip ? r.top - popH - 6 : r.bottom + 6;
@@ -44,11 +61,10 @@ export default function DatePicker({ value, onChange, placeholder = 'Select date
   }, [open, updatePos]);
 
   useEffect(() => {
-    if (value) {
-      const d = new Date(value + 'T00:00:00');
-      if (!isNaN(d)) setViewDate(d);
-    }
-  }, [value]);
+    const d = parseDate(value);
+    if (d) setViewDate(d);
+    if (showTime) setTime(parseTimePart(value));
+  }, [value, showTime]);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -61,19 +77,44 @@ export default function DatePicker({ value, onChange, placeholder = 'Select date
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const selectedDate = parseDatePart(value);
+
+  const emitValue = (dateStr, timeStr) => {
+    if (showTime) {
+      onChange(dateStr ? `${dateStr}T${timeStr || time}` : '');
+    } else {
+      onChange(dateStr);
+    }
+  };
 
   const selectDay = (d) => {
     const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    onChange(dateStr);
-    setOpen(false);
+    if (showTime) {
+      emitValue(dateStr, time);
+    } else {
+      onChange(dateStr);
+      setOpen(false);
+    }
+  };
+
+  const onTimeChange = (newTime) => {
+    setTime(newTime);
+    if (selectedDate) emitValue(selectedDate, newTime);
   };
 
   const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
   const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
 
-  const displayValue = value
-    ? new Date(value + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : '';
+  const displayValue = (() => {
+    if (!value) return '';
+    const d = parseDate(value);
+    if (!d) return '';
+    if (showTime) {
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        + ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  })();
 
   const stop = (e) => { e.stopPropagation(); e.nativeEvent?.stopImmediatePropagation(); };
 
@@ -111,13 +152,13 @@ export default function DatePicker({ value, onChange, placeholder = 'Select date
               </button>
             </div>
             <div className="dp-weekdays">
-              {DAYS.map(d => <span key={d} className="dp-weekday">{d}</span>)}
+              {DAYS_HDR.map(d => <span key={d} className="dp-weekday">{d}</span>)}
             </div>
             <div className="dp-grid">
               {cells.map((d, i) => {
                 if (d === null) return <span key={`e${i}`} className="dp-cell dp-empty" />;
                 const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                const isSelected = dateStr === value;
+                const isSelected = dateStr === selectedDate;
                 const isToday = dateStr === todayStr;
                 return (
                   <button
@@ -131,11 +172,31 @@ export default function DatePicker({ value, onChange, placeholder = 'Select date
                 );
               })}
             </div>
-            {value && (
-              <button type="button" className="dp-clear" onClick={() => { onChange(''); setOpen(false); }}>
-                Clear date
-              </button>
+
+            {showTime && (
+              <div className="dp-time">
+                <Icon name="clock" size={13} />
+                <input
+                  type="time"
+                  className="dp-time-input"
+                  value={time}
+                  onChange={e => onTimeChange(e.target.value)}
+                />
+              </div>
             )}
+
+            <div className="dp-footer">
+              {value && (
+                <button type="button" className="dp-clear" onClick={() => { onChange(''); setOpen(false); }}>
+                  Clear
+                </button>
+              )}
+              {showTime && selectedDate && (
+                <button type="button" className="dp-done" onClick={() => setOpen(false)}>
+                  Done
+                </button>
+              )}
+            </div>
           </div>
         </>,
         document.body
