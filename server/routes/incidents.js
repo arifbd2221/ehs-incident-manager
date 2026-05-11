@@ -20,6 +20,9 @@ import {
   upsertPrimaryFromLegacy,
   bulkInsertFromArray,
   buildLegacyInjuredPerson,
+  updateAffectedPerson,
+  updateInjury,
+  mapInjuredPersonToColumns,
 } from '../services/affected_persons.js';
 
 const router = Router();
@@ -28,6 +31,125 @@ const router = Router();
 // Phase 2 collapses these to worker/ehs_manager/site_admin.
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
+
+// WI-A: keep the primary affected_person + primary injury in sync with
+// whatever was PATCHed against an existing incident. Called from PATCH
+// /:id. Multi-person edits use /incidents/:id/affected-persons/... and
+// don't go through here.
+//
+// Safe to call on every PATCH — if no sync surface applies, returns
+// without writing.
+function syncAffectedPersonsOnPatch({ incident, body, req, userId }) {
+  const orgId = incident.org_id;
+  const incidentId = incident.id;
+
+  // ----- 1. Locate the active primary affected_person, if any. -----
+  let primary = db.prepare(`
+    SELECT * FROM affected_persons
+    WHERE org_id = ? AND incident_id = ? AND is_primary = 1 AND deleted_at IS NULL
+  `).get(orgId, incidentId);
+
+  // ----- 2. type_data.injured_person changes → upsert primary AP. -----
+  if (body.type_data !== undefined) {
+    const newTd = body.type_data || {};
+    const newIp = newTd.injured_person || newTd.affected_person || null;
+
+    if (newIp && primary) {
+      // Update existing primary with the new identity fields.
+      const apPatch = mapInjuredPersonToColumns(newIp);
+      // Drop keys whose value didn't actually change so we don't write
+      // a no-op diff to activity_log.
+      const realPatch = {};
+      for (const [k, v] of Object.entries(apPatch)) {
+        if (v !== undefined && (primary[k] ?? null) !== (v ?? null)) realPatch[k] = v;
+      }
+      if (Object.keys(realPatch).length > 0) {
+        updateAffectedPerson({ orgId, incidentId, apId: primary.id, patch: realPatch, userId, req });
+        // Re-fetch so downstream paths see the new values.
+        primary = db.prepare(`SELECT * FROM affected_persons WHERE id = ?`).get(primary.id);
+      }
+    } else if (newIp && !primary) {
+      // No primary today — create one from the merged type_data so the
+      // multi-person side-table doesn't drift from the JSON forever.
+      // Use upsertPrimaryFromLegacy (no audit row of its own; the parent
+      // PATCH activity_log captures the actor).
+      const merged = { ...(safeParse(incident.type_data) || {}), ...newTd };
+      upsertPrimaryFromLegacy({
+        orgId, incidentId,
+        typeData: merged,
+        incidentColumns: {
+          er_treated: body.er_treated ?? incident.er_treated,
+          hospitalized: body.hospitalized ?? incident.hospitalized,
+          hospitalization_date: body.hospitalization_date ?? incident.hospitalization_date,
+          body_parts_affected: body.body_parts_affected !== undefined
+            ? JSON.stringify(parseBodyParts(body.body_parts_affected))
+            : incident.body_parts_affected,
+          osha_privacy_case: body.osha_privacy_case ?? incident.osha_privacy_case ?? 0,
+          osha_days_away: body.osha_days_away ?? incident.osha_days_away ?? 0,
+          osha_days_restricted: body.osha_days_restricted ?? incident.osha_days_restricted ?? 0,
+          osha_date_of_death: body.osha_date_of_death ?? incident.osha_date_of_death,
+          description: body.description ?? incident.description,
+        },
+        userId,
+      });
+      primary = db.prepare(`
+        SELECT * FROM affected_persons
+        WHERE org_id = ? AND incident_id = ? AND is_primary = 1 AND deleted_at IS NULL
+      `).get(orgId, incidentId);
+    }
+  }
+
+  // ----- 3. osha_privacy_case flip → mirror onto primary AP. -----
+  if (body.osha_privacy_case !== undefined && primary) {
+    const desired = body.osha_privacy_case ? 1 : 0;
+    if (primary.is_privacy_case !== desired) {
+      updateAffectedPerson({
+        orgId, incidentId, apId: primary.id,
+        patch: { is_privacy_case: desired },
+        userId, req,
+      });
+    }
+  }
+
+  // ----- 4. Primary-injury mirror columns → patch the primary injury. -----
+  // The wizard's er_treated / hospitalized / osha_days_* / hospitalization_date /
+  // description path is the legacy "first injury" surface. body_parts_affected
+  // on the incident column also folds into body_part (comma-joined) for the
+  // primary injury.
+  if (!primary) return;
+
+  const injPatch = {};
+  if (body.er_treated !== undefined) injPatch.er_treated = body.er_treated;
+  if (body.hospitalized !== undefined) injPatch.hospitalized = body.hospitalized;
+  if (body.hospitalization_date !== undefined) injPatch.hospitalization_date = body.hospitalization_date;
+  if (body.osha_days_away !== undefined) injPatch.days_away = body.osha_days_away;
+  if (body.osha_days_restricted !== undefined) injPatch.days_restricted = body.osha_days_restricted;
+  if (body.osha_date_of_death !== undefined) injPatch.date_of_death = body.osha_date_of_death;
+  if (body.description !== undefined) injPatch.narrative = body.description;
+  if (body.body_parts_affected !== undefined) {
+    const parts = parseBodyParts(body.body_parts_affected);
+    injPatch.body_part = parts.length ? parts.join(', ') : null;
+  }
+
+  if (Object.keys(injPatch).length === 0) return;
+
+  const primaryInjury = db.prepare(`
+    SELECT id FROM injuries
+    WHERE affected_person_id = ? AND deleted_at IS NULL
+    ORDER BY id ASC LIMIT 1
+  `).get(primary.id);
+
+  if (primaryInjury) {
+    updateInjury({
+      orgId, incidentId, apId: primary.id, injuryId: primaryInjury.id,
+      patch: injPatch, userId, req,
+    });
+  }
+}
+
+function safeParse(s) {
+  try { return JSON.parse(s || '{}'); } catch { return {}; }
+}
 
 const RESTRICTED_FIELDS = new Set([
   'severity', 'track', 'status', 'assigned_to',
@@ -1081,6 +1203,26 @@ router.patch('/:id', (req, res) => {
   params.push(req.params.id);
 
   db.prepare(`UPDATE incidents SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  // WI-A dual-write on PATCH: keep the primary affected_person + primary
+  // injury in sync with whatever was touched. Multi-person edits go
+  // through /incidents/:id/affected-persons/... — this hook only handles
+  // the legacy single-person shape per the WI-A spec.
+  //
+  // Three sync paths:
+  //  1) type_data.injured_person was PATCHed → patch primary AP's
+  //     identity fields (name, dob, gender, job_title, etc.).
+  //  2) osha_privacy_case was PATCHed → flip primary AP's is_privacy_case.
+  //  3) er_treated/hospitalized/hospitalization_date/osha_days_*/
+  //     description were PATCHed → patch the primary injury.
+  // Each path no-ops cleanly when there's no primary AP (e.g. nearmiss
+  // incident, or legacy incident that never had injured_person data).
+  syncAffectedPersonsOnPatch({
+    incident,
+    body: req.body,
+    req,
+    userId: req.user.id,
+  });
 
   if (severityChanged) {
     const newSeverity = Number(req.body.severity);
