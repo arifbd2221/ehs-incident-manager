@@ -9,6 +9,8 @@ import Icon from '../../components/shared/Icon';
 import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
 import CustomFieldsDisplay from '../../components/assets/CustomFieldsDisplay';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
+import MaintenanceTab from '../../components/maintenance/MaintenanceTab';
+import { listSchedules } from '../../api/maintenance';
 import { timeAgo } from '../../utils/time';
 import '../../styles/assets.css';
 import '../../styles/dashboard.css';
@@ -43,6 +45,7 @@ export default function AssetDetail() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [tab, setTab] = useState('overview');
+  const [maintenanceCounts, setMaintenanceCounts] = useState({ total: 0, overdue: 0 });
 
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState({});
@@ -68,6 +71,19 @@ export default function AssetDetail() {
     listSites().then(setSites).catch(() => setSites([]));
     listAssetCategories().then(setCategories).catch(() => setCategories([]));
   }, []);
+
+  // Maintenance counts for the tab badge — cheap separate call so the rest
+  // of the asset detail isn't gated on it.
+  const refreshMaintenanceCounts = () => {
+    if (!id) return;
+    Promise.all([
+      listSchedules({ asset_id: id, active: 1 }),
+      listSchedules({ asset_id: id, active: 1, status: 'overdue' }),
+    ]).then(([all, od]) => {
+      setMaintenanceCounts({ total: all.total || 0, overdue: od.total || 0 });
+    }).catch(() => setMaintenanceCounts({ total: 0, overdue: 0 }));
+  };
+  useEffect(refreshMaintenanceCounts, [id]);
 
   const openEdit = () => {
     let cf = asset.custom_fields;
@@ -195,6 +211,7 @@ export default function AssetDetail() {
   const TABS = [
     { id: 'overview', label: 'Overview', icon: 'info' },
     { id: 'incidents', label: 'Incidents', icon: 'incidents', count: incidentCount },
+    { id: 'maintenance', label: 'Maintenance', icon: 'gear', count: maintenanceCounts.total, overdue: maintenanceCounts.overdue },
     { id: 'documents', label: 'Documents', icon: 'file', count: 0 },
     { id: 'activity', label: 'Activity', icon: 'pulse', count: 0 },
   ];
@@ -259,6 +276,11 @@ export default function AssetDetail() {
             {t.label}
             {t.count !== undefined && (
               <span className="tab-badge">{t.count}</span>
+            )}
+            {t.id === 'maintenance' && t.overdue > 0 && (
+              <span className="pill pill-err" style={{ marginLeft: 6, fontSize: 10 }}>
+                <span className="dot" />{t.overdue} overdue
+              </span>
             )}
           </div>
         ))}
@@ -363,6 +385,11 @@ export default function AssetDetail() {
             <p>When workers report an incident and select this asset, they'll show up here.</p>
           </div>
         )
+      )}
+
+      {/* Maintenance tab — P3-OP1 schedules + recent events + escalate-to-CAPA */}
+      {tab === 'maintenance' && (
+        <MaintenanceTab asset={asset} user={user} onRefresh={refreshMaintenanceCounts} />
       )}
 
       {/* Documents tab */}

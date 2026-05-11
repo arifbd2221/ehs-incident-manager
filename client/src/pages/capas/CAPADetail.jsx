@@ -90,7 +90,18 @@ export default function CAPADetail() {
             <div className="capd-meta-row">
               <span className="capd-number">{c.capa_number}</span>
               <span style={{ color: 'var(--sds-border)' }}>·</span>
-              {c.source_type === 'proactive' ? (
+              {c.maintenance_schedule_id ? (
+                <span className="capd-number">
+                  Maintenance{' '}
+                  <a
+                    className="capd-source-link"
+                    onClick={() => c.maintenance_asset_id && navigate(`/assets/${c.maintenance_asset_id}`)}
+                    title={c.maintenance_schedule_title || ''}
+                  >
+                    {c.maintenance_asset_display_id || c.maintenance_asset_name || `schedule #${c.maintenance_schedule_id}`}
+                  </a>
+                </span>
+              ) : c.source_type === 'proactive' ? (
                 <span className="capd-number">Proactive</span>
               ) : c.source_type === 'incident' && c.incident_id ? (
                 <span className="capd-number">
@@ -276,7 +287,11 @@ export default function CAPADetail() {
                 <div className="capd-detail-row">
                   <span className="capd-detail-label">Source</span>
                   <span className="capd-detail-val" style={{ fontFamily: "'SF Mono', Menlo, monospace", fontSize: 12 }}>
-                    {c.source_type === 'proactive' ? (
+                    {c.maintenance_schedule_id ? (
+                      <a className="capd-source-link" onClick={() => c.maintenance_asset_id && navigate(`/assets/${c.maintenance_asset_id}`)}>
+                        Maintenance: {c.maintenance_schedule_title || `schedule #${c.maintenance_schedule_id}`}
+                      </a>
+                    ) : c.source_type === 'proactive' ? (
                       'Proactive'
                     ) : c.source_type === 'incident' && c.incident_id ? (
                       <a className="capd-source-link" onClick={() => navigate(`/incidents/${c.incident_id}`)}>

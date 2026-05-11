@@ -43,3 +43,38 @@ export function formatDateShort(dateStr) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
+
+// Whole days between today (UTC) and the given ISO date. Negative = in the
+// past; positive = future. Used by the P3-OP1 maintenance UI to render
+// "due in 12 days" / "3 days overdue".
+export function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const target = parseServerDate(dateStr);
+  if (!target || isNaN(target.getTime())) return null;
+  // Normalize both ends to UTC midnight so a partial day doesn't tip the count.
+  const targetUtc = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((targetUtc - todayUtc) / 86400000);
+}
+
+// Bucket a due-date string into one of the maintenance status pills.
+// Mirrors the server's status compute in routes/maintenance.js.
+export function dueStatus(dateStr, { dueSoonDays = 30 } = {}) {
+  const d = daysUntil(dateStr);
+  if (d == null) return 'ok';
+  if (d < 0) return 'overdue';
+  if (d <= dueSoonDays) return 'due_soon';
+  return 'ok';
+}
+
+// "due in 12 days" / "1 day overdue" / "due today". Defaults to a short
+// readable label suitable for table cells; pass mode='long' for sentence form.
+export function dueLabel(dateStr) {
+  const d = daysUntil(dateStr);
+  if (d == null) return '—';
+  if (d === 0) return 'due today';
+  if (d > 0) return `due in ${d} day${d === 1 ? '' : 's'}`;
+  const abs = Math.abs(d);
+  return `${abs} day${abs === 1 ? '' : 's'} overdue`;
+}

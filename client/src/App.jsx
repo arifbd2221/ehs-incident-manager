@@ -22,6 +22,7 @@ import SiteDetail from './pages/admin/SiteDetail';
 import Members from './pages/admin/Members';
 import AssetsList from './pages/assets/AssetsList';
 import AssetDetail from './pages/assets/AssetDetail';
+import MaintenancePage from './pages/maintenance/MaintenancePage';
 import DocumentsList from './pages/documents/DocumentsList';
 import TemplatesList from './pages/templates/TemplatesList';
 import TemplateEditor from './pages/templates/TemplateEditor';
@@ -78,6 +79,7 @@ export default function App() {
         <Route path="/admin/members" element={<Members />} />
         <Route path="/assets" element={<AssetsList />} />
         <Route path="/assets/:id" element={<AssetDetail />} />
+        <Route path="/maintenance" element={<MaintenancePage />} />
         <Route path="/documents" element={<DocumentsList />} />
         <Route path="/templates" element={<TemplatesList />} />
         <Route path="/templates/:id/edit" element={<TemplateEditor />} />

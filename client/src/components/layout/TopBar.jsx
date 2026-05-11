@@ -29,6 +29,12 @@ const PAGE_TIPS = {
     { icon: 'warning', text: 'Overdue items show a blinking red indicator — address them first' },
     { icon: 'check', text: 'Set progress percentage and mark actions for verification when complete' },
   ],
+  '/maintenance': [
+    { icon: 'clock', text: 'See every preventive maintenance, calibration, and inspection schedule across all assets' },
+    { icon: 'warning', text: 'Overdue tab is the default — work the red list first' },
+    { icon: 'check', text: 'Mark complete to advance the next due date; outcome and notes go to the audit trail' },
+    { icon: 'capa', text: 'Found something wrong? Escalate to CAPA with one click — the CAPA back-links to this schedule' },
+  ],
   '/templates': [
     { icon: 'edit', text: 'Create inspection templates with sections and questions' },
     { icon: 'check', text: 'Publish a template to make it available for inspections' },
@@ -314,6 +320,7 @@ export default function TopBar() {
     if (p.startsWith('/templates')) return 'Templates';
     if (p.startsWith('/inspections')) return 'Inspections';
     if (p.startsWith('/documents')) return 'Documents';
+    if (p.startsWith('/maintenance')) return 'Maintenance';
     if (p.startsWith('/assets')) return 'Assets';
     if (p.startsWith('/sites')) return 'Sites';
     if (p.startsWith('/profile')) return 'Profile';

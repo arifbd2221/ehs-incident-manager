@@ -24,6 +24,7 @@ const NAV = [
   { id: 'investigations', path: '/investigations', icon: 'investigation', label: 'Investigations', color: '#F57C00' },
   { id: 'capas', path: '/capas', icon: 'capa', label: 'CAPA', color: '#2E7D32' },
   { id: 'assets', path: '/assets', icon: 'gear', label: 'Assets', color: '#546E7A' },
+  { id: 'maintenance', path: '/maintenance', icon: 'clock', label: 'Maintenance', color: '#FB8C00' },
   { id: 'documents', path: '/documents', icon: 'file', label: 'Documents', color: '#1E88E5' },
   { id: 'templates', path: '/templates', icon: 'clipboard', label: 'Templates', color: '#8b5cf6' },
   { id: 'inspections', path: '/inspections', icon: 'shield', label: 'Inspections', color: '#00897B' },

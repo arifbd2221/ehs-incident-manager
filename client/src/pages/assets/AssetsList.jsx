@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { listAssets, createAsset, updateAsset, deleteAsset, importAssets, assetImportTemplateUrl } from '../../api/assets';
+import { listSchedules } from '../../api/maintenance';
 import ImportModal from '../../components/shared/ImportModal';
 import { listSites } from '../../api/sites';
 import { listAssetCategories, createAssetCategory, listCategoryFields } from '../../api/asset_categories';
@@ -66,6 +67,9 @@ export default function AssetsList() {
   const nameRef = useRef(null);
 
   const refreshCategories = () => listAssetCategories().then(setCategories).catch(() => setCategories([]));
+  // Set of asset_ids that have at least one overdue maintenance schedule.
+  // Refreshed alongside the asset list so the red dot stays accurate.
+  const [overdueAssetIds, setOverdueAssetIds] = useState(() => new Set());
   const refreshAssets = () => {
     setLoading(true);
     const params = {};
@@ -77,6 +81,10 @@ export default function AssetsList() {
       .then(d => setAssets(d.assets || []))
       .catch(() => setAssets([]))
       .finally(() => setLoading(false));
+    // Bulk overdue lookup so the dot doesn't fire N requests on a 200-asset list.
+    listSchedules({ status: 'overdue', limit: 500 })
+      .then(d => setOverdueAssetIds(new Set((d.schedules || []).map(s => s.asset_id))))
+      .catch(() => setOverdueAssetIds(new Set()));
   };
 
   useEffect(() => {
@@ -519,7 +527,15 @@ export default function AssetsList() {
                 <div className="asset-card-top">
                   <div className="asset-card-avatar">{initials || '?'}</div>
                   <div className="asset-card-info">
-                    <div className="asset-card-name">{a.name}</div>
+                    <div className="asset-card-name">
+                      {a.name}
+                      {overdueAssetIds.has(a.id) && (
+                        <span
+                          title="One or more maintenance schedules are overdue"
+                          style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--sds-error)', marginLeft: 8, verticalAlign: 'middle' }}
+                        />
+                      )}
+                    </div>
                     <div className="asset-card-id">{a.display_id || a.asset_number}</div>
                   </div>
                   <div className="asset-card-h">
@@ -595,7 +611,15 @@ export default function AssetsList() {
               {filtered.map(a => (
                 <tr key={a.id} onClick={() => navigate(`/assets/${a.id}`)} style={{ opacity: a.active ? 1 : 0.6 }}>
                   <td>
-                    <span className="asset-tbl-name">{a.name}</span>
+                    <span className="asset-tbl-name">
+                      {a.name}
+                      {overdueAssetIds.has(a.id) && (
+                        <span
+                          title="One or more maintenance schedules are overdue"
+                          style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--sds-error)', marginLeft: 8, verticalAlign: 'middle' }}
+                        />
+                      )}
+                    </span>
                   </td>
                   <td>
                     <span className="asset-tbl-id">{a.display_id || a.asset_number}</span>

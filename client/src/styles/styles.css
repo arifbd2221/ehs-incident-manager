@@ -2830,3 +2830,35 @@ body {
   color: var(--sds-brand-primary);
   flex-shrink: 0;
 }
+
+/* ===== Generic hover tooltip ===============================================
+ * Opt-in pattern: add `class="has-tooltip"` + `data-tooltip="Hint text"` to
+ * any element. Tooltip appears below on hover. Generalized from the template
+ * editor's .te-toolbar-btn[data-tooltip] pattern so action-icon buttons across
+ * the app can adopt a consistent hint affordance without per-page CSS.
+ */
+.has-tooltip {
+  position: relative;
+}
+.has-tooltip[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: var(--sds-radius-sm);
+  background: var(--sds-fg-heading);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  z-index: var(--sds-z-tooltip);
+  transition: opacity 150ms;
+}
+.has-tooltip:hover[data-tooltip]::after,
+.has-tooltip:focus-visible[data-tooltip]::after {
+  opacity: 1;
+}
