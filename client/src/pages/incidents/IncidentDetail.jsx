@@ -5,6 +5,7 @@ import { getIncident, assignIncident, escalateIncident, closeIncident, updateInc
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
+import DeadlineBadge from '../../components/incidents/DeadlineBadge';
 import { useAuth } from '../../context/AuthContext';
 import { timeAgo, formatDate } from '../../utils/time';
 import { frameworkVisibility } from '../../utils/frameworks';
@@ -474,6 +475,10 @@ export default function IncidentDetail() {
                   RIDDOR{r.riddor_category ? ` · ${riddorCategoryLabel(r.riddor_category)}` : ''}
                 </span>
               )}
+              {/* WI-08: one badge per outstanding regulatory deadline. */}
+              {(r.pending_deadlines || []).map((d, i) => (
+                <DeadlineBadge key={`${d.kind}-${i}`} deadline={d}/>
+              ))}
             </div>
           </div>
 

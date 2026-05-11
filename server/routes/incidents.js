@@ -17,6 +17,12 @@ import { notifyUser, notifyElevatedAtSite, notifyRole } from '../services/notifi
 import { evaluateClosureGates } from '../services/closure_gates.js';
 import { writeActivity, auditCtx } from '../services/activity_log.js';
 import {
+  computePendingDeadlines,
+  getPendingDeadlinesForIncident,
+  loadRiddorReportsForIncidents,
+  mostUrgent,
+} from '../services/deadlines.js';
+import {
   upsertPrimaryFromLegacy,
   bulkInsertFromArray,
   buildLegacyInjuredPerson,
@@ -263,6 +269,17 @@ router.get('/', (req, res) => {
     }
   }
 
+  // WI-08: attach pending_deadlines + most_urgent_deadline per row so the
+  // IncidentsList can render a single inline badge without a follow-up
+  // fetch. One bulk SELECT loads RIDDOR rows for the listed incidents;
+  // computePendingDeadlines merges them in row-by-row.
+  const riddorMap = loadRiddorReportsForIncidents(incidents.map(i => i.id));
+  for (const inc of incidents) {
+    const deadlines = computePendingDeadlines(inc, riddorMap.get(inc.id));
+    inc.pending_deadlines = deadlines;
+    inc.most_urgent_deadline = mostUrgent(deadlines);
+  }
+
   res.json({ incidents, total, page: Number(page), limit: Number(limit) });
 });
 
@@ -309,7 +326,29 @@ router.get('/:id', (req, res) => {
     ORDER BY cr.created_at DESC LIMIT 1
   `).get(incident.id);
 
-  res.json({ ...incident, witnesses, attachments, activity, closure_request: closure_request || null });
+  // WI-08: attach pending_deadlines + most_urgent_deadline so the
+  // IncidentDetail header renders without a follow-up fetch. Reuses the
+  // same helper as the standalone /deadlines endpoint.
+  const pending_deadlines = getPendingDeadlinesForIncident(req.user.org_id, incident.id) || [];
+  const most_urgent_deadline = mostUrgent(pending_deadlines);
+
+  res.json({
+    ...incident,
+    witnesses, attachments, activity,
+    closure_request: closure_request || null,
+    pending_deadlines,
+    most_urgent_deadline,
+  });
+});
+
+// WI-08: aggregated regulatory deadlines for one incident. Today RIDDOR
+// is the only source; WI-06 (SafeWork NSW) and WI-07 (OSHA 1904.39) plug
+// in via deadlines.js when they land. Returns [] for incidents with no
+// applicable deadline (e.g. non-RIDDOR US injury), 404 for cross-tenant.
+router.get('/:id/deadlines', (req, res) => {
+  const deadlines = getPendingDeadlinesForIncident(req.user.org_id, Number(req.params.id));
+  if (deadlines === null) return res.status(404).json({ error: 'Incident not found' });
+  res.json({ pending_deadlines: deadlines });
 });
 
 router.post('/', async (req, res, next) => {
