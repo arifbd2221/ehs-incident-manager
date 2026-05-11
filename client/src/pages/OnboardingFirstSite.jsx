@@ -38,7 +38,6 @@ export default function OnboardingFirstSite() {
     country: user?.country || 'US',
     naics_code: user?.naics_code || '',
     annual_avg_employees: '',
-    total_hours_worked: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -55,7 +54,6 @@ export default function OnboardingFirstSite() {
       await createSite({
         ...form,
         annual_avg_employees: Number(form.annual_avg_employees) || 0,
-        total_hours_worked: Number(form.total_hours_worked) || 0,
       });
       setDone(true);
       setTimeout(() => navigate('/', { replace: true }), 2200);
@@ -143,15 +141,10 @@ export default function OnboardingFirstSite() {
             </div>
           </div>
 
-          <div className="field-row">
-            <div className="field">
-              <label className="label">Annual avg. employees</label>
-              <input className="input" type="number" min="0" value={form.annual_avg_employees} onChange={e => set('annual_avg_employees', e.target.value)} placeholder="0" />
-            </div>
-            <div className="field">
-              <label className="label">Total hours worked / year</label>
-              <input className="input" type="number" min="0" value={form.total_hours_worked} onChange={e => set('total_hours_worked', e.target.value)} placeholder="0" />
-            </div>
+          <div className="field">
+            <label className="label">Annual avg. employees</label>
+            <input className="input" type="number" min="0" value={form.annual_avg_employees} onChange={e => set('annual_avg_employees', e.target.value)} placeholder="0" />
+            <span className="helper">You can add work-hour periods (OSHA TRIR/DART denominator) on the site detail page after onboarding.</span>
           </div>
 
           <div className="onb-actions">

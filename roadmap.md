@@ -8,19 +8,22 @@ the full detail. Most recent session entries at the bottom.
 
 ## Current state
 
-- **Branch:** `backend` at `2e8daa7` — `origin/backend` and `origin/main` were
-  in sync at `36a564f` after PR #8; today's commit `2e8daa7` is on `backend`
-  only, not yet PR'd to main.
+- **Branch:** `backend` at `3848029` (plus this roadmap update). 8 commits ahead
+  of `origin/main` at `6051395` — work_hours industry-standard slice (5 commits)
+  and the work_hours CSV slice all unpushed to main; ready for PR #11.
 - **Phase 2:** code complete (only F6.2 manual demo walkthrough open).
 - **Wave 7:** E7.1 (custom asset fields per category) done.
 - **UX backlog A–H:** done. UX-C body-parts editor deferred (needs BodyMap3D
   outside the wizard).
-- **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OP2, OP3.
-- **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, OB2, OB3, RG1.
-- **Migrations applied:** 001–019 + letter fixups `014a`, `017a`. Final lexical
-  order: 001 → 014 → 014a → 015 → 016_osha_compliance_fields → 017_closure_workflow
-  → 017a_rename_legacy_org_migrations → 018_org_onboarding_fields → 019_compliance_frameworks.
-  `017a` aliases the legacy backend names in `_schema_migrations` — idempotent on fresh DBs.
+- **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, **OB2** (users + sites + assets + work_hours
+  full industry-standard surfaces — manual CRUD + year-group/YoY + live OSHA 300A + TRIR/DART/LTIR/Severity
+  cards on SiteDetail and Dashboard + CSV export + contractor split), OP2, OP3.
+- **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, OB3, RG1.
+- **Migrations applied:** 001–021 + letter fixups `014a`, `017a`. `017a` aliases
+  the legacy backend names in `_schema_migrations` — idempotent on fresh DBs.
+  `020` widens `activity_log` CHECK to accept `entity_type='work_hours'`.
+  `021` adds nullable `contractor_hours_worked` + `contractor_avg_employees`
+  on `work_hours` (ISO 45001 / Cority parity).
 - **Demo accounts** (all `password123`):
   - `elena@sdsmanager.com` (ehs_manager, multi-framework: OSHA 300/300A/301 + RIDDOR)
   - `marcus@sdsmanager.com` (supervisor), `james@sdsmanager.com` (ehs_manager Sheffield),
@@ -31,9 +34,32 @@ the full detail. Most recent session entries at the bottom.
 - **Dev servers:** `cd server && node --watch index.js` (BE :3001) +
   `cd client && npm run dev` (FE :5173).
 
+### Next session priority
+
+**Browser-test the work_hours slice end-to-end + open PR #11.** Five commits
+shipped (`db5c483 → 3848029`) — all curl-tested at the BE layer but the FE
+work (SiteDetail rebuild, modal, Dashboard rate cards, removal of
+`total_hours_worked` form inputs) wasn't click-tested. Verify on Priya's
+account and one empty tenant (acme), then open PR #11 backend → main.
+
+Click-test checklist:
+- `/admin/sites/:id` → "Safety performance" card year picker switches values
+- "Add work hours" modal pre-fills from prior period; Edit loads correct values
+- Year-group subtotals + YoY ▲/▼ pills match SUM in DevTools
+- Export CSV button downloads + the file imports back through the org-level
+  Import button without errors
+- `/admin/sites` Edit Site modal Workforce tab no longer shows hours input
+- Onboarding flow no longer asks for "total hours worked"
+- Dashboard renders 6 KPI cards (TRIR/DART/LTIR/Severity + Open + Overdue)
+  on Priya's account; all 0 on acme
+
+After this slice **P3-OB2 is fully closed** at industry-standard tier. Next
+roadmap candidate: P3-AI1 (auto-fill investigation) or P3-OP1 (asset
+maintenance schedules) — pick from "Open work — Phase 3" with the user.
+
 ### Files to re-read cold before extending
 
-These were auto-merged from main on 2026-05-08 and never read end-to-end:
+These were auto-merged from main and never read end-to-end this session:
 - `server/services/closure_gates.js` — ISO 45001 / OSHA / ANSI Z10 closure gates
 - `server/services/notifications.js` — backend-side notification creation
 - `server/routes/incidents.js` — backend's witnesses + recordability + stop-work merged
@@ -43,7 +69,14 @@ These were auto-merged from main on 2026-05-08 and never read end-to-end:
 - `client/src/pages/capas/CAPADetail.jsx` — main's hero-card redesign
 - `client/src/pages/incidents/modals/{ClosureChecklistModal,ClosureApprovalModal,ReopenModal}.jsx`
 - `client/src/pages/capas/UpdateProgressModal.jsx`
-- `client/src/components/layout/TopBar.jsx`
+- `client/src/components/layout/TopBar.jsx` — also gets hamburger button + label `<span>` wraps from `6051395`
+- **Responsive commit `6051395`** (2026-05-08) — `Sidebar.jsx` becomes a slide-in drawer at ≤768px;
+  `AppContext.jsx` adds `sidebarOpen` / `setSidebarOpen`; `Icon.jsx` adds `menu`;
+  8 page-CSS files get `@media` blocks at 768px + 480px. BE untouched. Diff was read
+  but the live mobile rendering wasn't browser-tested.
+- New onboarding files from main (`SignupOrg.jsx` redesign, `OnboardingFirstSite.jsx`,
+  `components/shared/OnboardingIllustrations.jsx` — 6 SVGs) — read to verify P3-O1
+  framework logic survived the redesign, but never opened in a browser.
 
 ---
 
@@ -51,7 +84,7 @@ These were auto-merged from main on 2026-05-08 and never read end-to-end:
 
 ### Onboarding + data import
 - [ ] **P3-OB1** User onboarding flow — first-login walkthrough, sample-data toggle, role-tailored "what to do first".
-- [ ] **P3-OB2** CSV import — users / sites / assets / work_hours. Dry-run + error report.
+- [x] **P3-OB2** CSV import — users / sites / assets / work_hours **all done** (`e30954d` `57db454` `7388574` `fb8fc8f`).
 - [ ] **P3-OB3** Document versioning — supersede a doc with a new file, audit trail of prior revisions.
 
 ### AI assistance
@@ -69,6 +102,22 @@ These were auto-merged from main on 2026-05-08 and never read end-to-end:
   - When RG1 lands, extend `client/src/utils/frameworks.js` with `showSafework` (one-line addition; pattern shipped 2026-05-08 in `2e8daa7`).
 
 ### Smaller open follow-ups
+- **work_hours deferred items** (sellable-tier + next-tier polish):
+  - **Parent-site rollup** — on a parent site (parent_id hierarchy from P3-N1),
+    show recursive sum of all descendant work_hours. Read-only widget;
+    distinct from per-site rates (rates don't aggregate cleanly through a
+    weighted parent because contractor mix differs). ~30 min.
+  - **Period-overlap warning** — currently `UNIQUE(site_id, period_start)`
+    enforces "no two periods start on the same day"; doesn't catch
+    overlapping ranges (e.g. Jan-Feb + Feb-Mar fine, but Jan-Feb +
+    Jan15-Feb15 is silently accepted). Add overlap check to
+    `validateRow` + the manual POST/PATCH paths.
+  - **Rolling-12-month aggregate** + sparkline on SiteDetail — most enterprise
+    EHS dashboards show a 12-month trend chart. Cheap once we add a
+    `?range=rolling12` mode to `/api/reports/site-metrics`.
+  - **Multi-denominator support** — OSHA 200K is hard-coded. UK HSE / RIDDOR
+    convention uses 100K-employee-hours; ILO uses 1M. Surface as a setting on
+    the org or as a per-card toggle.
 - Body-parts editor for UX-C — BodyMap3D integration outside the wizard.
 - Real invitation/email flow (slice 2 of P3-O1) — needs `invitations` table + token + email service.
 - Org rename / archive UI.
@@ -97,6 +146,12 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 | P3-OP2 | Inspection module (mig `008`+`009`) | `918279a` (main) |
 | P3-OP3 | Templates with versioning | `918279a` (main) |
 | OSHA/RIDDOR gating | `frameworkVisibility(user)` helper; gated 6 surfaces (IncidentDetail, InvestigationDetail, InvestigationsPage, Dashboard, ReportWizard) | `2e8daa7` |
+| P3-OB2 (users) | Generic `csv_import.js` engine + users adapter; admin-only; dry-run + atomic commit; Members.jsx button | `e30954d` + `d8d6803` (modal fixes) |
+| P3-OB2 (sites) | Sites adapter (parent_name resolves to parent_id, two-pass for in-file parent refs, cycle/depth re-checked at insert); generic `<ImportModal>` extracted; users adapter consistency fix | `57db454` |
+| P3-OB2 (assets) | Assets adapter (display_id case-insensitive uniqueness; asset_type → category resolution; v1 skips custom_fields); button on AssetsList | `7388574` |
+| P3-OB2 (work_hours) | Migration `020` widens `activity_log` CHECK; `routes/work_hours.js` adapter mounted at `/api/work-hours`; ISO date validation w/ calendar round-trip; UNIQUE(site_id, period_start) collision detection; second "Import work hours" button on `/admin/sites` | `fb8fc8f` |
+| P3-OB2 (work_hours surfaces) | Mig 021 contractor split; manual CRUD + CSV export at `/api/work-hours`; new `WorkHoursModal` + periods card on SiteDetail (year-group, YoY delta, weighted avg employees); TRIR/DART/LTIR/Severity Rate live from `work_hours`; rate cards on SiteDetail + Dashboard org-wide rollup; dropped `sites.total_hours_worked` form inputs + writes (column kept as legacy/no-op) | `db5c483` `4d15011` `9849e60` `a47615b` `3848029` |
+| Priya admin demo | Seeded admin user in SDS Manager Inc. + first row in Login.jsx DEMO grid | `dd94fe4` |
 
 ## Done — UX backlog
 
@@ -143,7 +198,7 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 ## Quick re-orientation for a fresh session
 
 1. Read this file. Most recent session at the bottom.
-2. `git fetch origin && git status` — `backend` should be at `2e8daa7`, working tree clean. `origin/main` lags by today's commit (not yet PR'd).
+2. `git fetch origin && git status` — `backend` should be at `3848029` (or +1 with this roadmap commit), working tree clean. `origin/main` lags by 8 commits.
 3. Boot servers (BE :3001, FE :5173). Login as elena (multi-framework) for the broadest exercise, or one of the empty test orgs to see framework-gated UI.
 4. For new work in any "re-read cold" file (above), read it top-to-bottom before editing.
 5. Ask the user which P3 item to pick up. Don't guess.
@@ -152,21 +207,71 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 
 ## Recent session log
 
-### 2026-05-08 (later) — OSHA/RIDDOR display gated by compliance_frameworks
+### 2026-05-08 (evening) — work_hours industry-standard surfaces (Sellable tier)
 
-Commit `2e8daa7`. New `client/src/utils/frameworks.js` mirrors ReportsPage's
-defensive-fallback pattern: missing `compliance_frameworks` field → show
-everything (legacy users / stale JWTs); explicit empty array → hide everything.
-Six surfaces gated: IncidentDetail (header badges + Triage card OSHA row +
-nested OSHA detail block + RecordabilityVerifyCard mount), InvestigationDetail
-(banner + summary OSHA fact-row + summary RIDDOR fact-row), InvestigationsPage
-(RIDDOR pill on kanban + list + `—` fallback), Dashboard (KPI counts zero out
-under the gate; existing guard then hides the reg-alerts block), ReportWizard
-Step 3 (review-card OSHA/RIDDOR rows + RIDDOR "phone HSE" next-step item).
+Five focused commits closing P3-OB2 at sellable tier — what every serious EHS
+buyer expects (TRIR/DART/LTIR/Severity rate cards, live OSHA 300A, contractor
+split, year-group/YoY, CSV export). Decisions locked at start: Sellable tier
+scope, drop `sites.total_hours_worked` reads + form inputs, weighted-by-period
+avg employees. Per-employee timesheet shape considered and rejected (industry
+standard is per-site aggregate).
 
-FE-only, no schema. P3-RG1 will extend the helper with `showSafework` when AU
-surfaces exist. Build clean (184 modules, 777 KB bundle). Not click-tested by
-me — user verifying. **Servers left running.**
+| Area | What changed | Commit |
+|---|---|---|
+| BE: manual CRUD + mig 021 + CSV export | Mig 021 adds `contractor_hours_worked` + `contractor_avg_employees` (nullable) on `work_hours`. Validation factored out of the CSV adapter into module-level helpers (`validateRow`, `parseNonNegInt`, `loadExistingKeys`, `isIsoDate`). Manual routes: `GET/POST/PATCH/DELETE /api/work-hours` + `GET /api/work-hours/export.csv` — all elevated, all org-scoped via the site, all `writeActivity()` audited. CSV import + template extended with optional contractor columns. 16 curl tests including UNIQUE collision, cross-org 404, calendar-round-trip date check, period_end > period_start, PATCH UNIQUE-self-exclude, worker-role 403 on POST/PATCH/DELETE with GET allowed. | `db5c483` |
+| FE: api module + modal + SiteDetail rebuild | `client/src/api/workHours.js` (manual CRUD + export client). `client/src/pages/admin/WorkHoursModal.jsx` (new, `createPortal` per `.page` transform constraint). On Add when prior periods exist, fields auto-fill from latest period; dates advance by same duration ("copy from prior period" UX). SiteDetail.jsx work hours section rebuilt: year-grouped periods table with subtotal rows + weighted avg employees + contractor totals + YoY ▲/▼ delta pill computed against prior year. Per-period Edit/Delete affordances (elevated only). Export CSV uses fetch+blob+click pattern (axios doesn't ride plain anchors). Reuses `.tbl/.modal-*/.field/.btn/.pill/.icon-btn/.stat-grid` — no new CSS. | `4d15011` |
+| BE: switch metrics + reports to live SUM | metrics.js drops `sites.total_hours_worked` read; computes weighted avg employees by `julianday()` period length, contractor totals (separate fields, never folded into TRIR), and adds LTIR field. Divide-by-zero now correctly returns 0 (was producing astronomical rates with `\|\| 1` fallback). reports.js `/osha-300a` returns live SUM in `total_hours_worked` response key (FE shape preserved). New `GET /api/reports/site-metrics` for embed components. SiteDetail.jsx adds "Safety performance" card with year picker + 4 stat-cards (TRIR/DART/LTIR/Severity Rate) + caption row citing OSHA 200K denominator + hours/period/contractor context. Verified site 1/2026 with 3 cases / 171,164 hours: TRIR=3.51, DART=1.17, LTIR=1.17, SR=3.51 — match hand-computed 200K rates. | `9849e60` |
+| Cache cleanup: drop form inputs + writes | sites.js POST/PATCH/CSV-import drop `total_hours_worked` from accepted body, INSERT, audit fields, updatable allowlist, template, parse, INSERT. Sites.jsx form input + initial state + populate + PATCH payload + table column + inline calc strip removed. OnboardingFirstSite.jsx field removed. SiteDetail.jsx sub-sites column swaps "Hours/yr" for "Time zone" (was about to show stale 0). Schema column kept as legacy (DROP COLUMN expensive on SQLite); seed.js writes are harmless no-ops. Final grep: no remaining reads in routes/ or services/. | `a47615b` |
+| Dashboard org-wide rate cards | `calculateOrgMetrics(orgId, year)` sums hours + cases across every org site, applies OSHA 200K denominator once at the org level (averaging per-site rates would weight a 50-emp sub-site equally with a 500-emp plant — wrong). dashboard.js drops the legacy single-site code path. Dashboard.jsx adds 2 new KPI widgets (kpi_ltir reuses `.kpi-dart` accent, kpi_severity reuses `.kpi-overdue`); 6 cards total. DART/LTIR/Severity foot lines now show backing case/days context. Verified Priya's org: 298,020 hours / 3 cases / 1 days-away → TRIR=2.01 DART=0.67 LTIR=0.67 SR=2.01 (matches DB). Empty tenant (acme) returns all 0 — no NaN. | `3848029` |
+
+**BE testing depth (high):** every route exercised end-to-end with curl across
+20+ test cases. All metrics hand-verified against SQL aggregations.
+
+**FE testing depth (medium-low):** every commit `npx vite build` clean
+(189 modules transformed), Vite proxy routes work end-to-end (curl through 5173
+returns BE responses). Did NOT click-test in a browser. Honest hallucination
+risk: medium on FE — five files modified across two pages and a new modal
+without browser verification of the rendered output. Punch list for next
+session in "Next session priority" above.
+
+**PR #11 not yet opened.** Slice ready for backend → main once user
+click-tests.
+
+### 2026-05-08 (afternoon) — OSHA/RIDDOR gating + Priya admin + P3-OB2 (full) + main merges
+
+Long session, ~3hr. Nine commits + two PRs round-tripped. P3-OB2 closed in full
+(users + sites + assets + work_hours all on the shared engine).
+
+| Area | What changed | Commit |
+|---|---|---|
+| OSHA/RIDDOR gating | New `client/src/utils/frameworks.js` mirrors ReportsPage's defensive-fallback pattern. Gates 6 surfaces by org's `compliance_frameworks`. | `2e8daa7` |
+| Roadmap compress | 330 → 195 lines. Done items become one-line entries with commit SHAs. | `3c18b63` |
+| Priya admin demo | Seeded admin in SDS Manager Inc. + first row in Login.jsx DEMO grid. Direct-inserted into running dev DB (id=13) so it works without SEED_FORCE rebuild. | `dd94fe4` |
+| P3-OB2 users | New `server/services/csv_import.js` engine; users adapter inline in `routes/users.js`. Strict template, admin-only, dry-run + atomic commit. New dep `csv-parse@^6.2.1`. ImportUsersModal on `/admin/members`. | `e30954d` |
+| ImportUsersModal fixes | File re-pick (clear input value after read), close-during-commit guarded by `safeClose`. | `d8d6803` |
+| Merge from main (PR #10's pre-cursor) | UI/UX overhaul (`fd3d165`): signup wizard redesign + 567-line OnboardingIllustrations + 509-line members.css + members page redesign + eye/eyeOff toggle. Design precedence to main on conflicts; backend functionality preserved (Priya kept as DEMO admin since main's `admin@sdsmanager.com` reference points at non-existent user). | `1849051` |
+| PR #9 (backend → main) | Round-tripped. | merge `669be3c` |
+| P3-OB2 sites + ImportModal generic | Sites adapter mounted on the engine. Modal extracted to `client/src/components/shared/ImportModal.jsx` parameterized by `{title, subtitle, helperText, templateUrl, templateFilename, importFn, entityNoun}`. Members + Sites both use it now. Users adapter consistency fix bundled (mixed-error duplicate detection). | `57db454` |
+| P3-OB2 assets | Assets adapter — display_id case-insensitive uniqueness, asset_type → category resolution, custom fields skipped in v1. AssetsList "Import CSV" button between "Asset types" and "+ New asset". | `7388574` |
+| PR #10 (backend → main) | Round-tripped. Maintainer also pushed `6051395` "responsive: full mobile/tablet support" between PR #10 merge and my fast-forward — fast-forwarded into backend post-merge. | merge `7a8f72e` + ff `6051395` |
+| Roadmap tick | OB2 done for users + sites + assets; session entry added; old "(later)" mini-entry merged in. | `beeda7b` |
+| P3-OB2 work_hours | Migration `020` widens `activity_log` CHECK; `routes/work_hours.js` adapter mounted at `/api/work-hours`; ISO date format with calendar round-trip (Feb 30 rejected); UNIQUE(site_id, period_start) collision detection (in-file + against DB); second "Import work hours" button on `/admin/sites`; full activity log with thousands-formatted hours descriptions. **Closes P3-OB2 entirely.** Per-site aggregate (industry standard) — per-employee was considered and rejected. | `fb8fc8f` |
+
+**BE testing depth (high):** every adapter exercised end-to-end with curl
+across 26+ test cases including CRLF / BOM / Unicode / quoted commas /
+case-insensitive collisions / cross-org isolation / atomic rollback /
+20-row batch / late conflict simulation / role gating. All green.
+
+**FE testing depth (medium):** maintainer click-test passed for /admin/members,
+/admin/sites, /assets after PR #10 merge. Wider responsive verification
+(mobile/tablet at 768/480 breakpoints from `6051395`) not done by me.
+
+**Hallucination-risk notes for next session:**
+- `6051395` responsive commit: read the diff, didn't browser-test.
+- The `<ImportModal>` is the modal pattern for any future bulk operations —
+  reuse before re-implementing.
+- `csv_import.js` engine is the canonical place to extend for new entities.
+  Adapter pattern: `{entityName, headers, validateRow, insertRow, onAllInserted}`.
 
 ### 2026-05-08 — Reports framework filter + merge-from-main + PR #8
 

@@ -9,7 +9,19 @@ import Icon from '../../components/shared/Icon';
 import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
 import CustomFieldsDisplay from '../../components/assets/CustomFieldsDisplay';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
+import { timeAgo } from '../../utils/time';
 import '../../styles/assets.css';
+import '../../styles/dashboard.css';
+
+// Map activity_log action verbs to the existing dashboard icon set.
+// Same shape Dashboard.jsx uses; falls back to a generic system icon.
+const ACTION_ICON = {
+  asset_created: { icon: 'plus', cls: 'act-create' },
+  asset_updated: { icon: 'edit', cls: 'act-create' },
+  asset_deleted: { icon: 'close', cls: 'act-system' },
+  asset_restored: { icon: 'check', cls: 'act-create' },
+  assets_imported: { icon: 'upload', cls: 'act-create' },
+};
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
@@ -362,12 +374,33 @@ export default function AssetDetail() {
         </div>
       )}
 
-      {/* Activity tab */}
+      {/* Activity tab — real audit timeline scoped to this asset */}
       {tab === 'activity' && (
-        <div className="card card-pad asset-tab-empty">
-          <Icon name="pulse" size={28} />
-          <h3>Activity log</h3>
-          <p>Edits, archive/restore actions, and inspections will be tracked here.</p>
+        <div className="card card-pad">
+          <div className="activity-feed">
+            {(asset.activity || []).map((e, i) => {
+              const mapped = ACTION_ICON[e.action] || { icon: 'bell', cls: 'act-system' };
+              return (
+                <div className="act-item" key={e.id || i}>
+                  <div className={`act-dot ${mapped.cls}`}>
+                    <Icon name={mapped.icon} size={16} />
+                  </div>
+                  <div className="act-body">
+                    <div className="act-who">{e.user_name || 'System'}</div>
+                    <div className="act-desc">{e.description}</div>
+                    <div className="act-when">{timeAgo(e.created_at)}</div>
+                  </div>
+                </div>
+              );
+            })}
+            {(!asset.activity || asset.activity.length === 0) && (
+              <div className="asset-tab-empty">
+                <Icon name="pulse" size={28} />
+                <h3>No activity yet</h3>
+                <p>Edits, archive/restore actions, and audit events will appear here as they happen.</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

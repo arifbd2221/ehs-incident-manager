@@ -123,12 +123,39 @@ export default function ReportsPage() {
 // download itself is logged on the BE so chain-of-custody is provable.
 // Reuses existing .rpt-panel / .rpt-table / .field shared classes.
 // ---------------------------------------------------------------------------
+// Must match the BE activity_log.entity_type CHECK constraint exactly.
+// Order is forensic-grouped: investigation → CAPA chain first (what an
+// inspector cares about), then operational records, then admin/internal.
 const ENTITY_TYPES = [
   'incident', 'investigation', 'capa',
-  'site', 'asset', 'asset_category',
+  'site', 'work_hours', 'asset', 'asset_category',
   'document', 'folder', 'link',
-  'user', 'template', 'inspection', 'answer_set', 'system',
+  'user', 'template', 'inspection', 'answer_set',
+  'organization', 'system',
 ];
+
+// Friendly labels for entity_types whose raw keys are jargon to a non-engineer.
+// Used in BOTH the entity-type picker AND as the group header in the
+// action picker. Falls back to the raw key with underscores → spaces.
+const ENTITY_TYPE_LABELS = {
+  incident:       'Incident',
+  investigation:  'Investigation',
+  capa:           'CAPA',
+  site:           'Site',
+  work_hours:     'Work hours',
+  asset:          'Asset',
+  asset_category: 'Asset category',
+  document:       'Document',
+  folder:         'Document folder',
+  link:           'Entity link',
+  user:           'User',
+  template:       'Inspection template',
+  inspection:     'Inspection',
+  answer_set:     'Inspection answer set',
+  organization:   'Organization',
+  system:         'System / cross-cutting',
+};
+const labelForEntityType = (t) => ENTITY_TYPE_LABELS[t] || t.replace(/_/g, ' ');
 
 // MultiPicker — generic multi-select with optional grouping.
 //
@@ -310,8 +337,17 @@ function AuditLogReport() {
       if (q.entity_types.length > 0) q.entity_type = q.entity_types.join(',');
       delete q.entity_types;
     }
+    // Action picker keys are composite ("entity_type|action") so we can
+    // disambiguate same-named actions across entity types (e.g. incident.created
+    // vs capa.created). The BE accepts these as `entity_action_pairs` using ':'
+    // as the delimiter, OR'd at query time so picking "incident.created" +
+    // "capa.completed" returns exactly those two pairs — not the cross-product.
     if (Array.isArray(q.actions)) {
-      if (q.actions.length > 0) q.action = q.actions.join(',');
+      if (q.actions.length > 0) {
+        q.entity_action_pairs = q.actions
+          .map(s => s.includes('|') ? s.replace('|', ':') : s)
+          .join(',');
+      }
       delete q.actions;
     }
     if (Array.isArray(q.actor_ids)) {
@@ -392,10 +428,11 @@ function AuditLogReport() {
                 Entity types <span className="al-label-hint">multi-select</span>
               </label>
               <MultiPicker
-                items={ENTITY_TYPES.map(t => ({ key: t, label: t }))}
+                items={ENTITY_TYPES.map(t => ({ key: t, label: labelForEntityType(t) }))}
                 value={filters.entity_types}
                 onChange={(next) => setF('entity_types', next)}
                 placeholder="All entities"
+                labelOne={(key) => labelForEntityType(key)}
                 labelMany={(n) => `${n} types selected`}
                 isGrouped={false}
                 disabled={!!filters.entity_number}
@@ -440,10 +477,19 @@ function AuditLogReport() {
                 items={(filters.entity_types.length > 0
                   ? actions.filter(a => filters.entity_types.includes(a.entity_type))
                   : actions
-                ).map(a => ({ key: a.action, label: a.action, count: a.count, group: a.entity_type }))}
+                ).map(a => ({
+                  // Composite key disambiguates same-named actions across
+                  // entity types (incident.created vs capa.created). Without
+                  // this, picking one would visually check both.
+                  key: `${a.entity_type}|${a.action}`,
+                  label: a.action,
+                  count: a.count,
+                  group: labelForEntityType(a.entity_type),
+                }))}
                 value={filters.actions}
                 onChange={(next) => setF('actions', next)}
                 placeholder="Any action"
+                labelOne={(key) => key.includes('|') ? key.split('|')[1] : key}
                 labelMany={(n) => `${n} actions selected`}
                 isGrouped={true}
               />

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/connection.js';
 import { calculateMetrics } from '../services/metrics.js';
 import { writeActivity } from '../services/activity_log.js';
+import { AUDIT_ACTIONS_CATALOG } from '../services/audit_actions_catalog.js';
 
 const router = Router();
 
@@ -21,6 +22,23 @@ const canSeeAudit = (user) => AUDIT_ROLES.has(user?.role);
 
 const OSHA_300A_AFFIRMATION =
   'I certify that I have examined this document and that to the best of my knowledge the entries are true, accurate, and complete.';
+
+// Site-scoped metrics for live KPI cards (SiteDetail, embed components).
+// Returns the same `calculateMetrics` shape used by /osha-300a, but standalone
+// so callers don't have to pull case lists + types + certification. Year
+// defaults to the current calendar year (not last year, unlike 300A).
+router.get('/site-metrics', (req, res) => {
+  const { site_id, year } = req.query;
+  if (!site_id) return res.status(400).json({ error: 'site_id is required' });
+  const site = db.prepare('SELECT id FROM sites WHERE id = ? AND org_id = ?')
+    .get(Number(site_id), req.user.org_id);
+  if (!site) return res.status(404).json({ error: 'Site not found' });
+  const y = year ? Number(year) : new Date().getFullYear();
+  if (!Number.isInteger(y) || y < 1900 || y > 2999) {
+    return res.status(400).json({ error: 'year must be a 4-digit year' });
+  }
+  res.json({ year: y, metrics: calculateMetrics(site.id, y) });
+});
 
 router.get('/osha-300', (req, res) => {
   const { site_id, year } = req.query;
@@ -94,9 +112,23 @@ router.get('/osha-300a', (req, res) => {
     ORDER BY rc.signed_at DESC LIMIT 1
   `).get(Number(site_id), Number(currentYear));
 
+  // OSHA 300A line 13/14: hours + employee count come from work_hours (live
+  // sum / period-length-weighted avg). When work_hours has no entries for the
+  // year, fall back to the onboarding-time `sites.annual_avg_employees` so a
+  // brand-new tenant doesn't see "0 employees" on a 300A draft. Hours have no
+  // sensible fallback — empty work_hours means zero recorded hours.
+  const liveHours = metrics.totalHoursWorked || 0;
+  const liveAvgEmployees = metrics.annualAvgEmployees || site?.annual_avg_employees || 0;
+
   res.json({
     year: Number(currentYear),
-    site: { name: site?.name, establishment_id: site?.establishment_id, naics_code: site?.naics_code, annual_avg_employees: site?.annual_avg_employees, total_hours_worked: site?.total_hours_worked },
+    site: {
+      name: site?.name,
+      establishment_id: site?.establishment_id,
+      naics_code: site?.naics_code,
+      annual_avg_employees: liveAvgEmployees,
+      total_hours_worked: liveHours,
+    },
     cases: {
       deaths: cases?.deaths || 0,
       days_away: cases?.days_away || 0,
@@ -430,6 +462,28 @@ function buildAuditWhere(orgId, query) {
       params.push(...actions);
     }
   }
+
+  // `entity_action_pairs` — comma-separated 'entity_type:action' tuples.
+  // Each pair is AND'd internally (entity_type AND action) and pairs are
+  // OR'd. This lets the FE filter precisely "incident.created OR capa.completed"
+  // without the cross-product issue that separate entity_type/action lists
+  // produce when the same action name appears under multiple entity types
+  // (e.g. 'created' belongs to incident, capa, AND investigation).
+  if (query.entity_action_pairs) {
+    const pairs = String(query.entity_action_pairs).split(',')
+      .map(s => s.trim())
+      .map(s => {
+        const i = s.indexOf(':');
+        if (i <= 0 || i === s.length - 1) return null;
+        return { t: s.slice(0, i).trim(), a: s.slice(i + 1).trim() };
+      })
+      .filter(p => p && p.t && p.a);
+    if (pairs.length > 0) {
+      const orClauses = pairs.map(() => '(al.entity_type = ? AND al.action = ?)').join(' OR ');
+      where.push(`(${orClauses})`);
+      for (const p of pairs) { params.push(p.t, p.a); }
+    }
+  }
   if (query.from) { where.push('al.created_at >= ?'); params.push(query.from); }
   // `to` is treated as exclusive upper bound (so passing 2026-05-07 returns
   // everything strictly before that date — i.e., all of 2026-05-06).
@@ -439,24 +493,51 @@ function buildAuditWhere(orgId, query) {
   return { where: where.join(' AND '), params };
 }
 
-// Distinct (entity_type, action) pairs present in this org's activity_log.
-// FE groups by entity_type so the user can pick "all site actions" or
-// individual actions inside a group. Same `action` string appearing under
-// multiple entity types shows up as separate rows (e.g., 'created' for
-// incident vs 'created' for capa) — that distinction matters when the user
-// is narrowing what they want to see.
+// Catalog UNION distinct-from-DB pairs. The catalog ensures EVERY known
+// action verb is filterable BEFORE the first trigger — important for an
+// EHS supervisor pulling forensics on a fresh tenant or a brand-new
+// action verb (e.g. "show me every CAPA closure" before any have closed).
+// Pairs the BE writes that aren't in the catalog (forgot to add) still
+// surface via the DB-distinct fallback so nothing is silently invisible.
+//
+// `count` is null for catalog-only entries (never triggered yet), >0 for
+// triggered entries. FE picker can render "—" or hide the count badge
+// when null.
 router.get('/audit-log/actions', (req, res) => {
   if (!canSeeAudit(req.user)) {
     return res.status(403).json({ error: 'Audit log access is limited to EHS compliance roles.' });
   }
-  const rows = db.prepare(`
+  const dbRows = db.prepare(`
     SELECT entity_type, action, COUNT(*) AS count
     FROM activity_log
     WHERE org_id = ?
     GROUP BY entity_type, action
-    ORDER BY entity_type ASC, count DESC, action ASC
   `).all(req.user.org_id);
-  res.json({ actions: rows });
+
+  const dbByKey = new Map(
+    dbRows.map(r => [`${r.entity_type}|${r.action}`, r.count])
+  );
+
+  // Start with catalog (preserves logical lifecycle ordering within entity).
+  const out = [];
+  const seen = new Set();
+  for (const c of AUDIT_ACTIONS_CATALOG) {
+    const key = `${c.entity_type}|${c.action}`;
+    out.push({
+      entity_type: c.entity_type,
+      action: c.action,
+      count: dbByKey.get(key) ?? null,
+    });
+    seen.add(key);
+  }
+  // Append any DB pairs the catalog forgot — defensive against drift.
+  for (const r of dbRows) {
+    const key = `${r.entity_type}|${r.action}`;
+    if (!seen.has(key)) {
+      out.push({ entity_type: r.entity_type, action: r.action, count: r.count });
+    }
+  }
+  res.json({ actions: out });
 });
 
 router.get('/audit-log', (req, res) => {
