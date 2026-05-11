@@ -335,6 +335,10 @@ router.post('/:id/versions', upload.single('file'), (req, res) => {
     try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
     return res.status(404).json({ error: 'Document not found' });
   }
+  if (!doc.active) {
+    try { unlinkSync(join(uploadDir, req.file.filename)); } catch {}
+    return res.status(409).json({ error: 'Restore the document before adding a new version.' });
+  }
 
   // Validate notes length up front so we can clean the orphan upload on reject.
   const rawNotes = (req.body.notes || '').toString().trim();

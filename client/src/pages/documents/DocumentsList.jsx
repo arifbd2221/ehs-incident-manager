@@ -556,12 +556,17 @@ export default function DocumentsList() {
     setSupersedeFile(null);
     setSupersedeNotes('');
     setSupersedeErr('');
+    // Clear the file input element too — without this, a previously-picked
+    // (then-cancelled) filename keeps showing in the input even though state
+    // is null, which is misleading.
+    if (supersedeInputRef.current) supersedeInputRef.current.value = '';
   };
   const closeSupersede = () => {
     setSupersedeOpen(false);
     setSupersedeFile(null);
     setSupersedeNotes('');
     setSupersedeErr('');
+    if (supersedeInputRef.current) supersedeInputRef.current.value = '';
   };
 
   const submitSupersede = async (e) => {
