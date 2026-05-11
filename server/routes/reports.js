@@ -3,6 +3,7 @@ import db from '../db/connection.js';
 import { calculateMetrics } from '../services/metrics.js';
 import { writeActivity, auditCtx } from '../services/activity_log.js';
 import { AUDIT_ACTIONS_CATALOG } from '../services/audit_actions_catalog.js';
+import { verifyChain } from '../db/activity_log_chain.js';
 
 const router = Router();
 
@@ -568,6 +569,8 @@ router.get('/audit-log', (req, res) => {
   const rows = db.prepare(`
     SELECT al.id, al.org_id, al.entity_type, al.entity_id, al.action, al.description,
            al.user_id, al.metadata, al.created_at,
+           al.ip_address, al.user_agent, al.field_diffs,
+           al.prev_hash, al.entry_hash,
            u.name AS user_name, u.initials AS user_initials, u.email AS user_email
     FROM activity_log al
     LEFT JOIN users u ON u.id = al.user_id
@@ -577,6 +580,18 @@ router.get('/audit-log', (req, res) => {
   `).all(...params, limit, offset);
 
   res.json({ rows, total, page, limit });
+});
+
+// WI-C: forensic chain-integrity check. Admin-only; returns whether the
+// activity_log hash chain for the caller's org verifies cleanly or where
+// the first break is. Inspectors can request a run of this before pulling
+// an audit-log CSV so the exported trail is provably untampered.
+router.get('/audit-log/verify', (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Chain verification is admin-only.' });
+  }
+  const result = verifyChain(db, req.user.org_id);
+  res.json(result);
 });
 
 router.get('/audit-log/export.csv', (req, res) => {
@@ -589,6 +604,7 @@ router.get('/audit-log/export.csv', (req, res) => {
   const rows = db.prepare(`
     SELECT al.id, al.created_at, al.entity_type, al.entity_id, al.action, al.description,
            al.user_id, al.metadata,
+           al.ip_address, al.user_agent, al.field_diffs, al.entry_hash,
            u.name AS user_name, u.email AS user_email
     FROM activity_log al
     LEFT JOIN users u ON u.id = al.user_id
@@ -609,6 +625,7 @@ router.get('/audit-log/export.csv', (req, res) => {
   const header = [
     'id', 'created_at', 'entity_type', 'entity_id', 'action', 'description',
     'user_id', 'user_name', 'user_email', 'metadata',
+    'ip_address', 'user_agent', 'field_diffs', 'entry_hash',
   ];
 
   const lines = [header.join(',')];
@@ -617,6 +634,8 @@ router.get('/audit-log/export.csv', (req, res) => {
       r.id, r.created_at, r.entity_type, r.entity_id ?? '', r.action,
       r.description, r.user_id ?? '', r.user_name ?? '', r.user_email ?? '',
       r.metadata ?? '{}',
+      r.ip_address ?? '', r.user_agent ?? '', r.field_diffs ?? '',
+      r.entry_hash ?? '',
     ].map(escape).join(','));
   }
   // Excel-compatible: BOM for UTF-8 + CRLF row separator (matches what tools

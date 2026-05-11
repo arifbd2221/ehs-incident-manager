@@ -1,31 +1,36 @@
 // server/services/activity_log.js — shared audit-trail writer for P3-A1.
 //
 // Routes that mutate compliance-relevant data call writeActivity() to stamp
-// one row in activity_log. Existing routes (incidents/capas/investigations/
-// inspections/templates/attachments/reports) hand-rolled their own INSERTs —
-// we don't refactor those in this pass; the helper exists for the routes
-// that previously bypassed the log entirely.
+// one row in activity_log. Hand-rolled INSERT INTO activity_log paths in
+// incidents.js / investigations.js / inspections.js / attachments.js /
+// templates.js still bypass this helper directly — that's fine; the
+// chain-INSERT trigger installed by WI-C catches them too.
 //
-// Standard call shape:
+// Standard call shape (post WI-C 2026-05-11):
 //   writeActivity({
 //     org_id, entity_type, entity_id, action, description,
 //     user_id, metadata,
-//     ip, user_agent,    // optional; folded into metadata under
-//                        // ip_address / user_agent keys for inspector traceability
+//     ip, user_agent, field_diffs,   // first-class columns now
 //   });
 //
 // `metadata` is plain object; we JSON-encode it. Pass null/undefined to
-// store the default '{}'. For PATCH-style updates the caller should pass
-// `{ changes: diffFields(before, after, FIELDS) }` so the audit trail
-// captures what actually changed, not just "updated".
+// store the default '{}'. For PATCH-style updates the caller can either
+// pass `field_diffs: diffFields(before, after, FIELDS)` directly OR
+// continue with the legacy shape `metadata: { changes: diffFields(...) }`
+// — we extract `.changes` automatically if `field_diffs` isn't passed.
 //
-// WI-10 (2026-05-11): `ip` + `user_agent` are accepted as first-class params
-// and serialized into the metadata JSON. Regulatory-submission routes
-// (OSHA 300A certify, OSHA 300 manual + auto entry, RIDDOR opened, audit
-// log export) pass these through. WI-C will promote them to first-class
-// columns on activity_log; until then, metadata is the canonical home.
+// WI-C (2026-05-11): ip_address / user_agent / field_diffs are now
+// first-class columns on activity_log (migration 024). writeActivity
+// strips the legacy ip_address / user_agent / changes keys from metadata
+// before INSERT so the same data never lives in two places. The chain
+// trigger (activity_log_hash_chain_insert) autocomputes prev_hash +
+// entry_hash on every INSERT.
 
 import db from '../db/connection.js';
+
+// Keys writeActivity moves from metadata into dedicated columns. Adding to
+// this list keeps the canonical row shape unambiguous.
+const PROMOTED_METADATA_KEYS = ['ip_address', 'user_agent', 'changes', 'field_diffs'];
 
 export function writeActivity({
   org_id,
@@ -37,23 +42,44 @@ export function writeActivity({
   metadata = null,
   ip = null,
   user_agent = null,
+  field_diffs = null,
 }) {
   if (!org_id) throw new Error('writeActivity: org_id is required');
   if (!entity_type) throw new Error('writeActivity: entity_type is required');
   if (!action) throw new Error('writeActivity: action is required');
   if (!description) throw new Error('writeActivity: description is required');
 
-  const augmented = (metadata && typeof metadata === 'object') ? { ...metadata } : {};
-  if (ip) augmented.ip_address = ip;
-  if (user_agent) augmented.user_agent = user_agent;
+  // Legacy fallback: caller may still pass `metadata.changes` instead of
+  // `field_diffs`. Lift it out so the dedicated column gets populated.
+  // Same for `metadata.ip_address` / `metadata.user_agent`.
+  let resolvedIp = ip;
+  let resolvedUa = user_agent;
+  let resolvedDiffs = field_diffs;
+  let cleanMeta = null;
 
-  const meta = Object.keys(augmented).length > 0 ? JSON.stringify(augmented) : '{}';
+  if (metadata && typeof metadata === 'object') {
+    resolvedIp = resolvedIp ?? metadata.ip_address ?? null;
+    resolvedUa = resolvedUa ?? metadata.user_agent ?? null;
+    resolvedDiffs = resolvedDiffs ?? metadata.changes ?? metadata.field_diffs ?? null;
+    cleanMeta = Object.fromEntries(
+      Object.entries(metadata).filter(([k]) => !PROMOTED_METADATA_KEYS.includes(k))
+    );
+  }
+
+  const metaJson = (cleanMeta && Object.keys(cleanMeta).length > 0)
+    ? JSON.stringify(cleanMeta)
+    : '{}';
+  const diffsJson = resolvedDiffs ? JSON.stringify(resolvedDiffs) : null;
 
   return db.prepare(`
     INSERT INTO activity_log
-      (org_id, entity_type, entity_id, action, description, user_id, metadata)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(org_id, entity_type, entity_id, action, description, user_id, meta);
+      (org_id, entity_type, entity_id, action, description, user_id, metadata,
+       ip_address, user_agent, field_diffs)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    org_id, entity_type, entity_id, action, description, user_id, metaJson,
+    resolvedIp, resolvedUa, diffsJson,
+  );
 }
 
 // Pull the request's IP + user-agent into a uniform shape for writeActivity.
