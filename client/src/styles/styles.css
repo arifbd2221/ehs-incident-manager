@@ -630,7 +630,13 @@ body {
 }
 
 /* Page content */
-.page { padding: 24px 32px 64px; animation: pageEnter 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.page {
+  padding: 24px 32px 64px;
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+  animation: pageEnter 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
 @keyframes pageEnter {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
