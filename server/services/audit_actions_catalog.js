@@ -149,4 +149,14 @@ export const AUDIT_ACTIONS_CATALOG = [
   // inspector narrative is "this incident produced this regulatory record".
   { entity_type: 'incident', action: 'osha_300_auto_entry' },
   { entity_type: 'incident', action: 'riddor_opened' },
+
+  // Multi-person incident management (WI-A). All entries hang off the
+  // parent incident so the timeline reads as a single narrative:
+  // "added affected person X → added injury Y → updated …".
+  { entity_type: 'incident', action: 'affected_person_added' },
+  { entity_type: 'incident', action: 'affected_person_updated' },
+  { entity_type: 'incident', action: 'affected_person_removed' },
+  { entity_type: 'incident', action: 'injury_added' },
+  { entity_type: 'incident', action: 'injury_updated' },
+  { entity_type: 'incident', action: 'injury_removed' },
 ];
