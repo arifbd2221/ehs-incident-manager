@@ -69,9 +69,13 @@ OSHA source PDFs landed `753ec42` — WI-01 / WI-02 / WI-03 / WI-07 are now unbl
 - **WI-05 RIDDOR F2508 PDF** — HSE F2508 visual reference.
 - **WI-06 SafeWork NSW** — WHS Act s.36 / s.37 enumerations + Notify form + ANZSIC code list.
 
-**Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
-
-**Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
+**WI-01 cold files for the next session:**
+- `server/routes/reports.js` lines 44–75 — existing `GET /reports/osha-300` JSON handler. Extend to honour `?format=pdf`.
+- `server/db/schema.sql` `osha_300_log` table — column set the PDF renders from.
+- `server/services/osha_300_helpers.js` — `descriptionForOsha300` + `injuryTypeForOsha300` text formatters reused by the renderer.
+- `client/src/pages/reports/ReportsPage.jsx` — section near the OSHA 300 table where the "Download PDF" button goes.
+- `server/package.json` — adds `pdfkit` (carries the dep for WI-02 / WI-03 / WI-09 too).
+- Source: `docs/regulatory-sources/osha/29 CFR Part 1904 (up to date as of 5-07-2026).pdf` (1904.29 + 1904.29(b)(7) privacy-case rule) + `OSHA-RK-Forms-Package.pdf` (the visual Form 300 layout).
 
 **Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
 
