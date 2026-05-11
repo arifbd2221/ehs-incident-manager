@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
 import BodyMap3D from '../../../components/shared/BodyMap3D';
 import AffectedPersonModal from '../../incidents/modals/AffectedPersonModal';
+import { getUsers } from '../../../api/users';
 import '../../../styles/bodymap.css';
 
 const INJURY_TYPES = [
@@ -93,6 +94,41 @@ export default function InjuryForm({ data, onChange }) {
   const additionalPersons = data.additional_persons || [];
   const [apModalOpen, setApModalOpen] = useState(false);
 
+  // WI-A: same "Is this person an employee?" affordance as the modal.
+  // Default to 'yes' since most workplace injuries involve employees.
+  // Selection auto-fills the three inline identity fields below.
+  const [primaryIsEmployee, setPrimaryIsEmployee] = useState(
+    data.injured_person_is_employee ?? 'yes'
+  );
+  const [users, setUsers] = useState([]);
+  useEffect(() => {
+    if (primaryIsEmployee === 'yes' && users.length === 0) {
+      getUsers().then(setUsers).catch(() => setUsers([]));
+    }
+  }, [primaryIsEmployee, users.length]);
+
+  const userOptions = useMemo(() => users.map(u => ({
+    value: String(u.id),
+    label: `${u.name}${u.job_title ? ` — ${u.job_title}` : ''}${u.email ? ` (${u.email})` : ''}`,
+  })), [users]);
+
+  const handlePrimaryEmployeeToggle = (val) => {
+    setPrimaryIsEmployee(val);
+    // Persist the choice in type_data so the wizard remembers across re-renders.
+    onChange({ ...data, injured_person_is_employee: val });
+  };
+
+  const handlePrimaryUserPick = (val) => {
+    const u = users.find(x => String(x.id) === String(val));
+    onChange({
+      ...data,
+      injured_user_id: val || null,
+      injured_name: u?.name ?? data.injured_name ?? '',
+      injured_job_title: u?.job_title ?? data.injured_job_title ?? '',
+      injured_department: u?.department ?? data.injured_department ?? '',
+    });
+  };
+
   const toggleBody = (id) => onChange({ ...data, body_parts: bodyParts.includes(id) ? bodyParts.filter(x => x !== id) : [...bodyParts, id] });
   const togglePpe = (n) => onChange({ ...data, ppe: ppe.includes(n) ? ppe.filter(x => x !== n) : [...ppe, n] });
 
@@ -107,6 +143,39 @@ export default function InjuryForm({ data, onChange }) {
     <>
       <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
         <div className="card-h"><Icon name="person" size={18} color="var(--sds-brand-primary)"/>Injured person</div>
+
+        <div className="field">
+          <label className="label">Is this person an employee?</label>
+          <div>
+            <label>
+              <input type="radio" name="primaryIsEmployee" value="yes"
+                checked={primaryIsEmployee === 'yes'}
+                onChange={() => handlePrimaryEmployeeToggle('yes')} /> Yes — pick from employee list
+            </label>
+          </div>
+          <div>
+            <label>
+              <input type="radio" name="primaryIsEmployee" value="no"
+                checked={primaryIsEmployee === 'no'}
+                onChange={() => handlePrimaryEmployeeToggle('no')} /> No — enter details manually
+            </label>
+          </div>
+        </div>
+
+        {primaryIsEmployee === 'yes' && (
+          <div className="field">
+            <label className="label">Employee</label>
+            <ComboBox
+              options={userOptions}
+              value={data.injured_user_id || ''}
+              onChange={handlePrimaryUserPick}
+              placeholder="Search employees…"
+              clearable
+            />
+            <span className="helper">Selecting an employee fills the fields below.</span>
+          </div>
+        )}
+
         <div className="field-row-3">
           <div className="field"><label className="label">Full name <span className="req">*</span></label><input className="input" value={data.injured_name || ''} onChange={e => onChange({ ...data, injured_name: e.target.value })}/></div>
           <div className="field"><label className="label">Job title</label><input className="input" value={data.injured_job_title || ''} onChange={e => onChange({ ...data, injured_job_title: e.target.value })}/></div>

@@ -109,7 +109,7 @@ export default function AffectedPersonModal({ open, incident, onClose, onSaved, 
   if (!open) return null;
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
     if (!form.name.trim()) {
       setError('Name is required.');
       return;
@@ -154,8 +154,15 @@ export default function AffectedPersonModal({ open, incident, onClose, onSaved, 
     }
   };
 
+  // Wizard overlay sits at z-index 600 (wizard.css). The default
+  // .modal-backdrop is z-index 500, which means a modal opened from
+  // inside the wizard renders BEHIND the wizard overlay. Stack on the
+  // toast tier (--sds-z-toast = 700) so this modal always floats above
+  // any wiz-overlay AND the standard non-wizard modal stack. Same
+  // component is used from IncidentDetail (no wizard above it) — works
+  // either way.
   return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" style={{ zIndex: 'var(--sds-z-toast)' }} onClick={onClose}>
       <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
         <div className="modal-h">
           <div>
@@ -168,8 +175,11 @@ export default function AffectedPersonModal({ open, incident, onClose, onSaved, 
             <Icon name="close" size={18}/>
           </button>
         </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
+        {/* No <form> wrapper — it would break .modal's flex column chain
+            (max-height + overflow-y:auto on .modal-body rely on the body
+            being a direct flex child of .modal). Submit is button-click;
+            Enter-to-submit can be added later via onKeyDown if needed. */}
+        <div className="modal-body">
             {error && <div className="pill pill-err">{error}</div>}
 
             <div className="field">
@@ -298,13 +308,12 @@ export default function AffectedPersonModal({ open, incident, onClose, onSaved, 
               </div>
             </div>
           </div>
-          <div className="modal-f">
-            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Adding…' : 'Add person'}
-            </button>
-          </div>
-        </form>
+        <div className="modal-f">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="button" className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
+            {saving ? 'Adding…' : 'Add person'}
+          </button>
+        </div>
       </div>
     </div>,
     document.body
