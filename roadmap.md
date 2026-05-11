@@ -33,18 +33,19 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 
 | Chunk | WI | Status |
 |---|---|---|
-| 1 | Setup (docs + memory + roadmap) | ✅ this session |
-| 2 | **WI-04 RIDDOR Reg 5 + 11** | gated on `docs/regulatory-sources/riddor/` |
-| 3 | WI-10 Activity-log audit consistency | |
-| 4 | WI-C Activity-log integrity (hash chain) | |
-| 5 | WI-A Multi-person incidents (no wizard) | |
+| 1 | Setup (docs + memory + roadmap) | ✅ `8cd3093` |
+| 2 | **WI-04 RIDDOR Reg 5 + 11** | **Sources in repo (`db5c1d4` + INDG453). NEXT SESSION.** |
+| 3 | WI-10 Activity-log audit consistency | ✅ `67b8c9a` |
+| 4 | WI-C Activity-log integrity (hash chain) | ✅ `2301521`, `b3343a0` |
+| 5 | WI-A Multi-person incidents (full: routes + dual-write + wizard + modal + 7 reg fields) | ✅ `12fbd8d` … `caab857` |
 | 6 | WI-B Override approval workflow | |
 | 7 | WI-08 Deadline countdown UI | |
+| **7a** | **WI-D Jurisdiction-aware wizard + forms** | **Owner directive 2026-05-11 evening — gate fields by org's compliance_frameworks + site.country. Spec in `docs/implementation-plan.md`.** |
 | 8+ | WI-01 OSHA 300 PDF → WI-05 F2508 → WI-06 SafeWork NSW → WI-07 1904.39 → WI-02 300A+ITA → WI-09 Generic PDF | reorder allowed by gate readiness |
 
 **Hallucination-risk gates** (memory `feedback_regulatory_truth.md`) — do NOT start without owner-supplied source material in `docs/regulatory-sources/`:
 - WI-02 — OSHA ITA CSV upload template.
-- WI-04 — HSE Schedule 1 (diseases) + Schedule 2 (dangerous occurrences).
+- WI-04 — ✅ owner provided SI 2013/1471 + HSE INDG453.
 - WI-05 — HSE F2508 visual reference.
 - WI-06 — WHS Act 2011 (NSW) s.36 / s.37 enumerations, official Notify SafeWork NSW form, ANZSIC code list.
 
@@ -52,14 +53,18 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 
 ## Next session priority
 
-**CHUNK 2 — WI-04 RIDDOR Reg 5 + 11.** Service-only extension to `server/services/riddor.js` for Reg 5 (non-workers — accidents to members of the public taken to hospital) and Reg 11 (gas incidents). Output goes into the existing `incidents.riddor_category` / `riddor_ref` columns. No schema changes.
+**CHUNK 2 — WI-04 RIDDOR Reg 5 + 11.** Source material is in the repo:
+- `docs/regulatory-sources/riddor/uksi_20131471_en.pdf` — SI 2013/1471 (the regs themselves)
+- `docs/regulatory-sources/riddor/indg453.pdf` — HSE INDG453 plain-English guidance
 
-**Blocker:** owner must populate `docs/regulatory-sources/riddor/` with authoritative source material before coding. If empty, ask owner to populate or pivot to **CHUNK 3 (WI-10)** which has no hallucination-risk gate.
+Service-only extension to `server/services/riddor.js` for **Reg 5** (non-workers — accidents to members of the public taken from the accident site to hospital, OR specified injury on hospital premises) and **Reg 11** (gas incidents — fixed-pipe flammable-gas distributors / LPG suppliers receiving notification of death/LOC/hospitalization arising from that gas, 14-day reporting deadline). Output goes into the existing `incidents.riddor_category` / `riddor_ref` columns. No schema changes.
 
 **Files cold for WI-04:**
 - `server/services/riddor.js` — current Reg 4/6/7/8 logic; lines 23 + 45–50 are the Reg 7 / Reg 8 lists with partial coverage.
 - `server/services/auto_classify.js` — where RIDDOR classification is fired from.
-- `server/routes/incidents.js` — RIDDOR fields persisted on POST/PATCH (~line 290 for `td.injured_person`).
+- `server/routes/incidents.js` — RIDDOR fields persisted on POST/PATCH; the WI-10 audit row + WI-A dual-write hooks are recent additions in this same handler.
+
+**After WI-04, queued for the same session if context allows: WI-D (jurisdiction-aware forms)** — see chunk 7a above and the full spec in `docs/implementation-plan.md`. WI-D is FE-heavy (extends `client/src/utils/frameworks.js` with `jurisdictionForContext()` + gates the wizard form-section visibility). Independent of WI-04, so order can swap if needed. Smoke-test matrix uses the existing empty-org demo accounts: `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
 
 ---
 

@@ -21,13 +21,14 @@ Defined in `plan-2026-05-11.md` Part 3. Each chunk ends with a ✋ owner checkpo
 
 | Chunk | Work item | Notes |
 |---|---|---|
-| 1 | Setup (this doc + plan + compliance-notes + memory + roadmap) | Current chunk. |
-| 2 | WI-04 RIDDOR Reg 5 + 11 | Gated on `docs/regulatory-sources/riddor/` being populated. |
-| 3 | WI-10 Activity-log audit consistency | No new columns; sweep call sites. |
-| 4 | WI-C Activity log integrity (hash chain) | First and only owner-authorized `ALTER TABLE` on an existing table. |
-| 5 | WI-A Multi-person incidents (no wizard) | Backfill + dual-write + detail page. |
-| 6 | WI-B Override approval workflow | New table + new routes + UI. |
+| 1 | Setup (this doc + plan + compliance-notes + memory + roadmap) | ✅ Done — `8cd3093` |
+| 2 | WI-04 RIDDOR Reg 5 + 11 | Source PDF in repo (`db5c1d4`, `caab857`). **Next session.** |
+| 3 | WI-10 Activity-log audit consistency | ✅ Done — `67b8c9a` |
+| 4 | WI-C Activity log integrity (hash chain) | ✅ Done — `2301521`, `b3343a0` |
+| 5 | WI-A Multi-person incidents | ✅ Done — `12fbd8d` … `caab857` (wizard, modal, dual-write, address/phone/DOB/gender/date_hired) |
+| 6 | WI-B Override approval workflow | Not started. |
 | 7 | WI-08 Deadline countdown UI | Reads existing + WI-06/WI-07 fields. |
+| **7a** | **WI-D Jurisdiction-aware wizard + forms** | **Owner directive 2026-05-11 evening — show fields by org's compliance_frameworks + site.country. Spec below.** |
 | 8+ | WI-01, WI-05, WI-06, WI-07, WI-02, WI-09 | OSHA 300 PDF → RIDDOR F2508 → SafeWork NSW → OSHA 1904.39 → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
 
 ---
@@ -213,6 +214,61 @@ New `classification_override_requests` table. Approve/reject/withdraw routes. Se
 `ALTER TABLE activity_log ADD COLUMN` for `prev_hash`, `entry_hash`, `ip_address`, `user_agent`, `field_diffs`. Per-org chain. Append-only triggers. Verify endpoint. **This is the only authorized `ALTER TABLE` on an existing table in the current plan; per-WI authorization rule (memory `feedback_no_structural_changes.md`) applies.**
 
 **Complexity:** L. **New tables:** none. **Existing schema touched:** `activity_log` (additive columns + triggers). **Chunk:** 4.
+
+### WI-D: Jurisdiction-aware wizard + forms (authorized 2026-05-11, evening)
+
+**Problem.** The wizard currently asks every reporter for the union of OSHA + RIDDOR + SafeWork NSW identity fields, regardless of which jurisdictions the org operates under. A US-only org sees RIDDOR-specific labels they don't need; a UK-only org sees OSHA fields. Reports surface already gates by `org.compliance_frameworks` (`client/src/utils/frameworks.js` → `frameworkVisibility(user)`), but the wizard does not. The user wants intake to mirror the org's regulatory posture.
+
+**Approach.** Drive form-section visibility from a `jurisdictionForContext({user, siteId, sites})` helper that combines the org's `compliance_frameworks` array (already on the JWT-loaded `user` object) with the selected site's `country`. Each field block is tagged with the jurisdiction(s) it serves; the helper decides what to render.
+
+**Rules:**
+- Org `compliance_frameworks` is the master switch. Whitelist (from `server/routes/auth.js` line 15–18): `osha_300`, `osha_300a`, `osha_301`, `riddor_f2508`, `safework_nsw`, `generic`.
+- Site `country` resolves multi-framework orgs: a UK site under a US+UK org gets RIDDOR; a US site gets OSHA.
+- Mapping:
+  - Any `osha_*` framework + site.country = 'US' → OSHA section shown.
+  - `riddor_f2508` framework + site.country = 'UK' → RIDDOR section shown.
+  - `safework_nsw` framework + site.country = 'AU' → NSW section shown.
+  - `generic` only OR no match → show only the minimum field set (name, job_title, description, body part).
+- A "Show all fields" toggle stays available so a reporter can override for unusual cases (e.g. multi-jurisdiction incident, exchange visitor).
+- Reports surface already does the right thing via `frameworkVisibility`; this WI extends the pattern into intake.
+
+**Files to touch:**
+
+Client (FE):
+- `client/src/utils/frameworks.js` — extend with `jurisdictionForContext()` and a registry mapping field-keys → required-by-jurisdiction. Pattern matches the existing `frameworkVisibility(user)` helper.
+- `client/src/pages/wizard/ReportWizard.jsx` — pass `jurisdiction` down to type-form steps. Compute once site is picked.
+- `client/src/pages/wizard/types/InjuryForm.jsx` — gate the field rows added in the WI-A pass:
+  - **Always-shown** (minimum set): name, job_title, body part, injury type.
+  - **OSHA-gated**: DOB, gender, date_hired, address, ER-treated/hospitalized/hosp-date, days_away/restricted.
+  - **RIDDOR-gated**: DOB (for age derivation), gender, address, phone, employment status, days away >7 trigger note.
+  - **NSW-gated**: DOB, gender, address, phone, employment status, PCBU question, site preservation question.
+- `client/src/pages/wizard/types/IllnessForm.jsx` — same gating pattern for the illness type.
+- `client/src/pages/incidents/modals/AffectedPersonModal.jsx` — accept an optional `jurisdiction` prop to gate fields the same way; default to "show all" when used from IncidentDetail (after-the-fact edits often need the full set).
+- "Show all fields" toggle: one checkbox at the top of the Injured-person card; defaults to off; persists in component state, not in `type_data` (operator hint, not data).
+
+Server (BE):
+- No schema changes. `compliance_frameworks` is already on `organizations`; `sites.country` exists.
+- `server/routes/auth.js` — confirm `compliance_frameworks` flows to the user object on every /me + /login response. Verified during WI-A; no change expected.
+- (Optional, low priority) reject incident POSTs with fields outside the active jurisdiction set — out of scope for v1 since the BE already accepts the union; FE gating is the source of truth.
+
+**Acceptance:**
+- A US-only org (e.g. `acme@sdsmanager.com`) reporting an injury sees OSHA fields only — no phone/address blocks unless "Show all fields" is on.
+- A UK-only org (e.g. `riddor-test@example.com`) reporting an injury sees RIDDOR fields only.
+- An AU-only org (e.g. `sydney-test@example.com`) sees NSW fields only.
+- A multi-framework org (e.g. `priya@sdsmanager.com` — OSHA+RIDDOR) reporting at a US site sees OSHA fields; reporting at a UK site sees RIDDOR fields.
+- A `generic`-only org sees the minimum field set.
+- IncidentDetail card display logic does NOT gate by jurisdiction (it shows whatever was captured at intake — auditors see what they see).
+- "Show all fields" toggle reveals every section regardless of jurisdiction.
+- Existing single-framework demo accounts (acme, riddor-test, sydney-test) become the smoke-test matrix.
+
+**Hallucination-risk gate:** None. The mapping is locked here; the rules are intra-app logic, not new regulatory enumerations. (Reg-specific lookups like NSW serious-injury categories still live in their own WIs.)
+
+**Complexity:** M. **New tables:** none. **Existing schema touched:** none. **Chunk:** 7a (slots between WI-08 deadline UI and WI-01 OSHA 300 PDF — see updated chunk order below).
+
+**Dependencies:**
+- Useful after WI-A (multi-person) — the gating extends to the Add-person modal.
+- Independent of WI-04 / WI-05 / WI-06 — those build the engines/PDFs; this WI just decides what to capture.
+- Should land before any PDF rendering (WI-01/02/03/05/06/09) so the renderers don't read fields the intake never captured.
 
 ---
 
