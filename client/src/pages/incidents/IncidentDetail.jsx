@@ -8,6 +8,7 @@ import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVer
 import { useAuth } from '../../context/AuthContext';
 import { timeAgo, formatDate } from '../../utils/time';
 import { frameworkVisibility } from '../../utils/frameworks';
+import { riddorCategoryLabel, riddorCategoryReg } from '../../utils/riddor';
 import AssignModal from './modals/AssignModal';
 import EscalateModal from './modals/EscalateModal';
 import CloseModal from './modals/CloseModal';
@@ -463,7 +464,16 @@ export default function IncidentDetail() {
                 <span className="st-dot"/>{r.status}
               </span>
               {showOsha && r.osha_recordable === 1 && <span className="inc-card-status st-triage"><span className="st-dot"/>OSHA</span>}
-              {showRiddor && r.riddor_reportable === 1 && <span className="inc-card-status" style={{ background: '#fef2f2', color: '#dc2626' }}><span className="st-dot" style={{ background: '#dc2626' }}/>RIDDOR</span>}
+              {showRiddor && r.riddor_reportable === 1 && (
+                <span
+                  className="inc-card-status"
+                  style={{ background: '#fef2f2', color: '#dc2626' }}
+                  title={r.riddor_category ? `RIDDOR ${riddorCategoryReg(r.riddor_category)} · ${riddorCategoryLabel(r.riddor_category)}` : 'RIDDOR reportable'}
+                >
+                  <span className="st-dot" style={{ background: '#dc2626' }}/>
+                  RIDDOR{r.riddor_category ? ` · ${riddorCategoryLabel(r.riddor_category)}` : ''}
+                </span>
+              )}
             </div>
           </div>
 

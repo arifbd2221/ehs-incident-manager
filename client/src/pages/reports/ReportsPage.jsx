@@ -8,6 +8,7 @@ import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
 import CertifyOsha300AModal from '../../components/modals/CertifyOsha300AModal';
 import { formatDateShort, formatDate } from '../../utils/time';
+import { riddorCategoryLabel, riddorCategoryReg } from '../../utils/riddor';
 import '../../styles/reports.css';
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -1011,7 +1012,11 @@ function RiddorReport({ siteId }) {
                   <td className="cell-ref">{r.riddor_number}</td>
                   <td className="cell-ref">{r.incident_number}</td>
                   <td>{formatDateShort(r.event_date)}</td>
-                  <td><span className="rpt-cat-pill"><span className="cat-dot"/>{r.category?.replace(/_/g, ' ')}</span></td>
+                  <td>
+                    <span className="rpt-cat-pill" title={riddorCategoryReg(r.category) ? `RIDDOR ${riddorCategoryReg(r.category)}` : ''}>
+                      <span className="cat-dot"/>{riddorCategoryLabel(r.category)}
+                    </span>
+                  </td>
                   <td>{r.description || r.incident_title}</td>
                   <td className="cell-ref">{r.hse_ref || '—'}</td>
                   <td>

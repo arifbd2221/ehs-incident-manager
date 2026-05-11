@@ -387,6 +387,130 @@ export default function InjuryForm({ data, onChange }) {
           })}
         </div>
       </div>
+
+      {/* UK RIDDOR edge cases — feeds server/services/riddor.js Reg 5 + Reg 11
+          + Reg 14 branches. Always rendered; WI-D will hide for non-UK
+          jurisdictions. Reporters at OSHA-only sites can ignore. */}
+      <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
+        <div className="card-h">
+          <Icon name="shield" size={18} color="var(--sds-brand-primary)"/>
+          UK RIDDOR edge cases
+          <span className="helper" style={{ marginLeft: 8 }}>Only relevant at UK sites; safe to leave blank otherwise.</span>
+        </div>
+
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label className="label">Accident occurred on hospital premises?</label>
+          <select
+            className="select"
+            value={data.on_hospital_premises ? '1' : '0'}
+            onChange={e => onChange({ ...data, on_hospital_premises: e.target.value === '1' })}
+            style={{ maxWidth: 200 }}
+          >
+            <option value="0">No</option>
+            <option value="1">Yes</option>
+          </select>
+          <span className="helper">RIDDOR Reg 5(b): for non-workers, only specified injuries on hospital premises are reportable.</span>
+        </div>
+
+        <div className="field-row" style={{ marginBottom: 12 }}>
+          <div className="field">
+            <label className="label">Reg 14(1) — medical-procedure exception</label>
+            <select
+              className="select"
+              value={data.reg14_medical_procedure_exception ? '1' : '0'}
+              onChange={e => onChange({ ...data, reg14_medical_procedure_exception: e.target.value === '1' })}
+            >
+              <option value="0">Does not apply</option>
+              <option value="1">Injury arose from medical examination / treatment</option>
+            </select>
+            <span className="helper">Excludes Reg 4/5/6(1) per Reg 14(1).</span>
+          </div>
+          <div className="field">
+            <label className="label">Reg 14(3) — road-vehicle exception</label>
+            <select
+              className="select"
+              value={(() => {
+                if (data.reg14_3_road_vehicle_excluded === true) return 'excluded';
+                if (data.reg14_3_road_vehicle === true) return 'carveout';
+                return 'no';
+              })()}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === 'no') {
+                  onChange({ ...data, reg14_3_road_vehicle: false, reg14_3_road_vehicle_excluded: false });
+                } else if (v === 'excluded') {
+                  onChange({ ...data, reg14_3_road_vehicle: true, reg14_3_road_vehicle_excluded: true });
+                } else {
+                  onChange({ ...data, reg14_3_road_vehicle: true, reg14_3_road_vehicle_excluded: false });
+                }
+              }}
+            >
+              <option value="no">No road-vehicle movement involved</option>
+              <option value="excluded">Road vehicle — no Reg 14(3) carve-out applies (exclude Reg 4/5/6)</option>
+              <option value="carveout">Road vehicle — but a Reg 14(3)(a)–(d) carve-out applies (still reportable)</option>
+            </select>
+            <span className="helper">Carve-outs: train accident, exposure to substance conveyed, loading/unloading, or work on/alongside a road.</span>
+          </div>
+        </div>
+
+        <div className="field" style={{ marginBottom: 8 }}>
+          <label className="label">Gas-related incident (Reg 11)</label>
+          <select
+            className="select"
+            value={data.gas_reporter_role || 'none'}
+            onChange={e => {
+              const v = e.target.value;
+              if (v === 'none') {
+                onChange({ ...data, gas_reporter_role: undefined, gas_dangerous_fitting: false, gas_fitting_under_test: false, gas_previously_reported: false });
+              } else {
+                onChange({ ...data, gas_reporter_role: v });
+              }
+            }}
+            style={{ maxWidth: 360 }}
+          >
+            <option value="none">Not a Reg 11 gas incident</option>
+            <option value="flammable_gas_conveyor">Reg 11(1) — fixed-pipe flammable-gas conveyor</option>
+            <option value="lpg_supplier">Reg 11(1) — LPG filler / importer / supplier</option>
+            <option value="approved_person">Reg 11(2) — approved person (Gas Safe registered)</option>
+          </select>
+          <span className="helper">Set only when the reporting org has the Reg 11 role; outcome (death / LOC / hospitalisation) is read from the treatment fields above.</span>
+        </div>
+
+        {data.gas_reporter_role === 'approved_person' && (
+          <div className="field-row" style={{ marginBottom: 0 }}>
+            <div className="field">
+              <label className="label">Dangerous gas fitting?</label>
+              <select
+                className="select"
+                value={data.gas_dangerous_fitting ? '1' : '0'}
+                onChange={e => onChange({ ...data, gas_dangerous_fitting: e.target.value === '1' })}
+              >
+                <option value="0">No</option>
+                <option value="1">Yes — design / installation / servicing likely to cause death, LOC or hospitalisation</option>
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Reg 11(3) carve-outs</label>
+              <select
+                className="select"
+                value={data.gas_fitting_under_test ? 'under_test' : data.gas_previously_reported ? 'previously_reported' : 'none'}
+                onChange={e => {
+                  const v = e.target.value;
+                  onChange({
+                    ...data,
+                    gas_fitting_under_test: v === 'under_test',
+                    gas_previously_reported: v === 'previously_reported',
+                  });
+                }}
+              >
+                <option value="none">Neither carve-out applies</option>
+                <option value="under_test">Fitting under test at a place set aside for that purpose — Reg 11(3)(b)</option>
+                <option value="previously_reported">Same information previously reported — Reg 11(3)(c)</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
     </>
   );
 }
