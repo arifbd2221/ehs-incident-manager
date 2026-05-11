@@ -12,7 +12,7 @@ const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
 // Validates source_type ↔ id shape against the migration-003 CHECK constraint
 // and the owner != verifier rule (DB trigger enforces, but fail-fast is friendlier).
 // Returns the created row, throws an Error with `.statusCode` on validation failure.
-function createCapaRow({ orgId, sourceType, investigationId, incidentId, body, userId }) {
+function createCapaRow({ orgId, sourceType, investigationId, incidentId, maintenanceScheduleId, body, userId }) {
   const {
     title, description, type, priority, category,
     owner_id, verifier_id, due_date,
@@ -85,12 +85,14 @@ function createCapaRow({ orgId, sourceType, investigationId, incidentId, body, u
     INSERT INTO capas (
       capa_number, source_type, investigation_id, incident_id, org_id,
       title, description, type, priority, category,
-      owner_id, verifier_id, due_date
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      owner_id, verifier_id, due_date,
+      maintenance_schedule_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     capaNumber, sourceType, investigationId || null, incidentId || null, orgId,
     title, description || null, safeType, safePriority, category || null,
     Number(owner_id), Number(verifier_id), due_date,
+    maintenanceScheduleId || null,
   );
 
   const capaId = result.lastInsertRowid;
@@ -179,12 +181,18 @@ router.get('/:id', (req, res) => {
     SELECT c.*, inv.investigation_number, COALESCE(inv.incident_id, c.incident_id) as incident_id,
            src_inc.incident_number as incident_number,
            o.name as owner_name, o.initials as owner_initials,
-           v.name as verifier_name, v.initials as verifier_initials
+           v.name as verifier_name, v.initials as verifier_initials,
+           ms.title as maintenance_schedule_title,
+           ms.asset_id as maintenance_asset_id,
+           ma.name as maintenance_asset_name,
+           ma.display_id as maintenance_asset_display_id
     FROM capas c
     LEFT JOIN investigations inv ON inv.id = c.investigation_id
     LEFT JOIN incidents src_inc ON src_inc.id = c.incident_id
     LEFT JOIN users o ON o.id = c.owner_id
     LEFT JOIN users v ON v.id = c.verifier_id
+    LEFT JOIN asset_maintenance_schedules ms ON ms.id = c.maintenance_schedule_id
+    LEFT JOIN assets ma ON ma.id = ms.asset_id
     WHERE c.id = ? AND c.org_id = ?
   `).get(req.params.id, req.user.org_id);
 

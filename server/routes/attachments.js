@@ -10,6 +10,9 @@ const PARENT_TABLES = {
   incident: 'incidents',
   investigation: 'investigations',
   capa: 'capas',
+  // P3-OP1 chunk B — maintenance event evidence. The events table is
+  // immutable; attachments give inspectors photographic proof of work.
+  maintenance_event: 'asset_maintenance_events',
 };
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -64,17 +67,37 @@ router.post('/', upload.array('files', 10), (req, res) => {
   // Audit trail: per OSHA 1904.33, post-creation evidence is fine but every
   // change must be attributable. One activity_log row per upload batch keeps
   // the timeline readable; metadata captures every filename for forensic use.
+  //
+  // maintenance_event isn't a top-level audit entity_type — its parent
+  // schedule is. Roll the audit row up to entity_type='asset_maintenance' +
+  // schedule_id so it appears on the schedule's audit timeline.
   if (attachments.length > 0) {
     const summary = attachments.length === 1
       ? `attached "${attachments[0].filename}"`
       : `attached ${attachments.length} files`;
+
+    let logEntityType = entity_type;
+    let logEntityId = Number(entity_id);
+    if (entity_type === 'maintenance_event') {
+      const ev = db.prepare('SELECT schedule_id FROM asset_maintenance_events WHERE id = ?').get(Number(entity_id));
+      if (ev) {
+        logEntityType = 'asset_maintenance';
+        logEntityId = ev.schedule_id;
+      }
+    }
+
     db.prepare(`
       INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
       VALUES (?, ?, ?, 'attached', ?, ?, ?)
     `).run(
-      req.user.org_id, entity_type, Number(entity_id),
+      req.user.org_id, logEntityType, logEntityId,
       summary, req.user.id,
-      JSON.stringify({ attachment_ids: attachments.map(a => a.id), filenames: attachments.map(a => a.filename) }),
+      JSON.stringify({
+        attachment_ids: attachments.map(a => a.id),
+        filenames: attachments.map(a => a.filename),
+        // Preserve the original entity_type/id when we rolled up to the parent.
+        ...(entity_type !== logEntityType ? { source_entity_type: entity_type, source_entity_id: Number(entity_id) } : {}),
+      }),
     );
   }
 

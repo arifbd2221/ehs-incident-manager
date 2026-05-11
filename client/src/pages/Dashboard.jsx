@@ -17,12 +17,15 @@ import '../styles/dashboard.css';
  * where it renders in the grid.
  * ================================================================ */
 const DEFAULT_WIDGETS = [
-  { id: 'kpi_trir',      label: 'TRIR',                icon: 'reports',       visible: true, zone: 'kpi' },
-  { id: 'kpi_dart',      label: 'DART',                icon: 'person',        visible: true, zone: 'kpi' },
-  { id: 'kpi_ltir',      label: 'LTIR',                icon: 'clock',         visible: true, zone: 'kpi' },
-  { id: 'kpi_severity',  label: 'Severity Rate',       icon: 'pulse',         visible: true, zone: 'kpi' },
-  { id: 'kpi_open',      label: 'Open Incidents',      icon: 'incidents',     visible: true, zone: 'kpi' },
-  { id: 'kpi_overdue',   label: 'Overdue CAPAs',       icon: 'warning',       visible: true, zone: 'kpi' },
+  { id: 'kpi_trir',           label: 'TRIR',                icon: 'reports',       visible: true,  zone: 'kpi' },
+  { id: 'kpi_dart',           label: 'DART',                icon: 'person',        visible: true,  zone: 'kpi' },
+  { id: 'kpi_ltir',           label: 'LTIR',                icon: 'clock',         visible: true,  zone: 'kpi' },
+  { id: 'kpi_severity',       label: 'Severity Rate',       icon: 'pulse',         visible: true,  zone: 'kpi' },
+  { id: 'kpi_open',           label: 'Open Incidents',      icon: 'incidents',     visible: true,  zone: 'kpi' },
+  { id: 'kpi_overdue',        label: 'Overdue CAPAs',       icon: 'warning',       visible: true,  zone: 'kpi' },
+  // PM compliance (P3-OP1) — ISO 55001 standard metric. Visible by default;
+  // the customize drawer lets users hide it if 7 KPIs in the row feels dense.
+  { id: 'kpi_pm_compliance',  label: 'PM Compliance',       icon: 'gear',          visible: true,  zone: 'kpi' },
   { id: 'by_type',       label: 'Incidents by Type',   icon: 'dashboard',     visible: true, zone: 'left' },
   { id: 'track',         label: 'Track Routing',       icon: 'shield',        visible: true, zone: 'left' },
   { id: 'recent',        label: 'Recent Incidents',    icon: 'incidents',     visible: true, zone: 'left' },
@@ -397,6 +400,37 @@ export default function Dashboard() {
             </div>
           </div>
         );
+      case 'kpi_pm_compliance': {
+        // ISO 55001 PM-compliance ratio over the trailing 90 days; null when
+        // there's no completion history yet (acme/empty tenants).
+        const hasData = kpis.pmCompliancePct != null;
+        const onTime = kpis.pmOnTimeLast90 || 0;
+        const total = kpis.pmEventsLast90 || 0;
+        const overdue = kpis.maintenanceOverdueCount || 0;
+        const accent = hasData && kpis.pmCompliancePct >= 90 ? 'kpi-dart' : 'kpi-overdue';
+        return (
+          <div className={`kpi-card ${accent} kpi-clickable`} onClick={() => navigate('/maintenance')}>
+            <div className="kpi-top">
+              <div className="kpi-label">PM Compliance · 90d</div>
+              <div className="kpi-icon"><Icon name="gear" size={18} /></div>
+            </div>
+            <div className="kpi-val">
+              {hasData ? <><KpiValue value={kpis.pmCompliancePct} />%</> : '—'}
+            </div>
+            <div className="kpi-foot">
+              {hasData
+                ? `${onTime} of ${total} on time`
+                : 'No completions recorded yet'}
+              {overdue > 0 && (
+                <>
+                  <span style={{ color: 'var(--sds-border)' }}>&middot;</span>
+                  <span className="kpi-target bad">{overdue} overdue</span>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      }
       case 'by_type':
         return (
           <div className="dash-card">

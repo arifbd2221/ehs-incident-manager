@@ -8,11 +8,11 @@ the full detail. Most recent session entries at the bottom.
 
 ## Current state
 
-- **Branch:** `backend` at `897ac78` (P3-OB3 FE — version history + supersede
-  in preview modal). Equal to `origin/backend`. Working tree clean.
-- **`origin/main`** at `b3dbb08` (merge of PR #11). All previously-pending
-  backend work has landed on main; backend is now +2 commits ahead with the
-  P3-OB3 BE + FE slice (`7af629b`, `897ac78`).
+- **Branch:** `backend` at `f2ff262` (P3-OP1 FE — maintenance tab + global
+  page + KPI + detail modal). Working tree clean.
+- **`origin/main`** at `b3dbb08` (merge of PR #11). Backend is +9 commits
+  ahead — P3-OB3 (`7af629b` `897ac78` `73c1996` `465bddd` `ed6798e`
+  `2d5262a`) + P3-OP1 (`d51f540` `f2ff262`).
 - **PR #11** ✅ merged 2026-05-11 (was: P3-OB2 sellable-tier + audit log fixes).
 - **Phase 2:** code complete (only F6.2 manual demo walkthrough open).
 - **Wave 7:** E7.1 (custom asset fields per category) done.
@@ -22,16 +22,22 @@ the full detail. Most recent session entries at the bottom.
   full industry-standard surfaces — manual CRUD + year-group/YoY + live OSHA 300A + TRIR/DART/LTIR/Severity
   cards on SiteDetail and Dashboard + CSV export + contractor split),
   **OB3** (document versioning — mig 022, supersede route, immutable history,
-  preview-modal version timeline + inline supersede), OP2, OP3.
-- **Phase 3 open:** AI1, AI2, AI3, OP1, OP4, OP5, OB1, RG1.
-- **Migrations applied:** 001–022 + letter fixups `014a`, `017a`. `017a` aliases
-  the legacy backend names in `_schema_migrations` — idempotent on fresh DBs.
-  `020` widens `activity_log` CHECK to accept `entity_type='work_hours'`.
-  `021` adds nullable `contractor_hours_worked` + `contractor_avg_employees`
-  on `work_hours` (ISO 45001 / Cority parity).
-  `022` adds `document_versions` (UUID-named historical files, immutable
-  rows, per-doc version_number, optional notes) and backfills v1 from
-  every existing document.
+  preview-modal version timeline + inline supersede),
+  **OP1** (asset maintenance — mig 023+023a/b/c, schedules/events tables,
+  per-schedule assignment, completion events with calibration before/after
+  + attachments + escalate-to-CAPA, AssetDetail Maintenance tab + global
+  /maintenance page + Dashboard PM-compliance KPI), OP2, OP3.
+- **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1, RG1.
+- **Migrations applied:** 001–023 + letter fixups `014a`, `017a`, `023a`,
+  `023b`, `023c`. `020` widens `activity_log` CHECK with `work_hours`.
+  `021` adds nullable contractor split on `work_hours`. `022` adds
+  `document_versions` (UUID-named files, immutable rows, per-doc
+  version_number) + v1 backfill. `023` adds maintenance schedules + events
+  tables, widens `activity_log` with `asset_maintenance`, adds nullable
+  `capas.maintenance_schedule_id` FK. `023a` adds `assigned_to` on
+  schedules. `023b` widens `attachments` CHECK with `maintenance_event`.
+  `023c` adds calibration-specific event fields (before/after/unit/
+  tolerance/reference/certificate) for ISO/IEC 17025 + FDA 21 CFR 211.
 - **Demo accounts** (all `password123`):
   - `priya@sdsmanager.com` (admin, COO of SDS Manager Inc., id=13) — primary admin test account
   - `elena@sdsmanager.com` (ehs_manager, multi-framework: OSHA 300/300A/301 + RIDDOR)
@@ -50,14 +56,17 @@ the full detail. Most recent session entries at the bottom.
 - **P3-OB1** — first-login walkthrough + sample-data toggle. Onboarding
   for empty tenants (acme / riddor-test / sydney-test) is the natural
   closing slice for the OB-series.
-- **P3-OP1** — asset maintenance schedules / due dates / overdue → CAPA
-  escalation. Largest sellable-tier gap on the asset surface.
 - **P3-RG1** — Australian regulator. Closes the `safework_nsw` framework
   loop (currently has no Reports card). Per-state WHS deadline tracking.
   Schema work + new Reports surface.
+- **P3-OP4** — scheduling for recurring inspections / training /
+  walkthroughs. Reuses the schedule + event pattern from OP1; mostly a
+  "wire the existing engine to non-asset entities" slice.
+- **P3-OP5** — risk register / proactive risk assessment. Largest of the
+  four — roadmap explicitly flags as needing its own scoping pass.
 
-Click-test punch list still open for backend's recent work (per the
-"FE not click-tested" flags below).
+Click-test punch list still open for OP1 (detail modal + tooltips +
+notification deep-link landed after the user's mid-session walkthrough).
 
 ### Other files cold / never read end-to-end in recent sessions
 
@@ -98,7 +107,7 @@ Carryovers from prior merges + the latest one from main:
 - [ ] **P3-AI3** Video → incident report — extend voice intake to accept video. Pipeline: video → audio → transcript → existing `services/voice_extract.js` → confirmation UX.
 
 ### Operational features
-- [ ] **P3-OP1** Asset maintenance — schedules, due dates, last-done, escalation to CAPA when overdue.
+- [x] **P3-OP1** Asset maintenance — schedules + events + per-schedule assignment + calibration before/after + completion attachments + manual escalate-to-CAPA + AssetDetail tab + global `/maintenance` page + Dashboard PM-compliance KPI (`d51f540` + `f2ff262`).
 - [ ] **P3-OP4** Scheduling — recurring inspections, calibrations, training, walkthroughs; calendar view + reminders.
 - [ ] **P3-OP5** Risk register / risk assessment — *proactive*: identify hazards at sites/assets, assess L×C, mitigations, periodic review, link to incidents/CAPAs. Distinct from the post-event 5×5 in `ReportWizard.jsx`. Likely needs `risks` + `risk_assessments` tables, `risk_review_due`, entity_links wiring. Big enough to be its own phase — scope before starting.
 
@@ -223,6 +232,52 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 ---
 
 ## Recent session log
+
+### 2026-05-11 (evening) — P3-OP1 asset maintenance shipped (BE + FE)
+
+User picked OP1 over OB1 / OP5 / RG1 with industry-standard awareness as
+the framing. Closed in one sitting across two commits.
+
+| Area | What changed | Commit |
+|---|---|---|
+| BE foundation | Mig 023 (`asset_maintenance_schedules` + `asset_maintenance_events` tables; widen `activity_log` CHECK with `asset_maintenance`; nullable FK `capas.maintenance_schedule_id`). `routes/maintenance.js` w/ 7 endpoints incl. server-side status compute (`ok` / `due_soon ≤30d` / `overdue` / `inactive`), atomic mark-complete that advances `next_due`, and a manual escalate-to-CAPA that calls a now-extended `createCapaRow`. Dashboard `kpis` payload gains `pmCompliancePct` (last-90-day on-time ratio, reconstructed per-event via correlated subquery) + `maintenanceOverdueCount`. Audit catalog gets 5 new pairs. | `d51f540` |
+| BE extensions (chunks A/B/D) | Mig 023a `assigned_to` FK on schedules; POST/PATCH accept assignee + fire `notifyUser({ type:'maintenance_assigned', action_url:'/maintenance?open=<id>' })` on (re)assignment. Mig 023b widens `attachments` CHECK with `maintenance_event` (audit row rolls up to entity_type='asset_maintenance' on schedule_id; source preserved in metadata). Mig 023c adds calibration_* event columns (FDA 21 CFR 211 + ISO/IEC 17025 baseline). Chunk C (meter-based) was scoped in but the user dropped it; deferred. | `d51f540` |
+| FE foundation | `api/maintenance.js`; `time.js` gains `daysUntil` / `dueStatus` / `dueLabel`. AssetDetail gains a Maintenance tab w/ tab badge + "X overdue" pill. AssetsList gains an 8px red dot on cards + rows for assets with any overdue schedule (single bulk fetch). Dashboard gains `kpi_pm_compliance` (visible by default; click-through to /maintenance). CAPADetail renders "Maintenance — <schedule>" hero badge + side-panel Source row when `maintenance_schedule_id` set. | `f2ff262` |
+| FE global page | `/maintenance` route + Sidebar entry between Assets and Documents + TopBar `PAGE_TIPS`. Page has 3 KPI cards (overdue / due 7d / due 30d) + 4 tabs (overdue / due_soon / on schedule / archived) + site + type filters + "+ New schedule" with required asset picker (ComboBox, lazy-loaded `listAssets`). | `f2ff262` |
+| FE modals | `ScheduleModal` (new + edit; weekly/monthly/quarterly/semi-annual/annual presets + custom days; assignee picker; asset picker auto-renders when invoked without an `assetId`). `CompleteModal` (outcome pass/fail/conditional + notes + date + ≤10 attached files via existing `/api/attachments`; calibration block rendered only when `schedule_type==='calibration'`). `EscalateModal` (pre-fills title from "Address maintenance finding: …" + asset; priority auto-derives from last outcome). `ScheduleDetailModal` (read-only view on row click; standard `.modal-h` + `.field-row` layout matching the rest of the app; fresh `getSchedule` on open; footer routes to other modals; Archive in header as icon-btn). | `f2ff262` |
+| Hover guides | Generic `.has-tooltip` + `data-tooltip` class added to `styles.css` (~30 lines) — generalized from the template-editor pattern so any icon button across the app can opt in. Applied to all 8 action icons on MaintenanceTab + MaintenancePage + the detail-modal Archive button. aria-label on each for screen-reader parity. | `f2ff262` |
+| Notification deep-link | Assignment + reassignment notifications carry `action_url='/maintenance?open=<schedule.id>'`. MaintenancePage reads `?open=<id>` on mount, fetches the schedule, opens the detail modal directly, strips the query param so reload doesn't re-pop. 4 existing notifications from earlier in the session backfilled to `/maintenance` so the user's current notifs still route somewhere instead of doing nothing. | `f2ff262` |
+
+**Locked design decisions (user choices mid-session):**
+- Manual-only escalation in v1 (no auto-CAPA on fail outcome) — keeps audit
+  trail clean; per-schedule auto-toggle deferred.
+- AssetDetail tab + global `/maintenance` page (rejected "global page only")
+  so the inspector narrative stays tied to the asset.
+- Ship draft as-is on the meter-based / file-attachments / calibration-fields
+  question; subsequently relaxed when user said "do not defer, complete
+  everything in chunks if required" — so attachments + calibration shipped
+  but meter-based was dropped explicitly later.
+
+**Industry-standard framing (worth noting for sales decks):** v1 matches
+the Cority/Intelex sellable tier for the EHS-buyer persona — closes ISO
+9001 §7.1.5 / ISO 55001 / OSHA 1910.119 PSM / 1910.178 forklift / FDA 21
+CFR 211 audit narratives. Does NOT match Limble/Fiix/UpKeep for CMMS-first
+buyers (no meter-based, no work-orders, no spare-parts inventory) — that
+market is out of scope.
+
+**Honest hallucination flags:**
+- Click-test partially done by the user mid-session (created a "yearly
+  maintain" + "inspect" schedule via the UI, both still active in dev DB).
+  The detail-modal rewrite + tooltips + notification deep-link landed AFTER
+  that walkthrough — those are build-clean but not browser-verified.
+- The recent-events timeline in `MaintenanceTab` fires N requests (one per
+  schedule on the asset) to gather events for the "Recent completions"
+  card. Fine for typical 1-5 schedule assets; could be a perf hit on
+  20+ schedule assets. Documented; a single bulk endpoint is the v1.5
+  follow-up.
+- Periodic "PM due in 7 days" notifications need a cron infrastructure
+  not yet present in this codebase — user explicitly deferred. Only
+  immediate-event notifications (assignment / reassignment) fire today.
 
 ### 2026-05-11 (later) — P3-OB3 document versioning shipped (BE + FE)
 
