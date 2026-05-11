@@ -380,6 +380,9 @@ export default function ReportWizard({ onClose, onSubmit }) {
           dob: typeDataNoExtras?.injured_dob ?? typeDataNoExtras?.injured_person?.dob ?? null,
           gender: typeDataNoExtras?.injured_gender ?? typeDataNoExtras?.injured_person?.gender ?? null,
           date_hired: typeDataNoExtras?.injured_date_hired ?? typeDataNoExtras?.injured_person?.date_hired ?? null,
+          // Contact (OSHA 301 address; RIDDOR + NSW address+phone).
+          address: typeDataNoExtras?.injured_address ?? typeDataNoExtras?.injured_person?.address ?? null,
+          phone: typeDataNoExtras?.injured_phone ?? typeDataNoExtras?.injured_person?.phone ?? null,
         },
       };
       const extras = Array.isArray(additional_persons) ? additional_persons : [];
@@ -392,6 +395,8 @@ export default function ReportWizard({ onClose, onSubmit }) {
           dob: submittedTypeData.injured_person.dob,
           gender: submittedTypeData.injured_person.gender,
           date_hired: submittedTypeData.injured_person.date_hired,
+          address: submittedTypeData.injured_person.address,
+          phone: submittedTypeData.injured_person.phone,
           employment_status: 'employee',
           is_primary: true,
           injuries: [{

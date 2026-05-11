@@ -309,6 +309,7 @@ router.get('/osha-301/:incidentId', (req, res) => {
       gender: td.injured_person?.gender || td.affected_person?.gender || '',
       hire_date: td.injured_person?.date_hired || td.injured_person?.hire_date || '',
       address: td.injured_person?.address || '',
+      phone: td.injured_person?.phone || '',
     },
     incident: {
       date: incident.incident_datetime,

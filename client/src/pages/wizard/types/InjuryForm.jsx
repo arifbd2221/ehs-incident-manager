@@ -185,6 +185,27 @@ export default function InjuryForm({ data, onChange }) {
           <div className="field"><label className="label">Department</label><input className="input" value={data.injured_department || ''} onChange={e => onChange({ ...data, injured_department: e.target.value })}/></div>
         </div>
 
+        {/* Contact details. Required for:
+            - OSHA 301 (29 CFR 1904.29): address
+            - RIDDOR F2508: address + phone
+            - SafeWork NSW notification: address + phone */}
+        <div className="field-row">
+          <div className="field">
+            <label className="label">Address</label>
+            <input className="input" value={data.injured_address || ''}
+              onChange={e => onChange({ ...data, injured_address: e.target.value })}
+              placeholder="123 Main St, City ST 12345"/>
+            <span className="helper">Required for OSHA 301 + RIDDOR + SafeWork NSW</span>
+          </div>
+          <div className="field">
+            <label className="label">Phone</label>
+            <input className="input" type="tel" value={data.injured_phone || ''}
+              onChange={e => onChange({ ...data, injured_phone: e.target.value })}
+              placeholder="(555) 123-4567"/>
+            <span className="helper">Required for RIDDOR + SafeWork NSW</span>
+          </div>
+        </div>
+
         {/* Regulatory identity fields. Required for:
             - OSHA 301 (29 CFR 1904.29): DOB + gender + date hired
             - SafeWork NSW notification: DOB + gender
