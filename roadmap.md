@@ -51,22 +51,61 @@ the full detail. Most recent session entries at the bottom.
 
 ### Next session priority
 
-**Pick one with the user:**
+**P3-RG1 — Australian regulator** (decided 2026-05-11 evening, taken
+in a fresh session for context cleanliness). Closes the `safework_nsw`
+framework loop (today: code exists, no Reports card surfaces). Adds
+per-state WHS Acts (NSW WHS s38, Vic OHS Act 2004 s37, etc.); new
+`notifiable_incidents` table tracking phone + written notification
+deadlines.
 
-- **P3-OB1** — first-login walkthrough + sample-data toggle. Onboarding
-  for empty tenants (acme / riddor-test / sydney-test) is the natural
-  closing slice for the OB-series.
-- **P3-RG1** — Australian regulator. Closes the `safework_nsw` framework
-  loop (currently has no Reports card). Per-state WHS deadline tracking.
-  Schema work + new Reports surface.
-- **P3-OP4** — scheduling for recurring inspections / training /
-  walkthroughs. Reuses the schedule + event pattern from OP1; mostly a
-  "wire the existing engine to non-asset entities" slice.
-- **P3-OP5** — risk register / proactive risk assessment. Largest of the
-  four — roadmap explicitly flags as needing its own scoping pass.
+**CRITICAL constraint for the new session** (also captured in auto-memory
+`feedback_regulatory_truth.md`): regulatory specifics (deadlines, category
+definitions, portal URLs, reference number formats) **must not be invented
+from model memory**. The user is expected to bring a source-of-truth
+document — internal compliance brief, an authoritative regulator-doc
+link, or to direct that values stay as `TODO: legal review` placeholders.
 
-Click-test punch list still open for OP1 (detail modal + tooltips +
-notification deep-link landed after the user's mid-session walkthrough).
+**Files cold for RG1 — must be read end-to-end in Phase 1:**
+
+- `client/src/utils/frameworks.js` — current `frameworkVisibility(user)`
+  gating helper (added 2026-05-08 `2e8daa7`)
+- `client/src/pages/reports/ReportsPage.jsx` — Reports-card render pattern
+  + `requiresFramework` map
+- `server/routes/auth.js` — `VALID_FRAMEWORKS` whitelist
+- `client/src/pages/SignupOrg.jsx` `FRAMEWORKS`
+- `client/src/pages/Settings.jsx` `FRAMEWORK_LABELS`
+- `server/routes/reports.js` — existing osha_300/300a/301 + riddor_f2508
+  endpoints (the shape RG1 will mimic)
+- `server/routes/incidents.js` — where regulatory flags (osha, riddor)
+  get set on creation; figure out the AU-equivalent plug point
+
+**5-touchpoint pattern for adding a framework code** (per architectural
+decisions section above): `auth.js VALID_FRAMEWORKS`, `SignupOrg.jsx
+FRAMEWORKS`, `Settings.jsx FRAMEWORK_LABELS`, `ReportsPage
+requiresFramework`, `frameworks.js`.
+
+**Three open scope questions to ask the user up-front** (do not assume):
+1. Single-state NSW only in v1, or all-AU multi-state (NSW + VIC + QLD +
+   WA + SA + TAS + NT + ACT)?
+2. Auto-classify incidents into notifiable categories (similar to current
+   OSHA recordability auto-detect), or manual flag like RIDDOR today?
+3. Reuse `safework_nsw` framework or expand to per-state codes
+   (`worksafe_vic`, etc.)?
+
+**Other still-open click-test punch list for OP1** (landed after the
+user's mid-session walkthrough): detail modal + tooltips + notification
+deep-link. Quick visual verify recommended before assuming OP1 is fully
+clean.
+
+**Other candidates if RG1 is blocked on source-of-truth:**
+
+- **P3-OB1** — first-login walkthrough + sample-data toggle for empty
+  tenants (acme / riddor-test / sydney-test).
+- **P3-OP4** — recurring inspections / training / walkthroughs. Reuses
+  the OP1 schedule + event pattern; mostly a "wire the existing engine
+  to non-asset entities" slice.
+- **P3-OP5** — risk register / proactive risk assessment. Needs its own
+  scoping pass per the original roadmap note.
 
 ### Other files cold / never read end-to-end in recent sessions
 
