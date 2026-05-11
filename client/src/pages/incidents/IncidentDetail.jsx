@@ -16,6 +16,7 @@ import ClosureApprovalModal from './modals/ClosureApprovalModal';
 import ReopenModal from './modals/ReopenModal';
 import SeverityOverrideModal from './modals/SeverityOverrideModal';
 import WitnessModal from './modals/WitnessModal';
+import AffectedPersonModal from './modals/AffectedPersonModal';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/incidents.css';
 
@@ -174,6 +175,7 @@ export default function IncidentDetail() {
   const [postingNote, setPostingNote] = useState(false);
 
   const [affectedPersons, setAffectedPersons] = useState([]);
+  const [apModalOpen, setApModalOpen] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -829,55 +831,68 @@ export default function IncidentDetail() {
             </div>
           </div>
 
-          {/* Affected persons (WI-A) — read-only multi-person view.
-              Renders only when the side-table has rows; legacy
-              single-person facts in the main column continue to render
-              regardless. Edit UI happens in a follow-up; the route layer
-              already supports CRUD via /incidents/:id/affected-persons. */}
-          {affectedPersons.length > 0 && (
+          {/* Affected persons (WI-A) — multi-person view with add-only
+              CRUD. Edit + remove on individual rows is a follow-up; the
+              route layer already supports it via
+              /incidents/:id/affected-persons/... */}
+          {(affectedPersons.length > 0 || canEdit) && (
             <div className="idet-card">
               <div className="idet-card-h">
                 <div className="hicon hi-person"><Icon name="person" size={16}/></div>
                 Affected persons
-                <span className="idet-attach-count">{affectedPersons.length}</span>
+                {affectedPersons.length > 0 && (
+                  <span className="idet-attach-count">{affectedPersons.length}</span>
+                )}
+                {canEdit && (
+                  <button className="idet-attach-add" onClick={() => setApModalOpen(true)}>
+                    <Icon name="plus" size={12}/>Add person
+                  </button>
+                )}
               </div>
               <div className="idet-card-body">
-                <div className="idet-witnesses">
-                  {affectedPersons.map(ap => (
-                    <div key={ap.id} className="idet-witness">
-                      <div className="idet-witness-head">
-                        <div className="idet-witness-info">
-                          <div className="idet-witness-name">
-                            {ap.name || <em>Unnamed</em>}
-                            {ap.is_primary === 1 && <> <span className="pill pill-info">Primary</span></>}
-                            {ap.is_privacy_case === 1 && <> <span className="pill pill-warn">Privacy case</span></>}
-                          </div>
-                          <div className="idet-witness-contact">
-                            {[ap.job_title, ap.employment_status?.replace(/_/g, ' ')]
-                              .filter(Boolean).join(' · ') || '—'}
-                          </div>
-                        </div>
-                      </div>
-                      {(ap.injuries || []).length > 0 && (
-                        <div className="idet-witness-statement">
-                          {ap.injuries.map(inj => (
-                            <div key={inj.id}>
-                              <strong>
-                                {[inj.body_part, inj.injury_type].filter(Boolean).join(' — ') || 'Injury'}
-                              </strong>
-                              {inj.mechanism && <> · {inj.mechanism}</>}
-                              {(inj.days_away > 0 || inj.days_restricted > 0) && (
-                                <> · {inj.days_away || 0}d away, {inj.days_restricted || 0}d restricted</>
-                              )}
-                              {inj.hospitalized === 1 && <> · hospitalized</>}
-                              {inj.er_treated === 1 && <> · ER treated</>}
+                {affectedPersons.length === 0 ? (
+                  <div className="idet-witness-empty">
+                    No affected persons recorded yet. Add one when identified.
+                  </div>
+                ) : (
+                  <div className="idet-witnesses">
+                    {affectedPersons.map((ap, idx) => (
+                      <div key={ap.id} className="idet-witness">
+                        <div className="idet-witness-head">
+                          <div className="idet-witness-info">
+                            <div className="idet-witness-name">
+                              <span className="pill pill-gray">Person {idx + 1}</span>
+                              {' '}{ap.name || <em>Unnamed</em>}
+                              {ap.is_primary === 1 && <> <span className="pill pill-info">Primary</span></>}
+                              {ap.is_privacy_case === 1 && <> <span className="pill pill-warn">Privacy case</span></>}
                             </div>
-                          ))}
+                            <div className="idet-witness-contact">
+                              {[ap.job_title, ap.employment_status?.replace(/_/g, ' ')]
+                                .filter(Boolean).join(' · ') || '—'}
+                            </div>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                        {(ap.injuries || []).length > 0 && (
+                          <div className="idet-witness-statement">
+                            {ap.injuries.map(inj => (
+                              <div key={inj.id}>
+                                <strong>
+                                  {[inj.body_part, inj.injury_type].filter(Boolean).join(' — ') || 'Injury'}
+                                </strong>
+                                {inj.mechanism && <> · {inj.mechanism}</>}
+                                {(inj.days_away > 0 || inj.days_restricted > 0) && (
+                                  <> · {inj.days_away || 0}d away, {inj.days_restricted || 0}d restricted</>
+                                )}
+                                {inj.hospitalized === 1 && <> · hospitalized</>}
+                                {inj.er_treated === 1 && <> · ER treated</>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -989,6 +1004,13 @@ export default function IncidentDetail() {
       {modal === 'severity' && createPortal(<SeverityOverrideModal incident={r} onCancel={() => setModal(null)} onConfirm={handleSeverityOverride}/>, document.body)}
       {witnessModal === 'add' && createPortal(<WitnessModal incident={r} onCancel={() => setWitnessModal(null)} onConfirm={handleAddWitness}/>, document.body)}
       {witnessModal && witnessModal !== 'add' && createPortal(<WitnessModal incident={r} witness={witnessModal} onCancel={() => setWitnessModal(null)} onConfirm={handleUpdateWitness}/>, document.body)}
+      <AffectedPersonModal
+        open={apModalOpen}
+        incident={r}
+        onClose={() => setApModalOpen(false)}
+        onSaved={load}
+      />
+
 
       {/* Toast */}
       {toast && createPortal(
