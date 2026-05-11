@@ -8,9 +8,15 @@ the full detail. Most recent session entries at the bottom.
 
 ## Current state
 
-- **Branch:** `backend` at `3848029` (plus this roadmap update). 8 commits ahead
-  of `origin/main` at `6051395` — work_hours industry-standard slice (5 commits)
-  and the work_hours CSV slice all unpushed to main; ready for PR #11.
+- **Branch:** `backend` at `9d1faf8` (merge from `origin/main`). Equal to
+  `origin/backend`. Working tree clean.
+- **`origin/main`** at `bb0fca3`. Main's two new commits since `6051395`:
+  global voice report feature (`b2e6a9f`, +2982 lines, new
+  `@google/generative-ai` server dep) and a small ReferencedByCard
+  double-modal fix. Both merged into backend cleanly (no manual conflicts).
+- **PR #11** open: backend → main — "P3-OB2 sellable-tier work_hours +
+  audit log timeline fixes" — 12 commits. Awaits click-test approval.
+  `https://github.com/arifbd2221/ehs-incident-manager/pull/11`.
 - **Phase 2:** code complete (only F6.2 manual demo walkthrough open).
 - **Wave 7:** E7.1 (custom asset fields per category) done.
 - **UX backlog A–H:** done. UX-C body-parts editor deferred (needs BodyMap3D
@@ -25,6 +31,7 @@ the full detail. Most recent session entries at the bottom.
   `021` adds nullable `contractor_hours_worked` + `contractor_avg_employees`
   on `work_hours` (ISO 45001 / Cority parity).
 - **Demo accounts** (all `password123`):
+  - `priya@sdsmanager.com` (admin, COO of SDS Manager Inc., id=13) — primary admin test account
   - `elena@sdsmanager.com` (ehs_manager, multi-framework: OSHA 300/300A/301 + RIDDOR)
   - `marcus@sdsmanager.com` (supervisor), `james@sdsmanager.com` (ehs_manager Sheffield),
     `mehta@sdsmanager.com` (ehs_officer), `wendy@sdsmanager.com` (worker)
@@ -36,47 +43,99 @@ the full detail. Most recent session entries at the bottom.
 
 ### Next session priority
 
-**Browser-test the work_hours slice end-to-end + open PR #11.** Five commits
-shipped (`db5c483 → 3848029`) — all curl-tested at the BE layer but the FE
-work (SiteDetail rebuild, modal, Dashboard rate cards, removal of
-`total_hours_worked` form inputs) wasn't click-tested. Verify on Priya's
-account and one empty tenant (acme), then open PR #11 backend → main.
+**P3-OB3 — document versioning.** Supersede a doc with a new file, keep an
+immutable audit trail of prior revisions. Industry standard for ISO 9001
++ OSHA records management. Inspectors on 1903 visits routinely ask "what
+did this SDS / SOP / certificate say on date X" — must be answerable.
 
-Click-test checklist:
-- `/admin/sites/:id` → "Safety performance" card year picker switches values
-- "Add work hours" modal pre-fills from prior period; Edit loads correct values
-- Year-group subtotals + YoY ▲/▼ pills match SUM in DevTools
-- Export CSV button downloads + the file imports back through the org-level
-  Import button without errors
-- `/admin/sites` Edit Site modal Workforce tab no longer shows hours input
-- Onboarding flow no longer asks for "total hours worked"
-- Dashboard renders 6 KPI cards (TRIR/DART/LTIR/Severity + Open + Overdue)
-  on Priya's account; all 0 on acme
+**Locked design decisions** (the auto-memory file `project_state.md` has
+the full rationale — read before starting):
 
-After this slice **P3-OB2 is fully closed** at industry-standard tier. Next
-roadmap candidate: P3-AI1 (auto-fill investigation) or P3-OP1 (asset
-maintenance schedules) — pick from "Open work — Phase 3" with the user.
+1. New `document_versions` table (mig 022). Each version is an immutable
+   row. The `documents` table keeps name/type/number stable; file-shaped
+   fields move to versions. Backfill v1 from each existing document so
+   reads always resolve to ≥1 version.
+2. Keep every uploaded file on disk forever — never overwrite, never
+   delete. Inspector defensibility.
+3. References (entity_links) auto-follow to the latest version. No
+   version-pinning in v1.
+4. Elevated-role gate (same as existing upload).
+5. UX placement: inline expandable section on `DocumentsList.jsx`
+   per-row. NOT a new DocumentDetail page. Reuse `.activity-feed` /
+   `.act-item` styles, no new CSS.
 
-### Files to re-read cold before extending
+**Files to read END TO END before any edit** — none are warm:
 
-These were auto-merged from main and never read end-to-end this session:
+- `server/db/migrations/001_phase2_tables.sql` (documents table top)
+- `server/routes/documents.js`
+- `server/middleware/upload.js` (multer storage path + naming convention)
+- `server/routes/attachments.js` (sister polymorphic table; pattern
+  reference, NOT the same model)
+- `server/routes/folders.js`
+- `client/src/api/documents.js`
+- `client/src/pages/documents/DocumentsList.jsx`
+- `server/services/audit_actions_catalog.js` (extend with
+  `document_superseded`)
+
+**Proposed shape** (verify against current schema first):
+
+```sql
+-- mig 022
+CREATE TABLE document_versions (
+  id PK,
+  document_id FK documents(id) NOT NULL,
+  version_number INTEGER NOT NULL,
+  file_url, stored_filename, mime_type, size_bytes,
+  uploaded_by FK users(id) NOT NULL,
+  notes TEXT,                  -- "Updated cover image"
+  created_at,
+  UNIQUE(document_id, version_number)
+);
+-- + INSERT v1 backfill for every existing document row.
+```
+
+```
+POST /api/documents/:id/versions          → multer upload, +1 version,
+                                            writes document_superseded
+GET  /api/documents/:id                   → extended: include versions[]
+                                            (DESC by version_number)
+GET  /api/documents/:id/download          → still serves LATEST
+GET  /api/documents/:id/versions/:vid/download → serves historical
+```
+
+**Start order:** read every file in the list above → confirm decisions
+still hold with the user → BE commit (mig + supersede route + GET
+extension + audit catalog) → curl-test thoroughly → push → STOP and
+report → user confirms API surface → FE commit (inline version list
+on DocumentsList row) → push.
+
+**After this slice, P3-OB3 is closed.** Next roadmap candidate:
+P3-OB1 (first-login walkthrough), P3-OP1 (asset maintenance), or
+P3-RG1 (AU regulator) — pick with the user.
+
+### Other files cold / never read end-to-end in recent sessions
+
+Carryovers from prior merges + the latest one from main:
+- **Voice report feature (`b2e6a9f`, just merged 2026-05-11)** — adds
+  `client/src/components/voice/{GlobalVoiceFab,VoiceBottomSheet,VoiceReviewCard}.jsx`
+  + `voiceFieldConfig.js` + `hooks/{useAudioRecorder,useSpeechRecognition}.js`
+  + `styles/voice.css` (602 lines) + `server/services/{gemini_extract,gemini_transcribe}.js`
+  + modifications to `App.jsx`, `TopBar.jsx`, `AppContext.jsx`, `ReportWizard.jsx`,
+  `VoiceIntakeModal.jsx`, `api/incidents.js`, `routes/incidents.js`. BE was
+  tested via PR #11 curl smoke; FE not click-tested.
 - `server/services/closure_gates.js` — ISO 45001 / OSHA / ANSI Z10 closure gates
 - `server/services/notifications.js` — backend-side notification creation
-- `server/routes/incidents.js` — backend's witnesses + recordability + stop-work merged
-  alongside main's closure_request / approve / reject / reopen
-- `client/src/pages/incidents/IncidentDetail.jsx` — main's consolidated cards merged with
-  backend's witnesses + edit affordances
+- `client/src/pages/incidents/IncidentDetail.jsx` — main's consolidated cards
 - `client/src/pages/capas/CAPADetail.jsx` — main's hero-card redesign
 - `client/src/pages/incidents/modals/{ClosureChecklistModal,ClosureApprovalModal,ReopenModal}.jsx`
 - `client/src/pages/capas/UpdateProgressModal.jsx`
-- `client/src/components/layout/TopBar.jsx` — also gets hamburger button + label `<span>` wraps from `6051395`
-- **Responsive commit `6051395`** (2026-05-08) — `Sidebar.jsx` becomes a slide-in drawer at ≤768px;
-  `AppContext.jsx` adds `sidebarOpen` / `setSidebarOpen`; `Icon.jsx` adds `menu`;
-  8 page-CSS files get `@media` blocks at 768px + 480px. BE untouched. Diff was read
-  but the live mobile rendering wasn't browser-tested.
-- New onboarding files from main (`SignupOrg.jsx` redesign, `OnboardingFirstSite.jsx`,
-  `components/shared/OnboardingIllustrations.jsx` — 6 SVGs) — read to verify P3-O1
-  framework logic survived the redesign, but never opened in a browser.
+- `client/src/pages/templates/{TemplatesList,TemplateEditor}.jsx`
+- `client/src/pages/inspections/{InspectionsList,InspectionEditor,InspectionReport}.jsx`
+- New onboarding files from earlier main merge (`SignupOrg.jsx` redesign,
+  `OnboardingFirstSite.jsx`, `components/shared/OnboardingIllustrations.jsx`)
+- **Responsive commit `6051395`** — Sidebar mobile drawer + 8 page-CSS
+  media queries. Diff was read; live mobile rendering not tested.
+
 
 ---
 
@@ -198,14 +257,44 @@ Waves 1–6 + Wave 7. Foundation (migrations + multer + Anthropic SDK), Site/Ass
 ## Quick re-orientation for a fresh session
 
 1. Read this file. Most recent session at the bottom.
-2. `git fetch origin && git status` — `backend` should be at `3848029` (or +1 with this roadmap commit), working tree clean. `origin/main` lags by 8 commits.
-3. Boot servers (BE :3001, FE :5173). Login as elena (multi-framework) for the broadest exercise, or one of the empty test orgs to see framework-gated UI.
-4. For new work in any "re-read cold" file (above), read it top-to-bottom before editing.
-5. Ask the user which P3 item to pick up. Don't guess.
+2. `git fetch origin && git status` — `backend` should be at `9d1faf8`
+   (or +1 if this roadmap commit landed), working tree clean.
+   `origin/main` lags by ~12 backend commits which are awaiting PR #11
+   review/merge.
+3. Boot servers (`cd server && node --watch index.js` BE :3001;
+   `cd client && npm run dev` FE :5173). Login as priya (admin, COO)
+   for the broadest admin exercise, elena (ehs_manager, multi-framework)
+   for broad EHS work, or one of the empty test orgs (acme / riddor-test
+   / sydney-test) to see framework-gated UI + empty-state behaviour.
+4. The auto-memory file `project_state.md` (in your home memory dir)
+   has detailed locked design decisions for the next slice. Read it.
+5. For new work in any cold file (see "Other files cold" below), read
+   it top-to-bottom before editing.
+6. Ask the user which P3 item to pick up if unclear. Don't guess.
 
 ---
 
 ## Recent session log
+
+### 2026-05-11 — Activity timeline forensics, audit log polish, main merge, PR #11
+
+Two themes shipped + main merged + PR #11 opened. Six commits on backend,
+one merge from main.
+
+| Area | What changed | Commit |
+|---|---|---|
+| AssetDetail Activity | Tab was a hardcoded stub ("will be tracked here"); now renders the real audit trail. `GET /api/assets/:id` returns `asset.activity`. FE reuses Dashboard's `.activity-feed`/`.act-item` classes — no new CSS. | `7531fa5` |
+| SiteDetail Activity | No timeline anywhere previously; new Activity card surfaces both `site_*` and `work_hours_*` entries scoped by site_id (joined via `json_extract(metadata,'$.site_id')` for work_hours rows). Auto-refreshes after Add/Edit/Delete/Export. | `9ab8b16` |
+| UTC timestamp bug | Every server timestamp was off by browser UTC offset (Asia/Dhaka rendered just-now rows as "6h ago"). SQLite's `datetime('now')` returns 'YYYY-MM-DD HH:MM:SS' UTC with no `Z`; JS parsed it as local time. New `parseServerDate()` in `time.js` treats untimezoned strings as UTC. Fixes activity timelines, timeAgo across the app. 7 other direct `new Date(server_str)` call sites remain (cosmetic; logged as a sweep). | `4825251` |
+| Audit log filter bug | Picking "incident.created" visually checked `capa.created` and `investigation.created` because the React key was the bare action name. Composite `entity_type\|action` keys on the FE + new `entity_action_pairs` BE filter that ORs precise pairs. Plus added `organization` + `work_hours` to entity_types dropdown; jargon types relabelled ("Inspection answer set" not "answer_set"). | `974130b` |
+| Audit actions catalog | Picker was DB-distinct only — 17 of 83 known pairs visible. New `audit_actions_catalog.js` (canonical 83 pairs); BE endpoint now returns catalog UNION DB counts so fresh tenants can filter "every CAPA closure" with 0 results instead of "completed" being absent from the dropdown. | `a90a9ed` |
+| Merge from main | Brought in `b2e6a9f` (global voice report, +2982 lines, new `@google/generative-ai` dep) and `bb0fca3` (ReferencedByCard fix). Default merge, zero manual conflicts (only auto-merge on `server/index.js`). Server fresh-restart required after npm install. All my endpoints verified intact post-merge. | `9d1faf8` |
+| PR #11 | Opened backend → main. 12 commits scoped. Click-test punch list in PR body. Awaits review. | — |
+
+**Honest hallucination flags:**
+- Dashboard layout iteration earlier showed my visual-rendering judgement is unreliable. Three swings at the 6-card squeeze (4+2, 3+3, revert) before user said "revert to first design." All FE work this session was build-clean but not browser-tested.
+- The new asset Activity tab + Site Activity card + audit log picker
+  changes haven't been opened in a browser.
 
 ### 2026-05-08 (evening) — work_hours industry-standard surfaces (Sellable tier)
 
