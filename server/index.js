@@ -28,6 +28,10 @@ import folderRoutes from './routes/folders.js';
 import templateRoutes from './routes/templates.js';
 import answerSetRoutes from './routes/answer_sets.js';
 import inspectionRoutes from './routes/inspections_routes.js';
+import {
+  incidentScopedRouter as overrideIncidentRoutes,
+  globalRouter as overrideGlobalRoutes,
+} from './routes/override_requests.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -68,6 +72,11 @@ app.use('/api/incidents', authMiddleware, incidentRoutes);
 // Express dispatches to whichever router has a matching route — the two
 // routers don't share paths.
 app.use('/api/incidents', authMiddleware, affectedPersonsRoutes);
+// WI-B: incident-scoped POST/GET lives on /api/incidents (matches the
+// affected-persons idiom); global pending-queue + decision routes live
+// on /api/override-requests. Two routers to keep paths unambiguous.
+app.use('/api/incidents', authMiddleware, overrideIncidentRoutes);
+app.use('/api/override-requests', authMiddleware, overrideGlobalRoutes);
 app.use('/api/investigations', authMiddleware, investigationRoutes);
 app.use('/api/capas', authMiddleware, capaRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);

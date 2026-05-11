@@ -159,4 +159,14 @@ export const AUDIT_ACTIONS_CATALOG = [
   { entity_type: 'incident', action: 'injury_added' },
   { entity_type: 'incident', action: 'injury_updated' },
   { entity_type: 'incident', action: 'injury_removed' },
+
+  // Classification override approval workflow (WI-B). Lifecycle:
+  // requested → (approved | rejected | withdrawn). On approval the
+  // boolean flip on the incidents row also writes a regular
+  // `incident_updated` (or future `classification_changed`) row, so the
+  // timeline reads as two events: the approval AND the resulting change.
+  { entity_type: 'incident', action: 'override_requested' },
+  { entity_type: 'incident', action: 'override_approved' },
+  { entity_type: 'incident', action: 'override_rejected' },
+  { entity_type: 'incident', action: 'override_withdrawn' },
 ];

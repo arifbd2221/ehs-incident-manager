@@ -1194,6 +1194,21 @@ router.patch('/:id', (req, res) => {
     });
   }
 
+  // WI-B: warn (but do not block) when osha_recordable / riddor_reportable
+  // are flipped via the direct PATCH path. The override-request workflow
+  // is the preferred separation-of-duties route. Leaving the direct path
+  // working lets us measure usage before forbidding it in a follow-up WI
+  // (per docs/plan-2026-05-11.md Part 2 — "Existing direct-edit path:
+  // keep working for now, but emit a console.warn server-side").
+  const recordabilityFlips = ['osha_recordable', 'riddor_reportable']
+    .filter(k => req.body[k] !== undefined && Number(req.body[k]) !== Number(incident[k]));
+  if (recordabilityFlips.length > 0) {
+    console.warn(
+      `[WI-B] Direct PATCH on ${recordabilityFlips.join(', ')} for incident ${incident.incident_number ?? incident.id} ` +
+      `by user ${req.user.id} (${req.user.email}) — bypasses override-request workflow.`,
+    );
+  }
+
   const sets = [];
   const params = [];
   for (const key of updatable) {
