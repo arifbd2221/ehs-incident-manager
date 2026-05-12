@@ -12,6 +12,19 @@ import {
   getSevereNotification,
   logPhoneNotification,
 } from '../services/osha_severe.js';
+import {
+  listSeriousInjuryTypes,
+  listDangerousIncidentTypes,
+  getNotificationForIncident as getNswForIncident,
+  getNotificationByNumber as getNswByNumber,
+  listNotificationsForOrg as listNswForOrg,
+  logPhoneNotification as logNswPhone,
+  logRegulatorRequestedWritten as logNswRegulatorRequested,
+  logWrittenSubmitted as logNswWrittenSubmitted,
+  setSitePreservation as setNswSitePreservation,
+  setPcbu as setNswPcbu,
+} from '../services/safework_nsw.js';
+import { validateAbn } from '../services/abn_validator.js';
 
 const router = Router();
 
@@ -538,6 +551,247 @@ router.post('/osha-severe/:notificationId/phone-notified', (req, res) => {
     });
   }
 
+  res.json(updated);
+});
+
+// ===================================================================
+// SafeWork NSW notifications (WI-06) — WHS Act 2011 (NSW) Part 3
+//
+// Rows are auto-created on POST /incidents (and PATCH) when
+// evaluateSafeworkNsw classifies the event as notifiable. These
+// endpoints expose the per-incident view + the lifecycle write paths.
+//
+// Compliance-framework gating: all routes require the caller's org
+// to list `safework_nsw` in compliance_frameworks. Otherwise 403.
+// ===================================================================
+
+function isNswOrg(req) {
+  const frameworks = req.user?.compliance_frameworks;
+  if (!Array.isArray(frameworks)) return false;
+  return frameworks.includes('safework_nsw');
+}
+
+function requireNswOrg(req, res) {
+  if (!isNswOrg(req)) {
+    res.status(403).json({ error: 'SafeWork NSW reporting is not enabled for your organization.' });
+    return false;
+  }
+  return true;
+}
+
+// GET /reports/safework-nsw/lookups — both enum tables for the
+// wizard / FE pickers. Returns verbatim Act labels + section refs.
+router.get('/safework-nsw/lookups', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  res.json({
+    serious_injury_types: listSeriousInjuryTypes(),
+    dangerous_incident_types: listDangerousIncidentTypes(),
+  });
+});
+
+// GET /reports/safework-nsw — list all notifications for the caller's
+// org (optionally filtered by site / year). Mirrors GET /reports/riddor.
+router.get('/safework-nsw', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  const { site_id, year } = req.query;
+  const rows = listNswForOrg(req.user.org_id, { siteId: site_id, year });
+  res.json({ notifications: rows, year: year ? Number(year) : null });
+});
+
+// GET /reports/safework-nsw/:incidentId — single notification row.
+router.get('/safework-nsw/:incidentId', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  const inc = db.prepare('SELECT id FROM incidents WHERE id = ? AND org_id = ?')
+    .get(Number(req.params.incidentId), req.user.org_id);
+  if (!inc) return res.status(404).json({ error: 'Incident not found' });
+  const row = getNswForIncident(req.user.org_id, inc.id);
+  if (!row) return res.status(404).json({ error: 'No SafeWork NSW notification for this incident' });
+  res.json(row);
+});
+
+// POST /reports/safework-nsw/:notificationId/phone-notified — log the
+// s.38(1)/(3)/(4) phone call. Elevated-only. Idempotent.
+router.post('/safework-nsw/:notificationId/phone-notified', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can log a regulatory phone notification.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = db.prepare('SELECT * FROM safework_nsw_notifications WHERE id = ? AND org_id = ?')
+    .get(id, req.user.org_id);
+  if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
+
+  const { regulator_office, notes } = req.body || {};
+  const wasUnsubmitted = !existing.phone_notified_at;
+  const updated = logNswPhone({
+    orgId: req.user.org_id, notificationId: id, userId: req.user.id,
+    regulatorOffice: regulator_office, notes,
+  });
+
+  if (wasUnsubmitted) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: existing.incident_id,
+      action: 'safework_nsw_phone_notified',
+      description: `logged SafeWork NSW phone notification (${existing.nsw_number}) per WHS Act s.38(1)`,
+      user_id: req.user.id,
+      metadata: {
+        nsw_notification_id: id,
+        nsw_number: existing.nsw_number,
+        regulator_office: regulator_office || null,
+      },
+      ...auditCtx(req),
+    });
+  }
+  res.json(updated);
+});
+
+// POST /reports/safework-nsw/:notificationId/regulator-requested-written
+// — log the s.38(4)(b) "regulator requests written notice" event.
+// This is what starts the 48h written-deadline clock. Body may carry
+// an explicit `requested_at` ISO timestamp (defaults to now).
+router.post('/safework-nsw/:notificationId/regulator-requested-written', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can log a regulator request.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = db.prepare('SELECT * FROM safework_nsw_notifications WHERE id = ? AND org_id = ?')
+    .get(id, req.user.org_id);
+  if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
+
+  const wasNotRequested = !existing.regulator_requested_written_at;
+  const updated = logNswRegulatorRequested({
+    orgId: req.user.org_id, notificationId: id, userId: req.user.id,
+    requestedAtIso: req.body?.requested_at,
+  });
+  if (wasNotRequested) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: existing.incident_id,
+      action: 'safework_nsw_regulator_requested_written',
+      description: `regulator requested written notice for ${existing.nsw_number} — 48h deadline starts now (s.38(4)(b))`,
+      user_id: req.user.id,
+      metadata: {
+        nsw_notification_id: id,
+        nsw_number: existing.nsw_number,
+        written_deadline: updated.written_deadline,
+      },
+      ...auditCtx(req),
+    });
+  }
+  res.json(updated);
+});
+
+// POST /reports/safework-nsw/:notificationId/written-submitted — log
+// the submission of the s.38(5) written notice. Elevated-only.
+router.post('/safework-nsw/:notificationId/written-submitted', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can log a written submission.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = db.prepare('SELECT * FROM safework_nsw_notifications WHERE id = ? AND org_id = ?')
+    .get(id, req.user.org_id);
+  if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
+
+  const { reference, notes } = req.body || {};
+  const wasUnsubmitted = !existing.written_submitted_at;
+  const updated = logNswWrittenSubmitted({
+    orgId: req.user.org_id, notificationId: id, userId: req.user.id,
+    reference, notes,
+  });
+  if (wasUnsubmitted) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: existing.incident_id,
+      action: 'safework_nsw_written_submitted',
+      description: `submitted SafeWork NSW written notice for ${existing.nsw_number} (s.38(5))`,
+      user_id: req.user.id,
+      metadata: {
+        nsw_notification_id: id,
+        nsw_number: existing.nsw_number,
+        reference: reference || null,
+      },
+      ...auditCtx(req),
+    });
+  }
+  res.json(updated);
+});
+
+// POST /reports/safework-nsw/:notificationId/site-preservation — log
+// the s.39 site-preservation status + any permitted disturbance basis.
+router.post('/safework-nsw/:notificationId/site-preservation', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can update site preservation.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = db.prepare('SELECT * FROM safework_nsw_notifications WHERE id = ? AND org_id = ?')
+    .get(id, req.user.org_id);
+  if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
+
+  const { status, notes, inspector_arrived_at } = req.body || {};
+  const ALLOWED = new Set([
+    'preserved',
+    'disturbed_to_assist_injured',
+    'disturbed_to_remove_deceased',
+    'disturbed_to_make_safe',
+    'disturbed_for_police',
+    'disturbed_with_inspector_permission',
+    'released_by_inspector',
+  ]);
+  if (status && !ALLOWED.has(status)) {
+    return res.status(400).json({ error: `Invalid site_preservation_status. Allowed values: ${[...ALLOWED].join(', ')}` });
+  }
+  const updated = setNswSitePreservation({
+    orgId: req.user.org_id, notificationId: id, status, notes,
+    inspectorArrivedAt: inspector_arrived_at,
+  });
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'incident',
+    entity_id: existing.incident_id,
+    action: 'safework_nsw_site_preservation_updated',
+    description: `site preservation status set to '${status || '—'}' for ${existing.nsw_number} (s.39)`,
+    user_id: req.user.id,
+    metadata: { nsw_notification_id: id, status: status || null },
+    ...auditCtx(req),
+  });
+  res.json(updated);
+});
+
+// POST /reports/safework-nsw/:notificationId/pcbu — set PCBU identity.
+// ABN is validated via the ATO mod-89 checksum.
+router.post('/safework-nsw/:notificationId/pcbu', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can update PCBU details.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = db.prepare('SELECT * FROM safework_nsw_notifications WHERE id = ? AND org_id = ?')
+    .get(id, req.user.org_id);
+  if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
+
+  const { name, abn, anzsic_code } = req.body || {};
+  if (abn) {
+    const v = validateAbn(abn);
+    if (!v.ok) {
+      return res.status(400).json({ error: `Invalid ABN — ${v.reason}.`, abn_validation: v });
+    }
+  }
+  if (anzsic_code !== undefined && anzsic_code !== null && anzsic_code !== '') {
+    if (!/^\d{4}$/.test(String(anzsic_code))) {
+      return res.status(400).json({ error: 'ANZSIC code must be 4 digits.' });
+    }
+  }
+  const updated = setNswPcbu({
+    orgId: req.user.org_id, notificationId: id,
+    name, abn: abn ? validateAbn(abn).normalized : null, anzsicCode: anzsic_code,
+  });
   res.json(updated);
 });
 

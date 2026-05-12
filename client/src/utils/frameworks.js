@@ -14,10 +14,11 @@ const OSHA_CODES = ['osha_300', 'osha_300a', 'osha_301'];
 
 export function frameworkVisibility(user) {
   const fw = Array.isArray(user?.compliance_frameworks) ? user.compliance_frameworks : null;
-  if (fw === null) return { showOsha: true, showRiddor: true };
+  if (fw === null) return { showOsha: true, showRiddor: true, showNsw: true };
   return {
     showOsha: OSHA_CODES.some(c => fw.includes(c)),
     showRiddor: fw.includes('riddor_f2508'),
+    showNsw: fw.includes('safework_nsw'),
   };
 }
 

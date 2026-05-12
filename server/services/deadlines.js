@@ -89,7 +89,7 @@ const OSHA_SEVERE_LABEL = {
   loss_of_eye:      'OSHA 1904.39 — phone loss of eye',
 };
 
-export function computePendingDeadlines(incident, riddorReport, oshaSevereRows = []) {
+export function computePendingDeadlines(incident, riddorReport, oshaSevereRows = [], nswNotification = null) {
   if (!incident) return [];
   const out = [];
 
@@ -144,8 +144,39 @@ export function computePendingDeadlines(incident, riddorReport, oshaSevereRows =
     });
   }
 
-  // TODO: WI-06 SafeWork NSW — safework_nsw_notifications.written_deadline
-  //   + s.38(2) phone-notification "without delay" semantics.
+  // WI-06: SafeWork NSW notifications (WHS Act 2011 (NSW) Part 3).
+  // Mines & Petroleum carve-out (s.38(8) / s.39(4)): when excluded, the
+  // notification row is recorded but emits no deadlines.
+  if (nswNotification && !nswNotification.excluded_mines_petroleum) {
+    // s.38(1)/(2): "immediately after becoming aware … by the fastest
+    // possible means". Same "without delay" semantics as RIDDOR phone.
+    out.push({
+      kind: 'safework_nsw_phone',
+      jurisdiction: 'AU-NSW',
+      label: 'SafeWork NSW — phone regulator',
+      reg_ref: 'WHS Act s.38(1)',
+      deadline_at: null,
+      submitted_at: nswNotification.phone_notified_at || null,
+      status: nswNotification.phone_notified_at ? 'submitted' : 'without_delay',
+    });
+
+    // s.38(4)(b): 48 hours from regulator request. The clock starts
+    // only when the regulator asks. If they never ask, no written
+    // deadline arises — skip the entry rather than emit a phantom one.
+    if (nswNotification.regulator_requested_written_at && nswNotification.written_deadline) {
+      out.push({
+        kind: 'safework_nsw_written',
+        jurisdiction: 'AU-NSW',
+        label: 'SafeWork NSW — written notice',
+        reg_ref: 'WHS Act s.38(4)(b)',
+        deadline_at: nswNotification.written_deadline,
+        submitted_at: nswNotification.written_submitted_at || null,
+        status: nswNotification.written_submitted_at
+          ? 'submitted'
+          : statusFromDeadline(nswNotification.written_deadline),
+      });
+    }
+  }
 
   return out;
 }
@@ -201,7 +232,14 @@ export function getPendingDeadlinesForIncident(orgId, incidentId) {
     ORDER BY id ASC
   `).all(orgId, incidentId);
 
-  return computePendingDeadlines(incident, riddorReport, oshaSevereRows);
+  // WI-06: at most one safework_nsw_notifications row per incident
+  // (UNIQUE(incident_id) in migration 028).
+  const nswNotification = db.prepare(`
+    SELECT * FROM safework_nsw_notifications
+    WHERE org_id = ? AND incident_id = ?
+  `).get(orgId, incidentId) || null;
+
+  return computePendingDeadlines(incident, riddorReport, oshaSevereRows, nswNotification);
 }
 
 // Bulk helper for the incidents list handler. Given an array of
@@ -241,5 +279,20 @@ export function loadOshaSevereForIncidents(orgId, incidentIds) {
     if (!map.has(r.incident_id)) map.set(r.incident_id, []);
     map.get(r.incident_id).push(r);
   }
+  return map;
+}
+
+// WI-06 bulk helper — load all safework_nsw_notifications rows for a
+// set of incidents. Returns Map<incident_id, row> (at most one per
+// incident — UNIQUE(incident_id) is enforced by migration 028).
+export function loadNswNotificationsForIncidents(orgId, incidentIds) {
+  const map = new Map();
+  if (!Array.isArray(incidentIds) || incidentIds.length === 0) return map;
+  const placeholders = incidentIds.map(() => '?').join(',');
+  const rows = db.prepare(`
+    SELECT * FROM safework_nsw_notifications
+    WHERE org_id = ? AND incident_id IN (${placeholders})
+  `).all(orgId, ...incidentIds);
+  for (const r of rows) map.set(r.incident_id, r);
   return map;
 }

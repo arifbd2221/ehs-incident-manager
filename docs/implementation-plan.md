@@ -31,9 +31,10 @@ Defined in `plan-2026-05-11.md` Part 3. Each chunk ends with a ✋ owner checkpo
 | 7a | WI-D Jurisdiction-aware wizard + forms | ✅ Done — `2e708d0` (single FE commit: `jurisdictionForContext()` + `showField()` registry in `client/src/utils/frameworks.js`; wizard threads jurisdiction to InjuryForm + AffectedPersonModal with "Show all" override toggle; 25-test `frameworks.test.js`). |
 | 8 | WI-01 OSHA 300 PDF | ✅ Done — single BE+FE commit `b7e3507`. `server/services/pdf/osha_300.js` renderer + `?format=pdf` branch on `GET /reports/osha-300` + Download-PDF button on `Osha300Report` in `ReportsPage.jsx`. Privacy-case substitution per 29 CFR 1904.29(b)(7); per-establishment requirement per 1904.30(a). `pdfkit` landed on `server/package.json`. |
 | 9 | WI-03 OSHA 301 PDF | ✅ Done — `2d765af`. `server/services/pdf/osha_301.js` renderer + `?format=pdf` branch + Download-PDF button. Pulls primary `affected_persons` + first `injuries` row (WI-A). Manual word-wrap utility (bypasses pdfkit pagination on wrapped text). |
-| 10 | WI-07 OSHA 1904.39 severe-injury flow | ✅ Done — this turn. Migration 027 (`osha_severe_notifications`) + `server/services/osha_severe.js` (pure `evaluateSevereInjury` + DB writers). POST `/incidents` hook auto-creates rows for fatality (8h, 1904.39(a)(1)) / hospitalization (24h, 1904.39(a)(2)) / amputation / loss_of_eye — gated on `sites.country='US'`. Plug-in to `deadlines.js` aggregator (the WI-08 TODO marker). New routes `GET /reports/osha-severe/:incidentId` + `POST /reports/osha-severe/:notificationId/phone-notified`. FE: per-row "Log phone call" button + capture modal on IncidentDetail OSHA-recordable section. Audit verbs `osha_severe_opened` + `osha_severe_phone_notified`. |
-| **11** | **WI-06 SafeWork NSW** | **Next** (partly unblocked — WHS Act + factsheet PDFs landed). Still needs ANZSIC code list + Notify form for full delivery. |
-| 11+ | WI-05, WI-02, WI-09 | RIDDOR F2508 → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
+| 10 | WI-07 OSHA 1904.39 severe-injury flow | ✅ `89d0a27`. Migration 027 + `services/osha_severe.js` + auto-create POST/PATCH hooks + deadlines plug-in + FE phone-notif UI + 46-assertion e2e. |
+| 11 | WI-06 SafeWork NSW (engine + tables + routes + FE; no PDF) | ✅ Done — this turn. Migration 028 (`safework_nsw_notifications` + two seeded lookup tables with verbatim Act labels + section_refs). `services/safework_nsw.js` classification engine (s.35 categories + auto-derived s.36(a) hospitalization + explicit s.36(b)/(c) + s.37 sub-categories + Mines & Petroleum carve-out per s.38(8)/s.39(4)). `services/abn_validator.js` (ATO mod-89 checksum) + 12-test `node:test` suite. Six new routes: lookups, list, per-incident GET, phone-notified, regulator-requested-written (starts the s.38(4)(b) 48h clock), written-submitted, site-preservation (s.39 enum), PCBU (ABN-validated). Deadlines aggregator gains `safework_nsw_phone` (without_delay → submitted) and `safework_nsw_written` (only emitted after regulator request). FE: `SafeworkNswCardRows` + `SafeworkNswModal` on IncidentDetail behind `showNsw` framework gate. 57-assertion `wi06-e2e.sh`. **PDF renderer deferred to follow-up** per owner direction (no static Notify SafeWork form). |
+| **12** | **WI-06 PDF renderer (follow-up)** | After owner confirms layout from WHS Act requirements (per standing instruction: professional government styling, no logo impersonation, footer noting submission still happens via phone + online portal). Adds `services/pdf/safework_nsw.js` and a Download-PDF button on the NSW card. |
+| 12+ | WI-02 OSHA 300A + ITA, WI-09 Generic PDF, WI-05 RIDDOR F2508 (still gated) | Order may shift on hallucination-risk gate readiness. |
 
 ---
 
@@ -124,31 +125,46 @@ HSE form layout. Existing `riddor_reports.f2508_data` JSON column already holds 
 
 ---
 
-### WI-06: SafeWork NSW notification — engine + form + PDF (WHS Act 2011 (NSW) ss.36–39, WHS Reg 2017 (NSW))
+### WI-06: SafeWork NSW notification — engine + tables + routes + FE (WHS Act 2011 (NSW) ss.35–39) — ✅ DONE (engine), PDF deferred
 
-Largest in-scope item. Fully additive — all new tables, no touches to existing schema. `site_preservation_status` lives on the new NSW table only per `compliance-notes.md` §9.
+Shipped 2026-05-12 in a single BE+FE commit. Verbatim s.35–s.39 text extracted from `docs/regulatory-sources/safework-nsw/whs-act-2011-nsw.pdf` (current version for 1 March 2026 to date) and owner-approved before any code was written. PDF renderer deferred to a follow-up commit per owner direction (no static Notify SafeWork form to mirror; design will follow standing instruction on government styling + no logo impersonation + submission footer).
 
-- **Migration `0XX_safework_nsw.sql`** — new tables only:
-  - `safework_nsw_notifications` — one row per notifiable incident. Notifier details, PCBU details (legal name, trading name, ABN, address, ANZSIC code, worker count), workplace details, awareness_datetime, incident type (death/serious/dangerous), affected-person details (conditional), dangerous-incident details (conditional), `site_preservation_status` (s.39), plant/substances/equipment, witnesses summary, immediate actions, other-notifications-made, declaration, `phone_notified_at`, `written_submitted_at`, `written_deadline`. References `incidents.id`.
-  - `anzsic_codes` lookup — seeded from a user-supplied CSV. **Do not invent codes.**
-  - `safework_nsw_dangerous_incident_types` lookup — seeded from user-supplied list per s.37.
-  - `safework_nsw_serious_injury_types` lookup — seeded from user-supplied list per s.36.
-- **New services:**
-  - `server/services/safework_nsw.js` — classification engine matching ss.35–37. Pattern matches `riddor.js` / `recordability.js`.
-  - `server/services/abn_validator.js` — ATO ABN checksum (well-documented public algorithm).
-  - `server/services/pdf/safework_nsw.js` — PDF matching the SafeWork NSW Notify form.
-- **New routes:**
-  - `GET /reports/safework-nsw`, `GET /reports/safework-nsw/:id`, `GET /reports/safework-nsw/:id?format=pdf`.
-  - `POST /reports/safework-nsw/:id/phone-notified` — log s.38(2) phone notification.
-  - `POST /reports/safework-nsw/:id/written-submitted` — log s.38(4) written submission.
-- **New API client + UI:**
-  - `client/src/api/safework_nsw.js`.
-  - `client/src/pages/reports/ReportsPage.jsx` — AU section gated on `org.compliance_frameworks` including `safework_nsw`.
-  - Wizard hook: when `safework_nsw` is active and the engine flags notifiability, prompt for s.39 site preservation status + the additional NSW fields. Wizard data flows into `safework_nsw_notifications` on save — does **not** require any `incidents` column changes.
+- **Migration 028** — three additive tables, no `ALTER` on existing schema:
+  - `safework_nsw_notifications` — one row per notifiable incident (UNIQUE(incident_id)). Top-level booleans `is_fatality` (s.35(a)), `is_serious_injury` (s.35(b)), `is_dangerous_incident` (s.35(c)). Sub-categories carried as JSON arrays of lookup keys (`serious_injury_sub_categories`, `dangerous_incident_sub_categories`). s.38(8)/s.39(4) carve-out via `excluded_mines_petroleum`. s.39 site-preservation captured as a CHECK-constrained enum + free-text notes + `inspector_arrived_at`. s.38(1)/(4) phone notification fields. s.38(4)(b) written-clock fields (`regulator_requested_written_at` + computed `written_deadline = +48h` + `written_submitted_at`). PCBU identity (`pcbu_name`, `pcbu_abn`, `pcbu_anzsic_code`). Numbering: `NSW-{YYYY}-{NNNN}` via `nextNswNumber()`.
+  - `safework_nsw_serious_injury_types` — 11 rows seeded (10 enumerated s.36 + 1 "other prescribed by regulations" per the s.36 tail). Each row: `key`, `label` (verbatim Act wording), `section_ref` (e.g. `WHS Act 2011 (NSW) s.36(b)(i)`), `display_order`.
+  - `safework_nsw_dangerous_incident_types` — 12 rows (11 enumerated s.37 + 1 "other prescribed" per s.37(l)).
+- **Service** `server/services/safework_nsw.js` — pure `evaluateSafeworkNsw(incident, primaryAp, primaryInjury)` returns the intent object or null. Detection signals:
+  - **Fatality (s.35(a)):** `incidents.osha_date_of_death` OR `primaryInjury.date_of_death` set, OR explicit `type_data.safework_nsw.is_fatality`.
+  - **Serious injury (s.35(b)):** auto-derive `s36_a_inpatient_hospital` from `hospitalized=1`; all other s.36 sub-categories require explicit `type_data.safework_nsw.serious_injury_sub: string[]` (no fuzzy-match on free text, same discipline as 1904.39(b)(11)).
+  - **Dangerous incident (s.35(c)):** explicit `type_data.safework_nsw.dangerous_incident_sub: string[]` only — these describe workplace events, not injury phenotypes.
+  - **Mines & Petroleum carve-out (s.38(8)/s.39(4)):** `type_data.safework_nsw.excluded_mines_petroleum=true` short-circuits — row exists with `excluded_mines_petroleum=1`, deadlines aggregator emits nothing.
+  - Plus writers: `syncSafeworkNswNotification` (idempotent), `logPhoneNotification`, `logRegulatorRequestedWritten` (computes the 48h written_deadline), `logWrittenSubmitted`, `setSitePreservation`, `setPcbu`.
+- **POST + PATCH hooks** on `/incidents` (gated on `sites.country='AU'`) auto-create or re-classify. Idempotent.
+- **ABN validator** `server/services/abn_validator.js` — ATO mod-89 weighted-sum (algorithm per [abr.business.gov.au/Help/AbnFormat](https://abr.business.gov.au/Help/AbnFormat)). 12-test `node:test` suite at `server/scripts/abn-validator.test.js` covering `51 824 753 556` (ATO canonical example), `48 123 123 124` (second valid-checksum ABN), single-digit tweak property test (≥ 89 of 99 tweaks must break the checksum), wrong length / empty / structured-return cases.
+- **ANZSIC code** — 4-digit text format only in v1 per owner direction. ANZSIC source PDF kept in `docs/regulatory-sources/safework-nsw/` for a future code-list-seed WI.
+- **Routes** in `server/routes/reports.js`:
+  - `GET /reports/safework-nsw/lookups` (s.36 + s.37 enums)
+  - `GET /reports/safework-nsw` (list, optional `site_id` / `year` params)
+  - `GET /reports/safework-nsw/:incidentId` (per-incident)
+  - `POST /reports/safework-nsw/:id/phone-notified` (elevated-only, idempotent)
+  - `POST /reports/safework-nsw/:id/regulator-requested-written` (elevated-only — starts the 48h clock)
+  - `POST /reports/safework-nsw/:id/written-submitted` (elevated-only, idempotent)
+  - `POST /reports/safework-nsw/:id/site-preservation` (elevated-only; enum-constrained)
+  - `POST /reports/safework-nsw/:id/pcbu` (elevated-only; ABN checksum-gated; ANZSIC `/^\d{4}$/`)
+  - All routes 403 when caller's org `compliance_frameworks` lacks `safework_nsw`. Cross-tenant 404 via existing org-scoped WHERE clauses.
+- **Deadlines aggregator** — new `loadNswNotificationsForIncidents` bulk helper + per-incident loader. Emits `safework_nsw_phone` (status `without_delay` → `submitted`, reg_ref `WHS Act s.38(1)`) and `safework_nsw_written` (only when `regulator_requested_written_at` set; deadline from `written_deadline`, reg_ref `WHS Act s.38(4)(b)`). Surfaces automatically on `GET /incidents` (list), `GET /incidents/:id` (detail), and `GET /incidents/:id/deadlines`. Mines & Petroleum carve-out short-circuits to no deadlines.
+- **FE** — `client/src/api/safework_nsw.js`. `frameworkVisibility()` extended with `showNsw`. `SafeworkNswCardRows` renders s.35 categories + sub-categories (verbatim Act labels resolved from the lookup tables) + phone/written/site-preservation rows on `IncidentDetail`. `SafeworkNswModal` dispatch covers the four lifecycle actions. All gated on the `showNsw` framework flag.
+- **5 new audit verbs:** `safework_nsw_opened` (POST + PATCH), `safework_nsw_phone_notified`, `safework_nsw_regulator_requested_written`, `safework_nsw_written_submitted`, `safework_nsw_site_preservation_updated`.
+- **E2E coverage** — `server/scripts/wi06-e2e.sh` (57 assertions, all pass). Covers: lookups shape + verbatim labels, hospitalization auto-derive, explicit s.37 sub-categories, fatality via PATCH, minor incident → no row, Mines & Petroleum carve-out, AU-only gate, PATCH re-classification + idempotency, phone-notified + aggregator status flip, regulator-requested → 48h clock + written-submitted flip, s.39 site preservation, ABN checksum validation (valid normalised, invalid rejected), 4-digit ANZSIC validation, framework gate (3× 403 from non-NSW org), cross-tenant 404, activity_log entries (6 verbs), WI-C hash chain still verifies.
 
-**Hallucination-risk gate:** owner-supplied authoritative sources required for WHS Act 2011 (NSW) s.36 serious-injury enumeration, s.37 dangerous-incident enumeration, the official Notify SafeWork NSW form, and an ANZSIC code list.
+**Carry-forward TODOs:**
+- WHS Regulation 2017 (NSW) additions to the s.36 / s.37 "prescribed by regulations" tail (s.36 tail clause + s.37(l)) — deferred to a future WI when regulation source is supplied. v1 captures via the `s36_other_prescribed_by_regulations` / `s37_other_prescribed_by_regulations` lookup rows + free text.
+- s.38(7) 5-year retention obligation — satisfied implicitly by absence of deletion endpoints (per `docs/compliance-notes.md` §1).
+- s.38(8) Mines & Petroleum Sites Act 2013 path — out of scope.
+- PCBU "address" + "trading name" + "worker count" fields per original WI-06 spec — deferred (current PCBU capture is name + ABN + ANZSIC; expand when the PDF renderer lands).
+- PDF renderer (`services/pdf/safework_nsw.js`) — deferred to a follow-up commit. The data shape is ready.
 
-**Complexity:** L (≥ 2 sessions). **New tables:** 4.
+**Complexity:** L. **New tables:** 3. **Existing schema touched:** none.
 
 ---
 

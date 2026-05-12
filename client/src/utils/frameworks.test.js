@@ -17,14 +17,28 @@ const sites = [usSite, ukSite, auSite];
 
 // ─── frameworkVisibility (back-compat — already shipped) ────────────────
 
-test('frameworkVisibility: legacy user with no frameworks → showOsha + showRiddor', () => {
-  assert.deepEqual(frameworkVisibility({}), { showOsha: true, showRiddor: true });
+test('frameworkVisibility: legacy user with no frameworks → showOsha + showRiddor + showNsw', () => {
+  assert.deepEqual(frameworkVisibility({}), { showOsha: true, showRiddor: true, showNsw: true });
 });
 
 test('frameworkVisibility: RIDDOR-only org', () => {
   assert.deepEqual(
     frameworkVisibility({ compliance_frameworks: ['riddor_f2508'] }),
-    { showOsha: false, showRiddor: true },
+    { showOsha: false, showRiddor: true, showNsw: false },
+  );
+});
+
+test('frameworkVisibility: SafeWork NSW-only org', () => {
+  assert.deepEqual(
+    frameworkVisibility({ compliance_frameworks: ['safework_nsw'] }),
+    { showOsha: false, showRiddor: false, showNsw: true },
+  );
+});
+
+test('frameworkVisibility: multi-framework org gets all three flags', () => {
+  assert.deepEqual(
+    frameworkVisibility({ compliance_frameworks: ['osha_300', 'riddor_f2508', 'safework_nsw'] }),
+    { showOsha: true, showRiddor: true, showNsw: true },
   );
 });
 

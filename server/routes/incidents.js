@@ -21,9 +21,11 @@ import {
   getPendingDeadlinesForIncident,
   loadRiddorReportsForIncidents,
   loadOshaSevereForIncidents,
+  loadNswNotificationsForIncidents,
   mostUrgent,
 } from '../services/deadlines.js';
 import { syncSevereNotifications } from '../services/osha_severe.js';
+import { syncSafeworkNswNotification } from '../services/safework_nsw.js';
 import {
   upsertPrimaryFromLegacy,
   bulkInsertFromArray,
@@ -279,11 +281,13 @@ router.get('/', (req, res) => {
   const incidentIds = incidents.map(i => i.id);
   const riddorMap = loadRiddorReportsForIncidents(incidentIds);
   const oshaSevereMap = loadOshaSevereForIncidents(req.user.org_id, incidentIds);
+  const nswMap = loadNswNotificationsForIncidents(req.user.org_id, incidentIds);
   for (const inc of incidents) {
     const deadlines = computePendingDeadlines(
       inc,
       riddorMap.get(inc.id),
       oshaSevereMap.get(inc.id) || [],
+      nswMap.get(inc.id) || null,
     );
     inc.pending_deadlines = deadlines;
     inc.most_urgent_deadline = mostUrgent(deadlines);
@@ -656,6 +660,52 @@ router.post('/', async (req, res, next) => {
     console.error('[WI-07] syncSevereNotifications failed for incident', incidentId, severeErr);
   }
   } // close `if (site?.country === 'US')`
+
+  // --- WI-06: SafeWork NSW notifiable incidents ---
+  // WHS Act 2011 (NSW) Part 3. Gated on site.country = 'AU' so US / UK
+  // incidents don't get a phantom NSW notification. The classifier
+  // returns null when the incident doesn't meet s.35/s.36/s.37 criteria.
+  if (site?.country === 'AU') {
+    try {
+      const justCreatedIncident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incidentId);
+      const aps = db.prepare(`
+        SELECT * FROM affected_persons
+        WHERE org_id = ? AND incident_id = ? AND deleted_at IS NULL
+        ORDER BY is_primary DESC, id ASC
+      `).all(orgId, incidentId);
+      const primaryAp = aps.find(p => p.is_primary === 1) || aps[0] || null;
+      const primaryInj = primaryAp
+        ? db.prepare(`SELECT * FROM injuries WHERE org_id = ? AND affected_person_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1`)
+            .get(orgId, primaryAp.id)
+        : null;
+      const result = syncSafeworkNswNotification({
+        orgId, incidentId, incident: justCreatedIncident,
+        primaryAp, primaryInjury: primaryInj,
+        userId: anonymous ? null : req.user.id,
+      });
+      if (result?.created) {
+        writeActivity({
+          org_id: orgId,
+          entity_type: 'incident',
+          entity_id: incidentId,
+          action: 'safework_nsw_opened',
+          description: `opened SafeWork NSW notification ${result.row.nsw_number} per WHS Act 2011 (NSW) Part 3`,
+          user_id: anonymous ? null : req.user.id,
+          metadata: {
+            nsw_notification_id: result.row.id,
+            nsw_number: result.row.nsw_number,
+            is_fatality: result.row.is_fatality,
+            is_serious_injury: result.row.is_serious_injury,
+            is_dangerous_incident: result.row.is_dangerous_incident,
+            excluded_mines_petroleum: result.row.excluded_mines_petroleum,
+          },
+          ...auditCtx(req),
+        });
+      }
+    } catch (nswErr) {
+      console.error('[WI-06] syncSafeworkNswNotification failed for incident', incidentId, nswErr);
+    }
+  }
 
   if (riddor.reportable) {
     const riddorNum = nextRiddorNumber();
@@ -1429,6 +1479,65 @@ router.patch('/:id', (req, res) => {
         }
       } catch (severeErr) {
         console.error('[WI-07] syncSevereNotifications on PATCH failed for incident', incident.id, severeErr);
+      }
+    }
+  }
+
+  // WI-06: re-run SafeWork NSW classification on PATCH for the same
+  // trigger fields (osha_date_of_death = death; hospitalized = s.36(a);
+  // type_data.safework_nsw.* updates the sub-categories or mines flag).
+  // Gated on site.country='AU'. syncSafeworkNswNotification is
+  // idempotent (UNIQUE(incident_id)).
+  const wi06Triggered = (
+    req.body.osha_date_of_death !== undefined ||
+    req.body.hospitalized !== undefined ||
+    (req.body.type_data && (
+      req.body.type_data.safework_nsw !== undefined ||
+      Object.prototype.hasOwnProperty.call(req.body.type_data, 'safework_nsw')
+    ))
+  );
+  if (wi06Triggered) {
+    const patchedIncident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(req.params.id);
+    const patchedSite = db.prepare('SELECT country FROM sites WHERE id = ?').get(patchedIncident.site_id);
+    if (patchedSite?.country === 'AU') {
+      try {
+        const aps = db.prepare(`
+          SELECT * FROM affected_persons
+          WHERE org_id = ? AND incident_id = ? AND deleted_at IS NULL
+          ORDER BY is_primary DESC, id ASC
+        `).all(incident.org_id, incident.id);
+        const primaryAp = aps.find(p => p.is_primary === 1) || aps[0] || null;
+        const primaryInj = primaryAp
+          ? db.prepare(`SELECT * FROM injuries WHERE org_id = ? AND affected_person_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1`)
+              .get(incident.org_id, primaryAp.id)
+          : null;
+        const result = syncSafeworkNswNotification({
+          orgId: incident.org_id, incidentId: incident.id,
+          incident: patchedIncident, primaryAp, primaryInjury: primaryInj,
+          userId: req.user.id,
+        });
+        if (result?.created) {
+          writeActivity({
+            org_id: incident.org_id,
+            entity_type: 'incident',
+            entity_id: incident.id,
+            action: 'safework_nsw_opened',
+            description: `opened SafeWork NSW notification ${result.row.nsw_number} on PATCH per WHS Act 2011 (NSW) Part 3`,
+            user_id: req.user.id,
+            metadata: {
+              nsw_notification_id: result.row.id,
+              nsw_number: result.row.nsw_number,
+              is_fatality: result.row.is_fatality,
+              is_serious_injury: result.row.is_serious_injury,
+              is_dangerous_incident: result.row.is_dangerous_incident,
+              excluded_mines_petroleum: result.row.excluded_mines_petroleum,
+              triggered_by: 'patch',
+            },
+            ...auditCtx(req),
+          });
+        }
+      } catch (nswErr) {
+        console.error('[WI-06] syncSafeworkNswNotification on PATCH failed for incident', incident.id, nswErr);
       }
     }
   }

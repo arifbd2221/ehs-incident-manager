@@ -3,6 +3,14 @@ import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness, requestClosure, approveClosure, rejectClosure, reopenIncident, forceCloseIncident, getAffectedPersons, deleteAffectedPerson } from '../../api/incidents';
 import { getOshaSevere, logOshaSeverePhoneNotified } from '../../api/reports';
+import {
+  getSafeworkNswForIncident,
+  getSafeworkNswLookups,
+  logSafeworkNswPhoneNotified,
+  logSafeworkNswRegulatorRequested,
+  logSafeworkNswWrittenSubmitted,
+  setSafeworkNswSitePreservation,
+} from '../../api/safework_nsw';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
@@ -171,7 +179,7 @@ export default function IncidentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { showOsha, showRiddor } = frameworkVisibility(user);
+  const { showOsha, showRiddor, showNsw } = frameworkVisibility(user);
   const canVerify = ELEVATED_ROLES.has(user?.role);
   const canEdit = ELEVATED_ROLES.has(user?.role);
   const [incident, setIncident] = useState(null);
@@ -190,6 +198,11 @@ export default function IncidentDetail() {
   const [oshaSevere, setOshaSevere] = useState([]);
   // null = closed; severeRow = open for that row.
   const [logSevereTarget, setLogSevereTarget] = useState(null);
+  // WI-06: SafeWork NSW notification (at most one per incident; null if not notifiable).
+  const [nswNotification, setNswNotification] = useState(null);
+  const [nswLookups, setNswLookups] = useState({ serious_injury_types: [], dangerous_incident_types: [] });
+  // 'phone' | 'regulator-requested' | 'written' | 'site-preservation' | null
+  const [nswModal, setNswModal] = useState(null);
 
   const [affectedPersons, setAffectedPersons] = useState([]);
   const [apModalOpen, setApModalOpen] = useState(false);
@@ -208,6 +221,15 @@ export default function IncidentDetail() {
     // WI-07: fetch any auto-created 1904.39 severe notifications for this
     // incident. Empty array for incidents that don't trigger any category.
     getOshaSevere(id).then(setOshaSevere).catch(() => setOshaSevere([]));
+    // WI-06: SafeWork NSW notification (gated on org framework). 404
+    // when the incident is not notifiable; treat as "no row" silently.
+    if (showNsw) {
+      getSafeworkNswForIncident(id).then(setNswNotification).catch(() => setNswNotification(null));
+      // Lookups load lazily; ok to fetch every load — small payload, cached upstream.
+      if (nswLookups.serious_injury_types.length === 0) {
+        getSafeworkNswLookups().then(setNswLookups).catch(() => {});
+      }
+    }
   };
   useEffect(load, [id]);
 
@@ -935,6 +957,15 @@ export default function IncidentDetail() {
                     )}
                   </>
                 )}
+                {/* WI-06: SafeWork NSW notification (WHS Act 2011 (NSW) Part 3) */}
+                {showNsw && nswNotification && (
+                  <SafeworkNswCardRows
+                    notification={nswNotification}
+                    lookups={nswLookups}
+                    canVerify={canVerify}
+                    onAction={(action) => setNswModal(action)}
+                  />
+                )}
                 <div className="idet-triage-divider"/>
                 <div className="idet-triage-row">
                   <span className="idet-triage-label">Incident date</span>
@@ -1174,6 +1205,15 @@ export default function IncidentDetail() {
         />,
         document.body
       )}
+      {nswModal && nswNotification && createPortal(
+        <SafeworkNswModal
+          mode={nswModal}
+          notification={nswNotification}
+          onClose={() => setNswModal(null)}
+          onSaved={() => { setNswModal(null); load(); }}
+        />,
+        document.body
+      )}
       {witnessModal === 'add' && createPortal(<WitnessModal incident={r} onCancel={() => setWitnessModal(null)} onConfirm={handleAddWitness}/>, document.body)}
       {witnessModal && witnessModal !== 'add' && createPortal(<WitnessModal incident={r} witness={witnessModal} onCancel={() => setWitnessModal(null)} onConfirm={handleUpdateWitness}/>, document.body)}
       <AffectedPersonModal
@@ -1277,6 +1317,272 @@ function LogOshaSevereModal({ target, onClose, onSaved }) {
           <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="btn btn-primary" onClick={submit} disabled={saving}>
             {saving ? 'Saving…' : 'Mark notified'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// WI-06: rows rendered inside the Details card when the incident is a
+// SafeWork NSW notifiable event. Shows the s.35 categories, sub-category
+// summaries, phone/written status, site-preservation, and per-row
+// action buttons that open the dedicated modal.
+const SITE_PRESERVATION_LABELS = {
+  preserved: 'Preserved',
+  disturbed_to_assist_injured: 'Disturbed — to assist injured (s.39(3)(a))',
+  disturbed_to_remove_deceased: 'Disturbed — to remove deceased (s.39(3)(b))',
+  disturbed_to_make_safe: 'Disturbed — to make safe (s.39(3)(c))',
+  disturbed_for_police: 'Disturbed — police investigation (s.39(3)(d))',
+  disturbed_with_inspector_permission: 'Disturbed — inspector permission (s.39(3)(e))',
+  released_by_inspector: 'Released by inspector',
+};
+
+function SafeworkNswCardRows({ notification, lookups, canVerify, onAction }) {
+  const n = notification;
+  const s36Map = new Map((lookups.serious_injury_types || []).map(x => [x.key, x]));
+  const s37Map = new Map((lookups.dangerous_incident_types || []).map(x => [x.key, x]));
+
+  return (
+    <>
+      <div className="idet-triage-divider"/>
+      <div className="idet-triage-row">
+        <span className="idet-triage-label">SafeWork NSW</span>
+        <span className="inc-card-status st-capa">
+          <span className="st-dot" style={{ background: '#dc2626' }}/>
+          {n.nsw_number}
+        </span>
+      </div>
+      {!!n.excluded_mines_petroleum && (
+        <div className="idet-triage-row">
+          <span className="idet-triage-label">Status</span>
+          <span style={{ fontSize: 12, color: 'var(--sds-fg-secondary)' }}>
+            Not notifiable under WHS Act 2011 — Mines &amp; Petroleum (s.38(8) / s.39(4))
+          </span>
+        </div>
+      )}
+      {!n.excluded_mines_petroleum && (
+        <>
+          {/* s.35 top-level categories */}
+          <div className="idet-triage-row">
+            <span className="idet-triage-label">Category</span>
+            <span style={{ fontSize: 12, color: 'var(--sds-fg-secondary)' }}>
+              {[
+                n.is_fatality ? 'Death (s.35(a))' : null,
+                n.is_serious_injury ? 'Serious injury (s.35(b))' : null,
+                n.is_dangerous_incident ? 'Dangerous incident (s.35(c))' : null,
+              ].filter(Boolean).join(' · ') || '—'}
+            </span>
+          </div>
+
+          {/* s.36 sub-categories selected */}
+          {n.is_serious_injury && n.serious_injury_sub_categories?.length > 0 && (
+            <div className="idet-triage-row" style={{ alignItems: 'flex-start' }}>
+              <span className="idet-triage-label">s.36 sub-categories</span>
+              <span style={{ fontSize: 11, color: 'var(--sds-fg-secondary)', textAlign: 'right' }}>
+                {n.serious_injury_sub_categories.map(k => (s36Map.get(k)?.label || k)).join(' · ')}
+              </span>
+            </div>
+          )}
+
+          {/* s.37 sub-categories selected */}
+          {n.is_dangerous_incident && n.dangerous_incident_sub_categories?.length > 0 && (
+            <div className="idet-triage-row" style={{ alignItems: 'flex-start' }}>
+              <span className="idet-triage-label">s.37 sub-categories</span>
+              <span style={{ fontSize: 11, color: 'var(--sds-fg-secondary)', textAlign: 'right' }}>
+                {n.dangerous_incident_sub_categories.map(k => (s37Map.get(k)?.label || k)).join(' · ')}
+              </span>
+            </div>
+          )}
+
+          {/* s.38(1) phone notification */}
+          <div className="idet-triage-row">
+            <span className="idet-triage-label">s.38(1) phone</span>
+            {n.phone_notified_at ? (
+              <span className="inc-card-status st-closed" title={`Notified ${n.phone_notified_at}${n.phone_regulator_office ? ' — ' + n.phone_regulator_office : ''}`}>
+                <span className="st-dot"/>Notified
+              </span>
+            ) : canVerify ? (
+              <button className="btn btn-secondary btn-sm" onClick={() => onAction('phone')}>
+                <Icon name="phone" size={13}/>Log phone call
+              </button>
+            ) : (
+              <span className="inc-card-status st-triage"><span className="st-dot"/>Pending</span>
+            )}
+          </div>
+
+          {/* s.38(4)(b) regulator-requested written + s.38(5) written submission */}
+          <div className="idet-triage-row">
+            <span className="idet-triage-label">s.38(4)(b) written</span>
+            {n.written_submitted_at ? (
+              <span className="inc-card-status st-closed" title={`Submitted ${n.written_submitted_at}${n.written_reference ? ' — ' + n.written_reference : ''}`}>
+                <span className="st-dot"/>Submitted
+              </span>
+            ) : n.regulator_requested_written_at ? (
+              canVerify ? (
+                <button className="btn btn-secondary btn-sm" onClick={() => onAction('written')}
+                  title={`Regulator requested ${n.regulator_requested_written_at} — due by ${new Date(n.written_deadline).toLocaleString()}`}
+                >
+                  <Icon name="file" size={13}/>Log written submission
+                </button>
+              ) : (
+                <span className="inc-card-status st-triage"><span className="st-dot"/>Awaiting submission</span>
+              )
+            ) : canVerify ? (
+              <button className="btn btn-secondary btn-sm" onClick={() => onAction('regulator-requested')}
+                title="Only set after the regulator actually asks for a written notice. Starts the 48-hour clock."
+              >
+                <Icon name="edit" size={13}/>Regulator requested
+              </button>
+            ) : (
+              <span style={{ fontSize: 11, color: 'var(--sds-fg-tertiary)' }}>
+                No written deadline yet — call regulator first
+              </span>
+            )}
+          </div>
+
+          {/* s.39 site preservation */}
+          <div className="idet-triage-row">
+            <span className="idet-triage-label">s.39 site preservation</span>
+            {n.site_preservation_status ? (
+              <span style={{ fontSize: 11, color: 'var(--sds-fg-secondary)' }}>
+                {SITE_PRESERVATION_LABELS[n.site_preservation_status] || n.site_preservation_status}
+              </span>
+            ) : canVerify ? (
+              <button className="btn btn-secondary btn-sm" onClick={() => onAction('site-preservation')}>
+                <Icon name="shield" size={13}/>Set status
+              </button>
+            ) : (
+              <span className="inc-card-status st-triage"><span className="st-dot"/>Not captured</span>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// WI-06: dispatch modal for the four NSW lifecycle write paths.
+//   mode = 'phone' | 'regulator-requested' | 'written' | 'site-preservation'
+function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  // Field state — only the fields each mode needs are used.
+  const [regulatorOffice, setRegulatorOffice] = useState('');
+  const [notes, setNotes] = useState('');
+  const [reference, setReference] = useState('');
+  const [statusVal, setStatusVal] = useState(notification.site_preservation_status || 'preserved');
+  const [inspectorArrivedAt, setInspectorArrivedAt] = useState('');
+
+  const submit = async () => {
+    setSaving(true); setError('');
+    try {
+      if (mode === 'phone') {
+        await logSafeworkNswPhoneNotified(notification.id, {
+          regulator_office: regulatorOffice.trim() || undefined,
+          notes: notes.trim() || undefined,
+        });
+      } else if (mode === 'regulator-requested') {
+        await logSafeworkNswRegulatorRequested(notification.id, {});
+      } else if (mode === 'written') {
+        await logSafeworkNswWrittenSubmitted(notification.id, {
+          reference: reference.trim() || undefined,
+          notes: notes.trim() || undefined,
+        });
+      } else if (mode === 'site-preservation') {
+        await setSafeworkNswSitePreservation(notification.id, {
+          status: statusVal,
+          notes: notes.trim() || undefined,
+          inspector_arrived_at: inspectorArrivedAt || undefined,
+        });
+      }
+      onSaved();
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to save.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const title = {
+    'phone': `SafeWork NSW — log phone call (s.38(1))`,
+    'regulator-requested': `Regulator requested written notice (s.38(4)(b))`,
+    'written': `Submit written notice (s.38(5))`,
+    'site-preservation': `Site preservation status (s.39)`,
+  }[mode];
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-h">
+          <div>
+            <div className="modal-title">{title}</div>
+            <div className="modal-sub">{notification.nsw_number}</div>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Icon name="close" size={18}/></button>
+        </div>
+        <div className="modal-body">
+          {mode === 'phone' && (
+            <>
+              <div className="field">
+                <label className="label">Regulator office</label>
+                <input className="input" value={regulatorOffice} onChange={e => setRegulatorOffice(e.target.value)} placeholder="e.g. SafeWork NSW — Sydney"/>
+                <span className="helper">Per s.38(1)/(2) — "the fastest possible means".</span>
+              </div>
+              <div className="field">
+                <label className="label">Notes</label>
+                <textarea className="textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Who you spoke with, what you reported."/>
+              </div>
+            </>
+          )}
+          {mode === 'regulator-requested' && (
+            <div className="field">
+              <span className="helper">
+                Confirm that the regulator has formally asked you for a written notice. This starts
+                the 48-hour clock under WHS Act s.38(4)(b). The deadline is automatically computed
+                as 48 hours from now.
+              </span>
+            </div>
+          )}
+          {mode === 'written' && (
+            <>
+              <div className="field">
+                <label className="label">Regulator case reference</label>
+                <input className="input" value={reference} onChange={e => setReference(e.target.value)} placeholder="SafeWork case # if issued"/>
+              </div>
+              <div className="field">
+                <label className="label">Notes</label>
+                <textarea className="textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Method (email / portal), recipient, attachments."/>
+              </div>
+            </>
+          )}
+          {mode === 'site-preservation' && (
+            <>
+              <div className="field">
+                <label className="label">Status <span className="req">*</span></label>
+                <select className="select" value={statusVal} onChange={e => setStatusVal(e.target.value)}>
+                  {Object.entries(SITE_PRESERVATION_LABELS).map(([k, label]) => (
+                    <option key={k} value={k}>{label}</option>
+                  ))}
+                </select>
+                <span className="helper">Per WHS Act s.39 — site must not be disturbed until an inspector arrives, except as permitted by s.39(3).</span>
+              </div>
+              <div className="field">
+                <label className="label">Notes</label>
+                <textarea className="textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Reason for any disturbance; actions taken."/>
+              </div>
+              <div className="field">
+                <label className="label">Inspector arrived at (optional)</label>
+                <input className="input" type="datetime-local" value={inspectorArrivedAt} onChange={e => setInspectorArrivedAt(e.target.value)}/>
+              </div>
+            </>
+          )}
+          {error && <div className="helper" style={{ color: 'var(--sds-error)' }}>{error}</div>}
+        </div>
+        <div className="modal-f">
+          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-primary" onClick={submit} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
