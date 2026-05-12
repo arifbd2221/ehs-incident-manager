@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
-import { calculateMetrics } from '../services/metrics.js';
+import { calculateMetrics, calculateOrgMetrics } from '../services/metrics.js';
 import { writeActivity, auditCtx } from '../services/activity_log.js';
 import { AUDIT_ACTIONS_CATALOG } from '../services/audit_actions_catalog.js';
 import { verifyChain } from '../db/activity_log_chain.js';
@@ -1265,9 +1265,12 @@ router.get('/riddor', (req, res) => {
 
 router.get('/metrics', (req, res) => {
   const { site_id } = req.query;
-  if (!site_id) return res.status(400).json({ error: 'site_id is required' });
-  const metrics = calculateMetrics(Number(site_id));
-  res.json(metrics);
+  if (!site_id) {
+    // All-sites view — pool every site in the org and apply the OSHA
+    // 200,000-hour denominator once at the end (calculateOrgMetrics).
+    return res.json({ scope: 'org', ...calculateOrgMetrics(req.user.org_id) });
+  }
+  res.json({ scope: 'site', ...calculateMetrics(Number(site_id)) });
 });
 
 // ---------------------------------------------------------------------------
