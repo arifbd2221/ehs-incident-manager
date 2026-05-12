@@ -42,6 +42,7 @@
 // reason and the WI-01 precedent.
 
 import PDFDocument from 'pdfkit';
+import { embedOrgLogo } from './logo.js';
 
 const PAGE_OPTS = {
   layout: 'portrait',
@@ -214,11 +215,15 @@ function drawSectionHeader(doc, x, y, w, text) {
   doc.restore();
 }
 
-function drawHeader(doc, { incidentNumber, year }) {
+function drawHeader(doc, { incidentNumber, year, orgLogoPath }) {
   doc.font(FONT_BOLD).fontSize(11).fillColor('#000000');
   doc.text("OSHA's Form 301 (Rev. 04/2004)", 36, 36, { lineBreak: false });
   doc.font(FONT_BOLD).fontSize(16);
   doc.text('Injury and Illness Incident Report', 36, 50, { lineBreak: false });
+
+  // Optional org logo — top-right corner, conservative size to preserve
+  // the form-equivalent claim under 1904.29(b)(4).
+  embedOrgLogo(doc, orgLogoPath, 470, 32, 100, 38);
 
   doc.font(FONT_REG).fontSize(7).fillColor('#444444');
   doc.text(
@@ -430,6 +435,7 @@ export function renderOsha301Pdf(res, payload) {
   drawHeader(doc, {
     incidentNumber: payload.incidentNumber,
     year: payload.year,
+    orgLogoPath: payload.orgLogoPath || null,
   });
 
   let y = 140;

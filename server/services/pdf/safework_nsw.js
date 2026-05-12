@@ -27,6 +27,7 @@
 // organisation's choice.
 
 import PDFDocument from 'pdfkit';
+import { embedOrgLogo } from './logo.js';
 
 const PAGE_OPTS = {
   layout: 'portrait',
@@ -200,16 +201,22 @@ function drawSeparator(doc, x, y, w) {
 // ---------------------------------------------------------------------------
 
 function drawFirstPageHeader(doc, ctx) {
-  const { orgName, notification } = ctx;
+  const { orgName, notification, orgLogoPath } = ctx;
   doc.save();
 
-  // Title block — left-aligned, conservative weight. No logo, no banner
-  // imagery. The intention is "professional internal document", not
-  // "regulator-issued certificate".
+  // Title block — left-aligned, conservative weight. The intention is
+  // "professional internal document", not "regulator-issued
+  // certificate". The org logo (if configured) embeds to the right of
+  // the title block at a deliberately small size; the regulator's
+  // identity is conveyed by the title text, not the logo.
   doc.font(FONT_BOLD).fontSize(14).fillColor('#000000');
-  doc.text(INTERNAL_TITLE, LEFT_X, 36, { width: USABLE_W * 0.7, lineBreak: false });
+  doc.text(INTERNAL_TITLE, LEFT_X, 36, { width: USABLE_W * 0.55, lineBreak: false });
   doc.font(FONT_REG).fontSize(8).fillColor('#444444');
-  doc.text(INTERNAL_SUBTITLE, LEFT_X, 54, { width: USABLE_W * 0.7, lineBreak: false });
+  doc.text(INTERNAL_SUBTITLE, LEFT_X, 54, { width: USABLE_W * 0.55, lineBreak: false });
+
+  // Logo slot between the title and the reference column (top-centre,
+  // 40px tall). No-op when not configured.
+  embedOrgLogo(doc, orgLogoPath, LEFT_X + USABLE_W * 0.56, 34, USABLE_W * 0.14, 38);
 
   // Right-side reference column — NSW number + event date stamped like
   // a control number on a government form.
@@ -278,12 +285,16 @@ function drawFooter(doc, generatedAt) {
 function sectionNotifyingEntity(doc, y, ctx) {
   const { notification, incident, site, orgName } = ctx;
   y = drawSectionHeader(doc, LEFT_X, y, USABLE_W, '1. Notifying entity (PCBU)', ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Organisation',  orgName, ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'PCBU name',     notification.pcbu_name, ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'ABN',           notification.pcbu_abn, ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'ANZSIC code',   notification.pcbu_anzsic_code, ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Site',          site?.name, ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Site address',  site?.address, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Organisation',     orgName, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'PCBU name',        notification.pcbu_name, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'PCBU trading name', notification.pcbu_trading_name, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'PCBU address',     notification.pcbu_address, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'ABN',              notification.pcbu_abn, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'ANZSIC code',      notification.pcbu_anzsic_code, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Worker count',
+    notification.pcbu_worker_count != null ? String(notification.pcbu_worker_count) : null, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Site',             site?.name, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Site address',     site?.address, ctx);
   y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Incident number (linked)', incident?.incident_number, ctx);
   return y + 6;
 }
@@ -472,6 +483,7 @@ export function renderSafeworkNswPdf(res, payload) {
 
   const ctx = {
     orgName: payload.orgName || '',
+    orgLogoPath: payload.orgLogoPath || null,
     notification: payload.notification,
     incident: payload.incident,
     site: payload.site,

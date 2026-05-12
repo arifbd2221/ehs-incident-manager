@@ -18,6 +18,7 @@
 // the OSHA-fillable PDF but preserves the same information set.
 
 import PDFDocument from 'pdfkit';
+import { embedOrgLogo } from './logo.js';
 
 const PAGE_OPTS = {
   layout: 'portrait',
@@ -50,11 +51,14 @@ const EMPLOYER_PENALTY_STATEMENT =
   'including time to review the instruction, search and gather the data needed, and complete and review the ' +
   'collection of information. Knowingly falsifying this document may result in a fine.';
 
-function drawHeader(doc, { year, certified }) {
+function drawHeader(doc, { year, certified, orgLogoPath }) {
   doc.font(FONT_BOLD).fontSize(11).fillColor('#000000');
   doc.text('OSHA’s Form 300A (Rev. 04/2004)', LEFT_X, 36, { lineBreak: false });
   doc.font(FONT_BOLD).fontSize(16);
   doc.text('Summary of Work-Related Injuries and Illnesses', LEFT_X, 50, { lineBreak: false });
+
+  // Optional org logo, between the title block and the Year/CERTIFIED column.
+  embedOrgLogo(doc, orgLogoPath, 380, 32, 80, 32);
 
   // Right-side: Year + cert status badge.
   doc.font(FONT_BOLD).fontSize(11).fillColor('#000000');
@@ -184,7 +188,7 @@ export function renderOsha300APdf(res, payload) {
   const doc = new PDFDocument(PAGE_OPTS);
   doc.pipe(res);
 
-  drawHeader(doc, { year: payload.year, certified: !!payload.certified });
+  drawHeader(doc, { year: payload.year, certified: !!payload.certified, orgLogoPath: payload.orgLogoPath || null });
 
   let y = 116;
 

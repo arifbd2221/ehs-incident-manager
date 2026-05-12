@@ -137,6 +137,8 @@ export const AUDIT_ACTIONS_CATALOG = [
 
   // Organization
   { entity_type: 'organization', action: 'org_created' },
+  { entity_type: 'organization', action: 'organization_logo_updated' },
+  { entity_type: 'organization', action: 'organization_logo_removed' },
 
   // System / cross-cutting
   { entity_type: 'system', action: 'voice_extracted' },

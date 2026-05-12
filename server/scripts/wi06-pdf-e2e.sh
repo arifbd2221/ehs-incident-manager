@@ -286,6 +286,38 @@ echo "$F_TXT" | grep -qF "NSW/2026/12345" \
 
 # ============================================================
 echo ""
+echo "== Section G — PCBU extended fields (WI-06 follow-up, mig 033) =="
+# ============================================================
+
+# Set the full PCBU set (registered name + trading name + ABN + ANZSIC
+# + address + worker_count), download a fresh PDF, and assert each
+# value renders in the Notifying-entity section.
+curl -s -X POST "$BASE/api/reports/safework-nsw/$NSW_NID/pcbu" \
+  -H "Authorization: Bearer $SYDNEY" -H "Content-Type: application/json" \
+  -d '{"name":"Sydney Smelters Pty Ltd","trading_name":"Sydney Smelters","abn":"51 824 753 556","anzsic_code":"2412","address":"1 Industrial Way, Sydney NSW 2000","worker_count":47}' > /dev/null
+
+rm -f /tmp/wi06pdf_g.pdf
+curl -s -o /tmp/wi06pdf_g.pdf "$BASE/api/reports/safework-nsw/$INC_ID?format=pdf" -H "Authorization: Bearer $SYDNEY" > /dev/null
+G_TXT=$(pdftotext -layout /tmp/wi06pdf_g.pdf - 2>/dev/null)
+
+echo "$G_TXT" | grep -qF "Sydney Smelters Pty Ltd" \
+  && run "G1: PCBU registered name surfaces"     "yes" "yes" \
+  || run "G1: PCBU registered name surfaces"     "yes" "no"
+echo "$G_TXT" | grep -qF "Sydney Smelters" \
+  && run "G2: PCBU trading name surfaces"        "yes" "yes" \
+  || run "G2: PCBU trading name surfaces"        "yes" "no"
+echo "$G_TXT" | grep -qF "1 Industrial Way" \
+  && run "G3: PCBU address surfaces"             "yes" "yes" \
+  || run "G3: PCBU address surfaces"             "yes" "no"
+echo "$G_TXT" | grep -qF "51824753556" \
+  && run "G4: normalised ABN surfaces"           "yes" "yes" \
+  || run "G4: normalised ABN surfaces"           "yes" "no"
+echo "$G_TXT" | grep -qF "47" \
+  && run "G5: worker_count surfaces"             "yes" "yes" \
+  || run "G5: worker_count surfaces"             "yes" "no"
+
+# ============================================================
+echo ""
 echo "================================================================"
 echo "  PASS=$PASS  FAIL=$FAIL"
 echo "================================================================"

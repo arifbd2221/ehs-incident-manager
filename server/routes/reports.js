@@ -8,6 +8,7 @@ import { renderOsha300Pdf } from '../services/pdf/osha_300.js';
 import { renderOsha301Pdf } from '../services/pdf/osha_301.js';
 import { renderGenericIncidentPdf, ALL_SECTIONS as GENERIC_ALL_SECTIONS } from '../services/pdf/generic_incident.js';
 import { renderSafeworkNswPdf } from '../services/pdf/safework_nsw.js';
+import { resolveOrgLogoPath } from '../services/pdf/logo.js';
 import { listAffectedPersons } from '../services/affected_persons.js';
 import {
   listSevereNotificationsForIncident,
@@ -25,6 +26,8 @@ import {
   logWrittenSubmitted as logNswWrittenSubmitted,
   setSitePreservation as setNswSitePreservation,
   setPcbu as setNswPcbu,
+  listAnzsicCodes,
+  isAnzsicTableSeeded,
 } from '../services/safework_nsw.js';
 import { validateAbn } from '../services/abn_validator.js';
 import {
@@ -113,7 +116,7 @@ router.get('/osha-300', (req, res) => {
     if (!site) {
       return res.status(400).json({ error: 'site_id is required for PDF format (one Log per establishment, 29 CFR 1904.30(a)).' });
     }
-    const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+    const org = db.prepare('SELECT name, logo_path FROM organizations WHERE id = ?').get(orgId);
     const filename = `osha-300-${(site.establishment_id || site.name || 'site').toString().replace(/[^A-Za-z0-9_.-]/g, '_')}-${currentYear}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -138,6 +141,7 @@ router.get('/osha-300', (req, res) => {
       entries,
       site,
       orgName: org?.name || '',
+      orgLogoPath: resolveOrgLogoPath(org?.logo_path),
     });
   }
 
@@ -176,7 +180,7 @@ router.get('/osha-300a', (req, res) => {
   // --- PDF / CSV download branches ---
   if (format === 'pdf' || format === 'csv') {
     const baseFn = (site.establishment_id || site.name || 'site').toString().replace(/[^A-Za-z0-9_.-]/g, '_');
-    const company = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+    const company = db.prepare('SELECT name, logo_path FROM organizations WHERE id = ?').get(orgId);
 
     if (format === 'pdf') {
       const filename = `osha-300a-${baseFn}-${currentYear}.pdf`;
@@ -210,6 +214,7 @@ router.get('/osha-300a', (req, res) => {
           certifier_title_label: snapshot.certifier_title_label,
         } : null,
         companyName: company?.name || '',
+        orgLogoPath: resolveOrgLogoPath(company?.logo_path),
       });
     }
 
@@ -223,16 +228,16 @@ router.get('/osha-300a', (req, res) => {
           spec_ref: '29 CFR 1904.32(b)(3), 29 CFR 1904.41(a)(1)',
         });
       }
-      // Pull the supplemental fields not on the cert snapshot: company
-      // name + city/state/zip + industry_description + size +
-      // establishment_type + change_reason. v1 takes them from query
-      // string so the FE can pre-fill from a confirmation modal.
+      // EIN + city/state/zip are now persisted on the cert snapshot
+      // itself (WI-02 carry-forward, migration 032). Falling back to
+      // query string only for legacy snapshots that were certified
+      // before that migration landed.
       const extra = {
         company_name: req.query.company_name || company?.name || '',
-        ein: req.query.ein || '',
-        city: req.query.city || '',
-        state: req.query.state || '',
-        zip: req.query.zip || '',
+        ein: snapshot.ein || req.query.ein || '',
+        city: snapshot.city || req.query.city || '',
+        state: snapshot.state || req.query.state || '',
+        zip: snapshot.zip || req.query.zip || '',
         industry_description: req.query.industry_description || '',
         size: req.query.size ? Number(req.query.size) : null,
         establishment_type: req.query.establishment_type ? Number(req.query.establishment_type) : null,
@@ -412,6 +417,30 @@ router.post('/osha-300a/certify', (req, res) => {
 
   let snapshotIds;
   try {
+    // WI-02 carry-forward: structured ITA address fields land on the
+    // snapshot at cert time per 1904.41(a). Format validation here
+    // matches the OSHA ITA submission spec exactly — 2-letter state,
+    // 5-digit zip, 9-digit EIN WITHOUT dashes (the ITA CSV column is
+    // 9-char numeric per spec p.4). All fields are optional so legacy
+    // certs can still be created without them. We accept the dashed
+    // EIN format on input but strip the dash before persisting so the
+    // snapshot matches the format the regulator expects.
+    const city = req.body?.city || null;
+    const state = req.body?.state || null;
+    const zip = req.body?.zip || null;
+    let ein = req.body?.ein || null;
+    if (state && !/^[A-Z]{2}$/.test(state)) {
+      return res.status(400).json({ error: 'state must be a 2-letter USPS code (e.g., "TX") per OSHA ITA spec.' });
+    }
+    if (zip && !/^\d{5}(-\d{4})?$/.test(zip)) {
+      return res.status(400).json({ error: 'zip must be 5 digits (or 5+4) per OSHA ITA spec.' });
+    }
+    if (ein) {
+      if (!/^\d{2}-?\d{7}$/.test(ein)) {
+        return res.status(400).json({ error: 'ein must be 9 digits (formatted XX-XXXXXXX or XXXXXXXXX) per 1904.41(a)(4).' });
+      }
+      ein = ein.replace('-', '');
+    }
     snapshotIds = createCertifiedSnapshot({
       orgId,
       siteId: site.id,
@@ -422,7 +451,10 @@ router.post('/osha-300a/certify', (req, res) => {
       establishmentName: site.name,
       establishmentAddress: site.address,
       naicsCode: site.naics_code,
-      ein: req.body?.ein || null,
+      ein,
+      city,
+      state,
+      zip,
       annualAvgEmployees,
       totalHoursWorked,
       totals,
@@ -593,6 +625,7 @@ router.get('/osha-301/:incidentId', (req, res) => {
       ...auditCtx(req),
     });
 
+    const org = db.prepare('SELECT logo_path FROM organizations WHERE id = ?').get(req.user.org_id);
     return renderOsha301Pdf(res, {
       incidentNumber: incident.incident_number,
       year,
@@ -603,6 +636,7 @@ router.get('/osha-301/:incidentId', (req, res) => {
       hospitalized: primaryInj?.hospitalized ?? incident.hospitalized ?? null,
       case: caseInfo,
       completedBy,
+      orgLogoPath: resolveOrgLogoPath(org?.logo_path),
     });
   }
 
@@ -687,7 +721,7 @@ router.get('/incidents/:incidentId/generic', (req, res) => {
   `).get(incidentId, orgId);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
 
-  const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+  const org = db.prepare('SELECT name, logo_path FROM organizations WHERE id = ?').get(orgId);
 
   // Section filter — default all on.
   let sections = GENERIC_ALL_SECTIONS;
@@ -775,6 +809,7 @@ router.get('/incidents/:incidentId/generic', (req, res) => {
 
   return renderGenericIncidentPdf(res, {
     orgName: org?.name || '',
+    orgLogoPath: resolveOrgLogoPath(org?.logo_path),
     site: { name: incident.site_name, address: incident.site_address, naics_code: incident.site_naics },
     incident,
     affectedPersons,
@@ -880,6 +915,20 @@ function requireNswOrg(req, res) {
   return true;
 }
 
+// GET /reports/safework-nsw/anzsic-codes — lookup endpoint for the FE
+// PCBU modal autocomplete. Returns [] until the anzsic_codes table is
+// seeded; callers fall back to free-text 4-digit entry in that case.
+// Defined BEFORE the /:incidentId wildcard so Express dispatches the
+// specific path first (same idiom as /lookups).
+router.get('/safework-nsw/anzsic-codes', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  const { division, q } = req.query;
+  res.json({
+    seeded: isAnzsicTableSeeded(),
+    codes: listAnzsicCodes({ division, q }),
+  });
+});
+
 // GET /reports/safework-nsw/lookups — both enum tables for the
 // wizard / FE pickers. Returns verbatim Act labels + section refs.
 router.get('/safework-nsw/lookups', (req, res) => {
@@ -919,7 +968,7 @@ router.get('/safework-nsw/:incidentId', (req, res) => {
   if (!row) return res.status(404).json({ error: 'No SafeWork NSW notification for this incident' });
 
   if (req.query.format === 'pdf') {
-    const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(req.user.org_id);
+    const org = db.prepare('SELECT name, logo_path FROM organizations WHERE id = ?').get(req.user.org_id);
     // Resolve the primary affected person (if any) for the narrative
     // section. Falls back to nothing when WI-A side tables are empty.
     const primaryAffected = db.prepare(`
@@ -957,6 +1006,7 @@ router.get('/safework-nsw/:incidentId', (req, res) => {
 
     return renderSafeworkNswPdf(res, {
       orgName: org?.name || '',
+      orgLogoPath: resolveOrgLogoPath(org?.logo_path),
       notification: row,
       incident,
       site: { name: incident.site_name, address: incident.site_address },
@@ -1139,7 +1189,7 @@ router.post('/safework-nsw/:notificationId/pcbu', (req, res) => {
     .get(id, req.user.org_id);
   if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
 
-  const { name, abn, anzsic_code } = req.body || {};
+  const { name, abn, anzsic_code, trading_name, address, worker_count } = req.body || {};
   if (abn) {
     const v = validateAbn(abn);
     if (!v.ok) {
@@ -1150,13 +1200,37 @@ router.post('/safework-nsw/:notificationId/pcbu', (req, res) => {
     if (!/^\d{4}$/.test(String(anzsic_code))) {
       return res.status(400).json({ error: 'ANZSIC code must be 4 digits.' });
     }
+    // If the anzsic_codes lookup is seeded, gate on a known code. When
+    // unseeded (default), accept any 4-digit string — chunk-11 behaviour.
+    if (isAnzsicTableSeeded()) {
+      const hit = listAnzsicCodes({ q: String(anzsic_code) }).find(r => r.code === String(anzsic_code));
+      if (!hit) {
+        return res.status(400).json({ error: `ANZSIC code ${anzsic_code} not found in the seeded ABS 1292.0 list.` });
+      }
+    }
+  }
+  // WI-06 carry-forward: optional address / trading_name / worker_count.
+  // worker_count must be a non-negative integer when provided; bad
+  // input gets rejected before the DB-level CHECK fires.
+  let workerCountInt;
+  if (worker_count !== undefined && worker_count !== null && worker_count !== '') {
+    workerCountInt = Number(worker_count);
+    if (!Number.isInteger(workerCountInt) || workerCountInt < 0) {
+      return res.status(400).json({ error: 'worker_count must be a non-negative integer.' });
+    }
   }
   const updated = setNswPcbu({
     orgId: req.user.org_id, notificationId: id,
-    name, abn: abn ? validateAbn(abn).normalized : null, anzsicCode: anzsic_code,
+    name,
+    abn: abn ? validateAbn(abn).normalized : null,
+    anzsicCode: anzsic_code,
+    tradingName: trading_name,
+    address,
+    workerCount: workerCountInt,
   });
   res.json(updated);
 });
+
 
 router.get('/riddor', (req, res) => {
   const { site_id, year } = req.query;

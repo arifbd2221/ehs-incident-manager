@@ -25,6 +25,7 @@
 //     column today, and the spec forbids external URL fetches.
 
 import PDFDocument from 'pdfkit';
+import { embedOrgLogo } from './logo.js';
 
 const PAGE_OPTS = {
   layout: 'portrait',
@@ -179,17 +180,23 @@ function drawSeparator(doc, x, y, w) {
 // ---------------------------------------------------------------------------
 
 function drawFirstPageHeader(doc, ctx) {
-  const { orgName, incident } = ctx;
+  const { orgName, incident, orgLogoPath } = ctx;
   doc.save();
+
+  // Logo slot: top-right, 80px wide × 40px tall. No-op when unset.
+  const LOGO_W = 90;
+  const LOGO_H = 40;
+  embedOrgLogo(doc, orgLogoPath, PAGE_W - LEFT_X - LOGO_W, 32, LOGO_W, LOGO_H);
+
   doc.font(FONT_BOLD).fontSize(16).fillColor('#1A1A1A');
-  doc.text(orgName || PLATFORM_NAME, LEFT_X, 36, { width: USABLE_W, lineBreak: false, ellipsis: true });
+  doc.text(orgName || PLATFORM_NAME, LEFT_X, 36, { width: USABLE_W - LOGO_W - 20, lineBreak: false, ellipsis: true });
 
   doc.font(FONT_BOLD).fontSize(11).fillColor('#52525F');
-  doc.text('Incident Report', LEFT_X, 58, { width: USABLE_W, lineBreak: false });
+  doc.text('Incident Report', LEFT_X, 58, { width: USABLE_W - LOGO_W - 20, lineBreak: false });
 
   doc.font(FONT_REG).fontSize(9).fillColor('#52525F');
   const subRight = `${incident.incident_number}${incident.title ? ' — ' + incident.title : ''}`;
-  doc.text(subRight, LEFT_X, 74, { width: USABLE_W, lineBreak: false, ellipsis: true });
+  doc.text(subRight, LEFT_X, 74, { width: USABLE_W - LOGO_W - 20, lineBreak: false, ellipsis: true });
   doc.restore();
 }
 
@@ -553,6 +560,7 @@ export function renderGenericIncidentPdf(res, payload) {
 
   const ctx = {
     orgName: payload.orgName,
+    orgLogoPath: payload.orgLogoPath || null,
     incident: payload.incident,
     site: payload.site,
     affectedPersons: payload.affectedPersons,

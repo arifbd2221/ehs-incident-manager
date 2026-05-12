@@ -24,6 +24,13 @@ export default function CertifyOsha300AModal({ siteId, year, siteName, affirmati
   const { user } = useAuth();
   const [typedName, setTypedName] = useState('');
   const [titleKey, setTitleKey] = useState('highest_ranking_official');
+  // WI-02 carry-forward: ITA address fields persist on the snapshot at
+  // cert time per 29 CFR 1904.41(a). All four are optional — submitter
+  // can leave them blank if the org isn't required to submit to ITA.
+  const [ein, setEin] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [zip, setZip] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   // certifier_title_options come from the JSON branch of /reports/osha-300a.
@@ -50,6 +57,10 @@ export default function CertifyOsha300AModal({ siteId, year, siteName, affirmati
         year: Number(year),
         typed_name: typedName.trim(),
         certifier_title_key: titleKey,
+        ein: ein.trim() || undefined,
+        city: city.trim() || undefined,
+        state: state.trim().toUpperCase() || undefined,
+        zip: zip.trim() || undefined,
       });
       onCertified(cert);
     } catch (e) {
@@ -105,6 +116,33 @@ export default function CertifyOsha300AModal({ siteId, year, siteName, affirmati
                 options={titleOptions.map(opt => ({ value: opt.key, label: opt.label }))}
               />
               <span className="helper">Per 29 CFR 1904.32(b)(4) — only these four titles may certify.</span>
+            </div>
+          </div>
+
+          <div className="cert-affirmation-meta" style={{ marginTop: 12, marginBottom: 4 }}>
+            Establishment information per 29 CFR 1904.41(a) — required only if you submit electronically to OSHA via the Injury Tracking Application. Frozen onto the cert snapshot so the ITA CSV is reproducible.
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label className="label">EIN</label>
+              <input className="input" placeholder="XX-XXXXXXX" value={ein} onChange={e => setEin(e.target.value)} />
+              <span className="helper">9 digits, dashes optional. 1904.41(a)(4).</span>
+            </div>
+            <div className="field">
+              <label className="label">City</label>
+              <input className="input" value={city} onChange={e => setCity(e.target.value)} />
+            </div>
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label className="label">State</label>
+              <input className="input" placeholder="TX" maxLength={2} value={state} onChange={e => setState(e.target.value.toUpperCase())} />
+              <span className="helper">2-letter USPS code.</span>
+            </div>
+            <div className="field">
+              <label className="label">ZIP</label>
+              <input className="input" placeholder="78701" value={zip} onChange={e => setZip(e.target.value)} />
+              <span className="helper">5 digits, or 5+4.</span>
             </div>
           </div>
 

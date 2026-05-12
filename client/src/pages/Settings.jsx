@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { changePassword, getSites } from '../api/auth';
 import Icon from '../components/shared/Icon';
@@ -230,6 +230,7 @@ export default function Profile() {
               <div className="prof-row"><span className="prof-lbl">Company size</span><span className="prof-val">{user.company_size || '—'}</span></div>
               {user.naics_code && <div className="prof-row"><span className="prof-lbl">NAICS</span><span className="prof-val">{user.naics_code}</span></div>}
             </div>
+            {user.role === 'admin' && <OrgLogoWidget user={user} />}
           </section>
         </div>
       )}
@@ -293,6 +294,98 @@ export default function Profile() {
               <div className="prof-row"><span className="prof-lbl">Role</span><span className="prof-val prof-role">{user.role?.replace('_', ' ')}</span></div>
             </div>
           </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// WI-01 carry-forward: organisation logo upload widget. Admin-only —
+// rendered inside the Organization section by the parent. Posts to
+// /api/auth/organization/logo (multer single file) and re-applies the
+// returned JWT so the new logo_path is reflected immediately.
+function OrgLogoWidget({ user }) {
+  const { updateUserFromToken } = useAuth();
+  const fileRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState({ type: '', text: '' });
+
+  const logoUrl = user.logo_path ? `/uploads/${user.logo_path}` : null;
+
+  const upload = async (file) => {
+    if (!file) return;
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      return setMsg({ type: 'error', text: 'Logo must be PNG or JPG.' });
+    }
+    setBusy(true);
+    setMsg({ type: '', text: '' });
+    try {
+      const fd = new FormData();
+      fd.append('logo', file);
+      const resp = await fetch('/api/auth/organization/logo', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: fd,
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error || `Upload failed: ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (data.token) updateUserFromToken?.(data.token, data.user);
+      setMsg({ type: 'ok', text: 'Logo updated. It will appear on the next PDF download.' });
+    } catch (err) {
+      setMsg({ type: 'error', text: err.message || 'Upload failed' });
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    setMsg({ type: '', text: '' });
+    try {
+      const resp = await fetch('/api/auth/organization/logo', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error || `Remove failed: ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (data.token) updateUserFromToken?.(data.token, data.user);
+      setMsg({ type: 'ok', text: 'Logo removed.' });
+    } catch (err) {
+      setMsg({ type: 'error', text: err.message || 'Remove failed' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="prof-info" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--sds-border)' }}>
+      <div className="prof-row" style={{ alignItems: 'center' }}>
+        <span className="prof-lbl">Logo on PDFs</span>
+        <span className="prof-val" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {logoUrl ? (
+            <img src={logoUrl} alt="Organisation logo" style={{ maxHeight: 36, maxWidth: 120, objectFit: 'contain', border: '1px solid var(--sds-border)', borderRadius: 4, padding: 2 }} />
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>No logo set — PDFs use the org name only.</span>
+          )}
+          <input ref={fileRef} type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={e => upload(e.target.files?.[0])} />
+          <button className="btn btn-secondary btn-sm" type="button" disabled={busy} onClick={() => fileRef.current?.click()}>
+            <Icon name="upload" size={13} />{logoUrl ? 'Replace' : 'Upload'}
+          </button>
+          {logoUrl && (
+            <button className="btn btn-text btn-sm" type="button" disabled={busy} onClick={remove}>Remove</button>
+          )}
+        </span>
+      </div>
+      {msg.text && (
+        <div className={`prof-msg sm ${msg.type}`} style={{ marginTop: 8 }}>
+          <Icon name={msg.type === 'ok' ? 'check' : 'warning'} size={14} />{msg.text}
         </div>
       )}
     </div>

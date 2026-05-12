@@ -10,6 +10,7 @@ import {
   logSafeworkNswRegulatorRequested,
   logSafeworkNswWrittenSubmitted,
   setSafeworkNswSitePreservation,
+  setSafeworkNswPcbu,
 } from '../../api/safework_nsw';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
@@ -1531,6 +1532,28 @@ function SafeworkNswCardRows({ notification, lookups, canVerify, onAction, onDow
             )}
           </div>
 
+          {/* PCBU identity (s.38 mandates capture of the notifying entity). */}
+          <div className="idet-triage-row">
+            <span className="idet-triage-label">Notifying entity (PCBU)</span>
+            {n.pcbu_name ? (
+              <span style={{ fontSize: 11, color: 'var(--sds-fg-secondary)', textAlign: 'right' }}>
+                {n.pcbu_name}{n.pcbu_trading_name ? ` · t/a ${n.pcbu_trading_name}` : ''}
+                {n.pcbu_abn ? ` · ABN ${n.pcbu_abn}` : ''}
+                {canVerify && (
+                  <button className="btn btn-text btn-sm" style={{ marginLeft: 8 }} onClick={() => onAction('pcbu')}>
+                    <Icon name="edit" size={12}/>Edit
+                  </button>
+                )}
+              </span>
+            ) : canVerify ? (
+              <button className="btn btn-secondary btn-sm" onClick={() => onAction('pcbu')}>
+                <Icon name="factory" size={13}/>Set PCBU details
+              </button>
+            ) : (
+              <span className="inc-card-status st-triage"><span className="st-dot"/>Not captured</span>
+            )}
+          </div>
+
           {/* s.39 site preservation */}
           <div className="idet-triage-row">
             <span className="idet-triage-label">s.39 site preservation</span>
@@ -1579,6 +1602,16 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
   const [reference, setReference] = useState('');
   const [statusVal, setStatusVal] = useState(notification.site_preservation_status || 'preserved');
   const [inspectorArrivedAt, setInspectorArrivedAt] = useState('');
+  // WI-06 carry-forward PCBU fields. Pre-fill from the existing
+  // notification so an edit-cycle preserves the prior values.
+  const [pcbuName, setPcbuName] = useState(notification.pcbu_name || '');
+  const [pcbuTradingName, setPcbuTradingName] = useState(notification.pcbu_trading_name || '');
+  const [pcbuAbn, setPcbuAbn] = useState(notification.pcbu_abn || '');
+  const [pcbuAnzsic, setPcbuAnzsic] = useState(notification.pcbu_anzsic_code || '');
+  const [pcbuAddress, setPcbuAddress] = useState(notification.pcbu_address || '');
+  const [pcbuWorkerCount, setPcbuWorkerCount] = useState(
+    notification.pcbu_worker_count != null ? String(notification.pcbu_worker_count) : '',
+  );
 
   const submit = async () => {
     setSaving(true); setError('');
@@ -1601,6 +1634,15 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
           notes: notes.trim() || undefined,
           inspector_arrived_at: inspectorArrivedAt || undefined,
         });
+      } else if (mode === 'pcbu') {
+        await setSafeworkNswPcbu(notification.id, {
+          name: pcbuName.trim() || undefined,
+          trading_name: pcbuTradingName.trim() || undefined,
+          abn: pcbuAbn.trim() || undefined,
+          anzsic_code: pcbuAnzsic.trim() || undefined,
+          address: pcbuAddress.trim() || undefined,
+          worker_count: pcbuWorkerCount.trim() === '' ? undefined : Number(pcbuWorkerCount),
+        });
       }
       onSaved();
     } catch (e) {
@@ -1615,6 +1657,7 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
     'regulator-requested': `Regulator requested written notice (s.38(4)(b))`,
     'written': `Submit written notice (s.38(5))`,
     'site-preservation': `Site preservation status (s.39)`,
+    'pcbu': `Notifying entity (PCBU)`,
   }[mode];
 
   return (
@@ -1676,6 +1719,40 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
               <div className="field">
                 <label className="label">Inspector arrived at (optional)</label>
                 <DatePicker value={inspectorArrivedAt} onChange={setInspectorArrivedAt} includeTime />
+              </div>
+            </>
+          )}
+          {mode === 'pcbu' && (
+            <>
+              <div className="field-row">
+                <div className="field">
+                  <label className="label">Registered name</label>
+                  <input className="input" value={pcbuName} onChange={e => setPcbuName(e.target.value)} placeholder="e.g. Sydney Smelters Pty Ltd"/>
+                </div>
+                <div className="field">
+                  <label className="label">Trading name</label>
+                  <input className="input" value={pcbuTradingName} onChange={e => setPcbuTradingName(e.target.value)} placeholder="If different from registered name"/>
+                </div>
+              </div>
+              <div className="field">
+                <label className="label">Primary address</label>
+                <input className="input" value={pcbuAddress} onChange={e => setPcbuAddress(e.target.value)} placeholder="Street, suburb, state, postcode"/>
+              </div>
+              <div className="field-row">
+                <div className="field">
+                  <label className="label">ABN</label>
+                  <input className="input" value={pcbuAbn} onChange={e => setPcbuAbn(e.target.value)} placeholder="11-digit ABN"/>
+                  <span className="helper">Validated server-side via ATO mod-89 checksum.</span>
+                </div>
+                <div className="field">
+                  <label className="label">ANZSIC code</label>
+                  <input className="input" value={pcbuAnzsic} onChange={e => setPcbuAnzsic(e.target.value)} placeholder="4 digits, e.g. 2410" maxLength={4}/>
+                  <span className="helper">ABS 1292.0 (2006 Rev 2). Free-text 4-digit entry until the code list is seeded.</span>
+                </div>
+              </div>
+              <div className="field">
+                <label className="label">Worker count</label>
+                <input className="input" type="number" min={0} value={pcbuWorkerCount} onChange={e => setPcbuWorkerCount(e.target.value)} placeholder="Total workers at the PCBU"/>
               </div>
             </>
           )}

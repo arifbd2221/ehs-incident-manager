@@ -4,6 +4,9 @@ import db from '../db/connection.js';
 import { generateToken, authMiddleware } from '../middleware/auth.js';
 import { writeActivity, diffFields } from '../services/activity_log.js';
 import { validEmail, checkLen, checkPassword, NAME_MAX, NAICS_MAX } from '../services/validators.js';
+import { upload, uploadDir } from '../middleware/upload.js';
+import { unlink } from 'node:fs/promises';
+import { join } from 'path';
 
 const router = Router();
 
@@ -77,7 +80,7 @@ router.post('/signup-org', (req, res) => {
     SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
            u.department, u.job_title, u.created_at,
            o.name AS org_name, o.country, o.industry_sector, o.naics_code,
-           o.compliance_frameworks, o.company_size
+           o.compliance_frameworks, o.company_size, o.logo_path
     FROM users u JOIN organizations o ON o.id = u.org_id
     WHERE u.id = ?
   `).get(userId);
@@ -119,7 +122,7 @@ router.post('/login', (req, res) => {
 
   const user = db.prepare(`
     SELECT u.*, o.name AS org_name, o.country, o.industry_sector, o.naics_code,
-           o.compliance_frameworks, o.company_size
+           o.compliance_frameworks, o.company_size, o.logo_path
     FROM users u JOIN organizations o ON o.id = u.org_id
     WHERE u.email = ? AND u.is_active = 1
   `).get(email);
@@ -139,7 +142,7 @@ router.get('/me', authMiddleware, (req, res) => {
     SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
            u.department, u.job_title, u.created_at, u.dashboard_layout,
            o.name AS org_name, o.country, o.industry_sector, o.naics_code,
-           o.compliance_frameworks, o.company_size
+           o.compliance_frameworks, o.company_size, o.logo_path
     FROM users u JOIN organizations o ON o.id = u.org_id
     WHERE u.id = ?
   `).get(req.user.id);
@@ -180,7 +183,7 @@ router.patch('/profile', authMiddleware, (req, res) => {
     SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
            u.department, u.job_title, u.created_at,
            o.name AS org_name, o.country, o.industry_sector, o.naics_code,
-           o.compliance_frameworks, o.company_size
+           o.compliance_frameworks, o.company_size, o.logo_path
     FROM users u JOIN organizations o ON o.id = u.org_id
     WHERE u.id = ?
   `).get(req.user.id);
@@ -201,6 +204,90 @@ router.patch('/profile', authMiddleware, (req, res) => {
 
   const token = generateToken(user);
   res.json({ token, user });
+});
+
+// WI-01 carry-forward: organisation logo upload. Admin-only. The
+// uploaded file is stored in the shared uploadDir (same place as
+// attachments). organizations.logo_path stores only the basename — the
+// PDF renderers resolve the full path against uploadDir at render time.
+// The previous logo (if any) is deleted from disk after the new one is
+// recorded so we don't leak unused files.
+router.post('/organization/logo', authMiddleware, upload.single('logo'), async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only org admins can update the organisation logo.' });
+  }
+  if (!req.file) {
+    return res.status(400).json({ error: 'No logo file uploaded. Expected a single file under field name "logo".' });
+  }
+  // Restrict to image formats pdfkit can embed. The shared upload
+  // middleware already filters at the MIME level, but PDFKit specifically
+  // needs PNG or JPG.
+  if (!['image/png', 'image/jpeg'].includes(req.file.mimetype)) {
+    await unlink(req.file.path).catch(() => {});
+    return res.status(400).json({ error: 'Logo must be PNG or JPG (PDFKit limitation).' });
+  }
+
+  const prior = db.prepare('SELECT logo_path FROM organizations WHERE id = ?').get(req.user.org_id);
+  db.prepare('UPDATE organizations SET logo_path = ? WHERE id = ?').run(req.file.filename, req.user.org_id);
+
+  if (prior?.logo_path) {
+    await unlink(join(uploadDir, prior.logo_path)).catch(() => {});
+  }
+
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'organization',
+    entity_id: req.user.org_id,
+    action: 'organization_logo_updated',
+    description: 'updated organisation logo',
+    user_id: req.user.id,
+    metadata: { filename: req.file.originalname, mime_type: req.file.mimetype, size_bytes: req.file.size },
+  });
+
+  // Re-mint the token so the FE picks up the new logo_path on its next
+  // authed page load without a forced logout.
+  const user = db.prepare(`
+    SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
+           u.department, u.job_title,
+           o.name AS org_name, o.country, o.industry_sector, o.naics_code,
+           o.compliance_frameworks, o.company_size, o.logo_path
+    FROM users u JOIN organizations o ON o.id = u.org_id
+    WHERE u.id = ?
+  `).get(req.user.id);
+  user.compliance_frameworks = user.compliance_frameworks ? JSON.parse(user.compliance_frameworks) : [];
+
+  res.json({ token: generateToken(user), user, logo_path: req.file.filename });
+});
+
+// Remove the org logo. Admin-only. Idempotent — works whether or not a
+// logo is currently set.
+router.delete('/organization/logo', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only org admins can update the organisation logo.' });
+  }
+  const prior = db.prepare('SELECT logo_path FROM organizations WHERE id = ?').get(req.user.org_id);
+  db.prepare('UPDATE organizations SET logo_path = NULL WHERE id = ?').run(req.user.org_id);
+  if (prior?.logo_path) {
+    await unlink(join(uploadDir, prior.logo_path)).catch(() => {});
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'organization',
+      entity_id: req.user.org_id,
+      action: 'organization_logo_removed',
+      description: 'removed organisation logo',
+      user_id: req.user.id,
+    });
+  }
+  const user = db.prepare(`
+    SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
+           u.department, u.job_title,
+           o.name AS org_name, o.country, o.industry_sector, o.naics_code,
+           o.compliance_frameworks, o.company_size, o.logo_path
+    FROM users u JOIN organizations o ON o.id = u.org_id
+    WHERE u.id = ?
+  `).get(req.user.id);
+  user.compliance_frameworks = user.compliance_frameworks ? JSON.parse(user.compliance_frameworks) : [];
+  res.json({ token: generateToken(user), user });
 });
 
 router.put('/dashboard-layout', authMiddleware, (req, res) => {

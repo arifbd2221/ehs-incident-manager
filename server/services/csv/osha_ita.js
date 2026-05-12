@@ -110,9 +110,12 @@ export function buildItaRow(snapshot, extra = {}) {
     ein: snapshot.ein || extra.ein || '',
     company_name: extra.company_name || '',
     street_address: snapshot.establishment_address || extra.street_address || '',
-    city: extra.city || '',
-    state: extra.state || '',
-    zip: extra.zip || '',
+    // WI-02 carry-forward: city/state/zip persisted on snapshot at cert
+    // time per 1904.41(a). Snapshot wins; extra is only a fallback for
+    // legacy certs from before migration 032.
+    city: snapshot.city || extra.city || '',
+    state: snapshot.state || extra.state || '',
+    zip: snapshot.zip || extra.zip || '',
     naics_code: snapshot.naics_code || '',
     industry_description: extra.industry_description || '',
     size: extra.size,                    // integer 1/21/22/3 — validator enforces

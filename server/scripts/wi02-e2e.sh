@@ -110,8 +110,25 @@ echo ""
 echo "== Section C — Atomic cert + snapshot creation =="
 # =============================================================
 
+# WI-02 carry-forward: cert body now accepts ein/city/state/zip per
+# 1904.41(a). All four are optional but format-validated server-side.
+# B6..B8 prove the per-field validators reject bad input before any
+# snapshot is written.
+B6=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $PRIYA" \
+  -d "{\"site_id\":$SITE,\"year\":$YEAR,\"typed_name\":\"Priya Patel\",\"certifier_title_key\":\"owner\",\"ein\":\"abc\"}" \
+  "$BASE/api/reports/osha-300a/certify")
+run "B6: bad EIN format → 400"          "400" "$B6"
+B7=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $PRIYA" \
+  -d "{\"site_id\":$SITE,\"year\":$YEAR,\"typed_name\":\"Priya Patel\",\"certifier_title_key\":\"owner\",\"state\":\"Texas\"}" \
+  "$BASE/api/reports/osha-300a/certify")
+run "B7: state must be 2-letter code → 400"  "400" "$B7"
+B8=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $PRIYA" \
+  -d "{\"site_id\":$SITE,\"year\":$YEAR,\"typed_name\":\"Priya Patel\",\"certifier_title_key\":\"owner\",\"zip\":\"abc123\"}" \
+  "$BASE/api/reports/osha-300a/certify")
+run "B8: bad ZIP format → 400"          "400" "$B8"
+
 CERT_OUT=$(curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $PRIYA" \
-  -d "{\"site_id\":$SITE,\"year\":$YEAR,\"typed_name\":\"Priya Patel\",\"certifier_title_key\":\"corporate_officer\"}" \
+  -d "{\"site_id\":$SITE,\"year\":$YEAR,\"typed_name\":\"Priya Patel\",\"certifier_title_key\":\"corporate_officer\",\"ein\":\"12-3456789\",\"city\":\"Cleveland\",\"state\":\"OH\",\"zip\":\"44101\"}" \
   "$BASE/api/reports/osha-300a/certify")
 C1_CERT_ID=$(echo "$CERT_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('certification_id',''))")
 C1_TITLE_KEY=$(echo "$CERT_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('certifier_title_key',''))")
@@ -123,6 +140,16 @@ run "C1: certifier_title_label = verbatim 1904.32(b)(4)(ii)"  "An officer of the
 # Snapshot row exists with the same column totals as the live aggregate.
 C1_SNAP_DAYS_AWAY=$(sqlite3 "$DB" "SELECT total_days_away_cases FROM osha_300a_certified_summaries WHERE site_id=$SITE AND period_year=$YEAR;")
 run "C1: snapshot freezes total_days_away_cases"    "$A1_CASES_DAYS_AWAY"   "$C1_SNAP_DAYS_AWAY"
+
+# WI-02 carry-forward: cert body fields persisted on snapshot.
+C1_SNAP_EIN=$(sqlite3 "$DB" "SELECT ein FROM osha_300a_certified_summaries WHERE site_id=$SITE AND period_year=$YEAR;")
+C1_SNAP_CITY=$(sqlite3 "$DB" "SELECT city FROM osha_300a_certified_summaries WHERE site_id=$SITE AND period_year=$YEAR;")
+C1_SNAP_STATE=$(sqlite3 "$DB" "SELECT state FROM osha_300a_certified_summaries WHERE site_id=$SITE AND period_year=$YEAR;")
+C1_SNAP_ZIP=$(sqlite3 "$DB" "SELECT zip FROM osha_300a_certified_summaries WHERE site_id=$SITE AND period_year=$YEAR;")
+run "C1: snapshot.ein = '123456789' (dash stripped)" "123456789"             "$C1_SNAP_EIN"
+run "C1: snapshot.city = 'Cleveland'"               "Cleveland"              "$C1_SNAP_CITY"
+run "C1: snapshot.state = 'OH'"                     "OH"                     "$C1_SNAP_STATE"
+run "C1: snapshot.zip = '44101'"                    "44101"                  "$C1_SNAP_ZIP"
 
 # Re-cert blocked
 C2=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $PRIYA" \
@@ -177,9 +204,17 @@ run "E1: CSV header matches OSHA template"          "$TEMPLATE_HEADER"     "$E1_
 E1_COLS=$(echo "$E1_HEADER" | tr ',' '\n' | wc -l | tr -d ' ')
 run "E1: 28-column wire format"                     "28"                   "$E1_COLS"
 
-# Validate the data row's EIN is quoted (leading-zero preservation rule)
+# Validate the data row's EIN is quoted (leading-zero preservation rule).
+# Snapshot's ein ('123456789', stored without dash) wins over the query
+# string's '123456789' per the WI-02 carry-forward (migration 032).
 E1_QUOTED=$(tail -1 /tmp/wi02-ita.csv | python3 -c "import sys; line=sys.stdin.read(); print('yes' if ',\"123456789\",' in line else 'no')")
-run "E1: ein field quoted in data row"              "yes"                  "$E1_QUOTED"
+run "E1: ein field quoted in data row (from snapshot)" "yes"                  "$E1_QUOTED"
+E1_CITY_FROM_SNAP=$(tail -1 /tmp/wi02-ita.csv | python3 -c "import sys; line=sys.stdin.read(); print('yes' if 'Cleveland' in line else 'no')")
+run "E1: city in data row (from snapshot)"          "yes"                  "$E1_CITY_FROM_SNAP"
+E1_STATE_FROM_SNAP=$(tail -1 /tmp/wi02-ita.csv | python3 -c "import sys; line=sys.stdin.read(); print('yes' if ',OH,' in line else 'no')")
+run "E1: state in data row (from snapshot)"         "yes"                  "$E1_STATE_FROM_SNAP"
+E1_ZIP_FROM_SNAP=$(tail -1 /tmp/wi02-ita.csv | python3 -c "import sys; line=sys.stdin.read(); print('yes' if ',\"44101\",' in line else 'no')")
+run "E1: zip in data row (from snapshot, quoted)"   "yes"                  "$E1_ZIP_FROM_SNAP"
 
 # E2: uncertified CSV → 409
 sqlite3 "$DB" "DELETE FROM osha_300a_certified_summaries WHERE site_id=$SITE AND period_year=$YEAR; DELETE FROM regulatory_certifications WHERE type='osha_300a' AND site_id=$SITE AND period_year=$YEAR;"
