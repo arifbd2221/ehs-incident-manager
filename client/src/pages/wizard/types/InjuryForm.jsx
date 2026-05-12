@@ -1,7 +1,11 @@
+import { useState, useEffect, useMemo } from 'react';
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
 import DatePicker from '../../../components/shared/DatePicker';
 import BodyMap3D from '../../../components/shared/BodyMap3D';
+import AffectedPersonModal from '../../incidents/modals/AffectedPersonModal';
+import { getUsers } from '../../../api/users';
+import { showField } from '../../../utils/frameworks';
 import '../../../styles/bodymap.css';
 
 const INJURY_TYPES = [
@@ -82,22 +86,196 @@ const PPE_ITEMS = [
   )},
 ];
 
-export default function InjuryForm({ data, onChange }) {
+export default function InjuryForm({ data, onChange, jurisdiction = ['US-OSHA', 'UK-RIDDOR', 'AU-NSW'] }) {
+  // WI-D: when invoked outside the wizard (test harnesses, future callers)
+  // the prop is undefined and we default to showing every jurisdiction's
+  // fields so we never accidentally hide data capture. Inside the wizard
+  // ReportWizard passes the computed list.
+  const [showAllRegulatoryFields, setShowAllRegulatoryFields] = useState(false);
+  const see = (key) => showField(key, jurisdiction, showAllRegulatoryFields);
+
   const bodyParts = data.body_parts || [];
   const ppe = data.ppe || [];
+  // WI-A: extras are queued in data.additional_persons (each shaped like
+  // the AffectedPersonModal payload). The wizard hoists this array into
+  // affected_persons on createIncident — the primary stays the inline
+  // form above.
+  const additionalPersons = data.additional_persons || [];
+  const [apModalOpen, setApModalOpen] = useState(false);
+
+  // WI-A: same "Is this person an employee?" affordance as the modal.
+  // Default to 'yes' since most workplace injuries involve employees.
+  // Selection auto-fills the three inline identity fields below.
+  const [primaryIsEmployee, setPrimaryIsEmployee] = useState(
+    data.injured_person_is_employee ?? 'yes'
+  );
+  const [users, setUsers] = useState([]);
+  useEffect(() => {
+    if (primaryIsEmployee === 'yes' && users.length === 0) {
+      getUsers().then(setUsers).catch(() => setUsers([]));
+    }
+  }, [primaryIsEmployee, users.length]);
+
+  const userOptions = useMemo(() => users.map(u => ({
+    value: String(u.id),
+    label: `${u.name}${u.job_title ? ` — ${u.job_title}` : ''}${u.email ? ` (${u.email})` : ''}`,
+  })), [users]);
+
+  const handlePrimaryEmployeeToggle = (val) => {
+    setPrimaryIsEmployee(val);
+    // Persist the choice in type_data so the wizard remembers across re-renders.
+    onChange({ ...data, injured_person_is_employee: val });
+  };
+
+  const handlePrimaryUserPick = (val) => {
+    const u = users.find(x => String(x.id) === String(val));
+    onChange({
+      ...data,
+      injured_user_id: val || null,
+      injured_name: u?.name ?? data.injured_name ?? '',
+      injured_job_title: u?.job_title ?? data.injured_job_title ?? '',
+      injured_department: u?.department ?? data.injured_department ?? '',
+      // hire_date is the only regulatory identity field stored on users;
+      // dob + gender are not on the schema so still manual entry.
+      injured_date_hired: u?.hire_date ?? data.injured_date_hired ?? '',
+    });
+  };
 
   const toggleBody = (id) => onChange({ ...data, body_parts: bodyParts.includes(id) ? bodyParts.filter(x => x !== id) : [...bodyParts, id] });
   const togglePpe = (n) => onChange({ ...data, ppe: ppe.includes(n) ? ppe.filter(x => x !== n) : [...ppe, n] });
 
+  const handleCollectAdditional = (payload) => {
+    onChange({ ...data, additional_persons: [...additionalPersons, payload] });
+  };
+  const removeAdditional = (idx) => {
+    onChange({ ...data, additional_persons: additionalPersons.filter((_, i) => i !== idx) });
+  };
+
   return (
     <>
       <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
-        <div className="card-h"><Icon name="person" size={18} color="var(--sds-brand-primary)"/>Injured person</div>
+        <div className="card-h">
+          <Icon name="person" size={18} color="var(--sds-brand-primary)"/>Injured person
+          {/* WI-D: reporter can override jurisdiction gating when the
+              situation calls for it (e.g., a US org with a one-off UK
+              claimant). Defaults off so the form stays focused on the
+              fields the org's frameworks actually require. */}
+          <label className="helper" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={showAllRegulatoryFields}
+              onChange={e => setShowAllRegulatoryFields(e.target.checked)}
+            />
+            Show all regulatory fields
+          </label>
+        </div>
+
+        <div className="field">
+          <label className="label">Is this person an employee?</label>
+          <div>
+            <label>
+              <input type="radio" name="primaryIsEmployee" value="yes"
+                checked={primaryIsEmployee === 'yes'}
+                onChange={() => handlePrimaryEmployeeToggle('yes')} /> Yes — pick from employee list
+            </label>
+          </div>
+          <div>
+            <label>
+              <input type="radio" name="primaryIsEmployee" value="no"
+                checked={primaryIsEmployee === 'no'}
+                onChange={() => handlePrimaryEmployeeToggle('no')} /> No — enter details manually
+            </label>
+          </div>
+        </div>
+
+        {primaryIsEmployee === 'yes' && (
+          <div className="field">
+            <label className="label">Employee</label>
+            <ComboBox
+              options={userOptions}
+              value={data.injured_user_id || ''}
+              onChange={handlePrimaryUserPick}
+              placeholder="Search employees…"
+              clearable
+            />
+            <span className="helper">Selecting an employee fills the fields below.</span>
+          </div>
+        )}
+
         <div className="field-row-3">
           <div className="field"><label className="label">Full name <span className="req">*</span></label><input className="input" value={data.injured_name || ''} onChange={e => onChange({ ...data, injured_name: e.target.value })}/></div>
           <div className="field"><label className="label">Job title</label><input className="input" value={data.injured_job_title || ''} onChange={e => onChange({ ...data, injured_job_title: e.target.value })}/></div>
           <div className="field"><label className="label">Department</label><input className="input" value={data.injured_department || ''} onChange={e => onChange({ ...data, injured_department: e.target.value })}/></div>
         </div>
+
+        {/* Contact details. Required for:
+            - OSHA 301 (29 CFR 1904.29): address
+            - RIDDOR F2508: address + phone
+            - SafeWork NSW notification: address + phone
+            WI-D: each field gates on its FIELD_REQUIRED_BY entry; the
+            whole row collapses when neither field would render. */}
+        {(see('injured_address') || see('injured_phone')) && (
+          <div className="field-row">
+            {see('injured_address') && (
+              <div className="field">
+                <label className="label">Address</label>
+                <input className="input" value={data.injured_address || ''}
+                  onChange={e => onChange({ ...data, injured_address: e.target.value })}
+                  placeholder="123 Main St, City ST 12345"/>
+                <span className="helper">Required for OSHA 301 + RIDDOR + SafeWork NSW</span>
+              </div>
+            )}
+            {see('injured_phone') && (
+              <div className="field">
+                <label className="label">Phone</label>
+                <input className="input" type="tel" value={data.injured_phone || ''}
+                  onChange={e => onChange({ ...data, injured_phone: e.target.value })}
+                  placeholder="(555) 123-4567"/>
+                <span className="helper">Required for RIDDOR + SafeWork NSW</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Regulatory identity fields. Required for:
+            - OSHA 301 (29 CFR 1904.29): DOB + gender + date hired
+            - SafeWork NSW notification: DOB + gender
+            - RIDDOR F2508: age (derived from DOB) */}
+        {(see('injured_dob') || see('injured_gender') || see('injured_date_hired')) && (
+          <div className="field-row-3">
+            {see('injured_dob') && (
+              <div className="field">
+                <label className="label">Date of birth</label>
+                <input className="input" type="date" value={data.injured_dob || ''}
+                  onChange={e => onChange({ ...data, injured_dob: e.target.value })}/>
+                <span className="helper">Required for OSHA 301 + SafeWork NSW</span>
+              </div>
+            )}
+            {see('injured_gender') && (
+              <div className="field">
+                <label className="label">Gender</label>
+                <select className="select" value={data.injured_gender || ''}
+                  onChange={e => onChange({ ...data, injured_gender: e.target.value })}>
+                  <option value="">Select…</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                  <option value="non_binary">Non-binary</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                  <option value="other">Other</option>
+                </select>
+                <span className="helper">Required for OSHA 301 + SafeWork NSW</span>
+              </div>
+            )}
+            {see('injured_date_hired') && (
+              <div className="field">
+                <label className="label">Date hired</label>
+                <input className="input" type="date" value={data.injured_date_hired || ''}
+                  onChange={e => onChange({ ...data, injured_date_hired: e.target.value })}/>
+                <span className="helper">Required for OSHA 301</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24 }}>
@@ -157,6 +335,76 @@ export default function InjuryForm({ data, onChange }) {
         )}
       </div>
 
+      {/* WI-A: additional affected persons (collected before submit, sent
+          as the new affected_persons array shape on createIncident). The
+          inline form above is the primary (Person 1); each entry below
+          becomes Person 2..N. */}
+      <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
+        <div className="card-h">
+          <Icon name="person" size={18} color="var(--sds-brand-primary)"/>
+          Additional affected persons
+          {additionalPersons.length > 0 && (
+            <span className="idet-attach-count">{additionalPersons.length}</span>
+          )}
+          <button
+            type="button"
+            className="idet-attach-add"
+            onClick={() => setApModalOpen(true)}
+          >
+            <Icon name="plus" size={12}/>Add another person
+          </button>
+        </div>
+        {additionalPersons.length === 0 ? (
+          <div className="helper">
+            One person is captured in the form above. Add anyone else affected
+            by this incident — they'll be saved as separate records with their
+            own injuries.
+          </div>
+        ) : (
+          <div className="idet-witnesses">
+            {additionalPersons.map((p, idx) => (
+              <div key={idx} className="idet-witness">
+                <div className="idet-witness-head">
+                  <div className="idet-witness-info">
+                    <div className="idet-witness-name">
+                      <span className="pill pill-gray">Person {idx + 2}</span>
+                      {' '}{p.name || <em>Unnamed</em>}
+                      {p.is_primary && <> <span className="pill pill-info">Primary</span></>}
+                    </div>
+                    <div className="idet-witness-contact">
+                      {[p.job_title, p.employment_status?.replace(/_/g, ' ')]
+                        .filter(Boolean).join(' · ') || '—'}
+                    </div>
+                  </div>
+                  <div className="idet-witness-actions">
+                    <button type="button" className="idet-edit-trigger idet-witness-del"
+                      onClick={() => removeAdditional(idx)}
+                      title="Remove this person">
+                      <Icon name="close" size={11}/>remove
+                    </button>
+                  </div>
+                </div>
+                {(p.injuries || []).length > 0 && p.injuries[0] && (p.injuries[0].body_part || p.injuries[0].injury_type) && (
+                  <div className="idet-witness-statement">
+                    <strong>{[p.injuries[0].body_part, p.injuries[0].injury_type].filter(Boolean).join(' — ')}</strong>
+                    {p.injuries[0].mechanism && <> · {p.injuries[0].mechanism}</>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <AffectedPersonModal
+        open={apModalOpen}
+        incident={null}
+        jurisdiction={jurisdiction}
+        showAllRegulatoryFields={showAllRegulatoryFields}
+        onClose={() => setApModalOpen(false)}
+        onCollect={handleCollectAdditional}
+      />
+
       <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
         <div className="card-h"><Icon name="shield" size={18} color="var(--sds-brand-primary)"/>PPE worn at time of incident</div>
         <div className="ppe-grid">
@@ -180,6 +428,133 @@ export default function InjuryForm({ data, onChange }) {
           })}
         </div>
       </div>
+
+      {/* UK RIDDOR edge cases — feeds server/services/riddor.js Reg 5 + Reg 11
+          + Reg 14 branches. WI-D gates this card on jurisdiction; reporters
+          can still open it via the "Show all regulatory fields" toggle on
+          the Injured-person card when the situation calls for it. */}
+      {see('riddor_edge_cases') && (
+      <div className="card card-pad" style={{ boxShadow: 'none', background: 'var(--sds-bg-surface-alt)' }}>
+        <div className="card-h">
+          <Icon name="shield" size={18} color="var(--sds-brand-primary)"/>
+          UK RIDDOR edge cases
+          <span className="helper" style={{ marginLeft: 8 }}>Only relevant at UK sites; safe to leave blank otherwise.</span>
+        </div>
+
+        <div className="field">
+          <label className="label">Accident occurred on hospital premises?</label>
+          <select
+            className="select"
+            value={data.on_hospital_premises ? '1' : '0'}
+            onChange={e => onChange({ ...data, on_hospital_premises: e.target.value === '1' })}
+            style={{ maxWidth: 200 }}
+          >
+            <option value="0">No</option>
+            <option value="1">Yes</option>
+          </select>
+          <span className="helper">RIDDOR Reg 5(b): for non-workers, only specified injuries on hospital premises are reportable.</span>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label className="label">Reg 14(1) — medical-procedure exception</label>
+            <select
+              className="select"
+              value={data.reg14_medical_procedure_exception ? '1' : '0'}
+              onChange={e => onChange({ ...data, reg14_medical_procedure_exception: e.target.value === '1' })}
+            >
+              <option value="0">Does not apply</option>
+              <option value="1">Injury arose from medical examination / treatment</option>
+            </select>
+            <span className="helper">Excludes Reg 4/5/6(1) per Reg 14(1).</span>
+          </div>
+          <div className="field">
+            <label className="label">Reg 14(3) — road-vehicle exception</label>
+            <select
+              className="select"
+              value={(() => {
+                if (data.reg14_3_road_vehicle_excluded === true) return 'excluded';
+                if (data.reg14_3_road_vehicle === true) return 'carveout';
+                return 'no';
+              })()}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === 'no') {
+                  onChange({ ...data, reg14_3_road_vehicle: false, reg14_3_road_vehicle_excluded: false });
+                } else if (v === 'excluded') {
+                  onChange({ ...data, reg14_3_road_vehicle: true, reg14_3_road_vehicle_excluded: true });
+                } else {
+                  onChange({ ...data, reg14_3_road_vehicle: true, reg14_3_road_vehicle_excluded: false });
+                }
+              }}
+            >
+              <option value="no">No road-vehicle movement involved</option>
+              <option value="excluded">Road vehicle — no Reg 14(3) carve-out applies (exclude Reg 4/5/6)</option>
+              <option value="carveout">Road vehicle — but a Reg 14(3)(a)–(d) carve-out applies (still reportable)</option>
+            </select>
+            <span className="helper">Carve-outs: train accident, exposure to substance conveyed, loading/unloading, or work on/alongside a road.</span>
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="label">Gas-related incident (Reg 11)</label>
+          <select
+            className="select"
+            value={data.gas_reporter_role || 'none'}
+            onChange={e => {
+              const v = e.target.value;
+              if (v === 'none') {
+                onChange({ ...data, gas_reporter_role: undefined, gas_dangerous_fitting: false, gas_fitting_under_test: false, gas_previously_reported: false });
+              } else {
+                onChange({ ...data, gas_reporter_role: v });
+              }
+            }}
+            style={{ maxWidth: 360 }}
+          >
+            <option value="none">Not a Reg 11 gas incident</option>
+            <option value="flammable_gas_conveyor">Reg 11(1) — fixed-pipe flammable-gas conveyor</option>
+            <option value="lpg_supplier">Reg 11(1) — LPG filler / importer / supplier</option>
+            <option value="approved_person">Reg 11(2) — approved person (Gas Safe registered)</option>
+          </select>
+          <span className="helper">Set only when the reporting org has the Reg 11 role; outcome (death / LOC / hospitalisation) is read from the treatment fields above.</span>
+        </div>
+
+        {data.gas_reporter_role === 'approved_person' && (
+          <div className="field-row">
+            <div className="field">
+              <label className="label">Dangerous gas fitting?</label>
+              <select
+                className="select"
+                value={data.gas_dangerous_fitting ? '1' : '0'}
+                onChange={e => onChange({ ...data, gas_dangerous_fitting: e.target.value === '1' })}
+              >
+                <option value="0">No</option>
+                <option value="1">Yes — design / installation / servicing likely to cause death, LOC or hospitalisation</option>
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Reg 11(3) carve-outs</label>
+              <select
+                className="select"
+                value={data.gas_fitting_under_test ? 'under_test' : data.gas_previously_reported ? 'previously_reported' : 'none'}
+                onChange={e => {
+                  const v = e.target.value;
+                  onChange({
+                    ...data,
+                    gas_fitting_under_test: v === 'under_test',
+                    gas_previously_reported: v === 'previously_reported',
+                  });
+                }}
+              >
+                <option value="none">Neither carve-out applies</option>
+                <option value="under_test">Fitting under test at a place set aside for that purpose — Reg 11(3)(b)</option>
+                <option value="previously_reported">Same information previously reported — Reg 11(3)(c)</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+      )}
     </>
   );
 }

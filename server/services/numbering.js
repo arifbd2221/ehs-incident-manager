@@ -35,6 +35,15 @@ export function nextRiddorNumber() {
   return `RDR-${year}-${String(next).padStart(3, '0')}`;
 }
 
+export function nextNswNumber() {
+  const year = new Date().getFullYear();
+  const row = db.prepare(
+    "SELECT MAX(CAST(SUBSTR(nsw_number, -4) AS INTEGER)) as maxn FROM safework_nsw_notifications WHERE nsw_number LIKE ?"
+  ).get(`NSW-${year}-%`);
+  const next = (row?.maxn || 0) + 1;
+  return `NSW-${year}-${String(next).padStart(4, '0')}`;
+}
+
 export function nextAssetNumber() {
   const year = new Date().getFullYear();
   const row = db.prepare(

@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../shared/Icon';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 function AnimatedLogo() {
   return (
@@ -38,6 +41,10 @@ const NAV = [
   // Records & reporting
   { id: 'documents', path: '/documents', icon: 'file', label: 'Documents', color: '#1E88E5' },
   { id: 'reports', path: '/reports', icon: 'reports', label: 'Reports', color: '#5C6BC0' },
+  // WI-B: Approvals queue for recordability override requests. Hidden for
+  // workers via the elevatedOnly flag; the underlying endpoint already
+  // returns 403 to non-elevated roles, so this is just hiding noise.
+  { id: 'approvals', path: '/approvals', icon: 'shield', label: 'Approvals', color: '#ED6C02', elevatedOnly: true },
 ];
 
 const SETTINGS_CHILDREN = [
@@ -50,7 +57,15 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { sidebarOpen, setSidebarOpen } = useApp();
+  const { user } = useAuth();
+  const isElevated = ELEVATED_ROLES.has(user?.role);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Hide elevatedOnly nav items for worker-role users. Dividers are
+  // strings, not objects, so they fall through the filter unchanged.
+  const visibleNav = NAV.filter(item =>
+    typeof item === 'string' || !item.elevatedOnly || isElevated,
+  );
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';
@@ -69,7 +84,7 @@ export default function Sidebar() {
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
         <AnimatedLogo />
-        {NAV.map((it, i) => it === 'divider' ? (
+        {visibleNav.map((it, i) => it === 'divider' ? (
           <div key={`div-${i}`} className="nav-divider" />
         ) : (
           <div key={it.id} className={`nav-item ${isActive(it.path) ? 'active' : ''}`} style={{ '--nav-color': it.color }} onClick={() => go(it.path)}>

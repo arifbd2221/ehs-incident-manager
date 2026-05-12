@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getOsha300, getOsha300A, getOsha301, getRiddor, getMetrics, getAuditLog, getAuditActions, createOsha300Entry } from '../../api/reports';
+import { listSafeworkNsw, getSafeworkNswLookups } from '../../api/safework_nsw';
 import { getSites, getUsers } from '../../api/users';
 import { getIncidents } from '../../api/incidents';
 import { useAuth } from '../../context/AuthContext';
@@ -9,6 +10,7 @@ import ComboBox from '../../components/shared/ComboBox';
 import DatePicker from '../../components/shared/DatePicker';
 import CertifyOsha300AModal from '../../components/modals/CertifyOsha300AModal';
 import { formatDateShort, formatDate } from '../../utils/time';
+import { riddorCategoryLabel, riddorCategoryReg } from '../../utils/riddor';
 import '../../styles/reports.css';
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -25,6 +27,7 @@ const REPORT_TYPES = [
   { id: 'osha300a', cls: 'rt-osha300a', badge: 'OSHA · US',        title: 'OSHA 300A Summary',  desc: 'Annual summary, posted Feb 1 – Apr 30.',                            requiresFramework: 'osha_300a' },
   { id: 'osha301',  cls: 'rt-osha301',  badge: 'OSHA · US',        title: 'OSHA 301 Form',      desc: 'Individual incident report (per 29 CFR 1904.29).',                  requiresFramework: 'osha_301' },
   { id: 'riddor',   cls: 'rt-riddor',   badge: 'HSE · UK',         title: 'RIDDOR F2508',       desc: 'Event-triggered to HSE. Sheffield site only.',                      requiresFramework: 'riddor_f2508' },
+  { id: 'safework_nsw', cls: 'rt-safework', badge: 'SafeWork · NSW · AU', title: 'SafeWork NSW Notifications', desc: 'Notifiable incidents under WHS Act 2011 (NSW) ss.35–39.',     requiresFramework: 'safework_nsw' },
   { id: 'metrics',  cls: 'rt-metrics',  badge: 'Internal',         title: 'Safety Metrics',     desc: 'TRIR, DART, severity rate.' },
   { id: 'audit',    cls: 'rt-audit',    badge: 'Internal · Audit', title: 'Audit Log',          desc: 'Filterable trail of every change. Export for inspector requests.', requiresAudit: true },
 ];
@@ -109,6 +112,7 @@ export default function ReportsPage() {
       {tab === 'osha300a' && <Osha300AReport siteId={siteId}/>}
       {tab === 'osha301' && <Osha301Report siteId={siteId}/>}
       {tab === 'riddor' && <RiddorReport siteId={siteId}/>}
+      {tab === 'safework_nsw' && <SafeworkNswReport siteId={siteId}/>}
       {tab === 'metrics' && <MetricsReport siteId={siteId}/>}
       {tab === 'audit' && <AuditLogReport/>}
     </div>
@@ -658,11 +662,51 @@ function Osha300Report({ siteId }) {
   const canAdd = ELEVATED_ROLES.has(user?.role);
   const [data, setData] = useState(null);
   const [showManual, setShowManual] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const load = () => {
     if (siteId) { setData(null); getOsha300({ site_id: siteId }).then(setData).catch(() => {}); }
   };
   useEffect(load, [siteId]);
+
+  // OSHA Form 300 PDF — 29 CFR 1904.29(b)(4) lets us serve an "equivalent
+  // form" so long as the same information is presented. We re-use the same
+  // GET /reports/osha-300 endpoint with format=pdf so filters stay aligned
+  // with the on-screen table.
+  const downloadPdf = async () => {
+    if (!siteId) return;
+    setDownloading(true);
+    try {
+      const params = new URLSearchParams({ site_id: String(siteId), year: String(data.year), format: 'pdf' }).toString();
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`/api/reports/osha-300?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `Download failed: ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      let filename = `osha-300-${data.year}.pdf`;
+      const cd = resp.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      if (m) filename = m[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      // Surface failure but keep the UI usable.
+      console.error('OSHA 300 PDF download failed:', e);
+      alert(e.message || 'Download failed');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (!data) return <ReportLoading/>;
 
@@ -674,6 +718,14 @@ function Osha300Report({ siteId }) {
           <div className="rpt-panel-sub">{data.site?.name} · YTD {data.year}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={downloadPdf}
+            disabled={downloading || !siteId}
+            title="Download the OSHA 300 Log as a printable PDF (equivalent form per 29 CFR 1904.29(b)(4))"
+          >
+            <Icon name="download" size={14}/>{downloading ? 'Generating…' : 'Download PDF'}
+          </button>
           {canAdd && <button className="btn btn-secondary btn-sm" onClick={() => setShowManual(true)}><Icon name="plus" size={14}/>Manual entry</button>}
           <span className="rpt-auto-badge"><span className="auto-dot"/>Auto-updates</span>
         </div>
@@ -915,16 +967,65 @@ function Osha300AReport({ siteId }) {
   const { user } = useAuth();
   const canCertify = ELEVATED_ROLES.has(user?.role);
   const [data, setData] = useState(null);
+  const [designation, setDesignation] = useState(null);
   const [showCertify, setShowCertify] = useState(false);
   const [toast, setToast] = useState(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingCsv, setDownloadingCsv] = useState(false);
 
   const load = () => {
     if (siteId) {
       setData(null);
       getOsha300A({ site_id: siteId }).then(setData).catch(() => {});
+      // WI-02: ITA designation lookup (1904.41 Appendix A/B + 250+).
+      import('../../api/reports').then(m => {
+        if (m.getOshaItaDesignation) {
+          m.getOshaItaDesignation({ site_id: siteId })
+            .then(setDesignation).catch(() => setDesignation(null));
+        }
+      });
     }
   };
   useEffect(load, [siteId]);
+
+  const downloadCertifiedFile = async (format) => {
+    if (!data?.snapshot?.has_snapshot && format === 'csv') {
+      setToast('Certify the 300A summary before generating the ITA CSV.');
+      setTimeout(() => setToast(null), 3500);
+      return;
+    }
+    const setBusy = format === 'pdf' ? setDownloadingPdf : setDownloadingCsv;
+    setBusy(true);
+    try {
+      const params = new URLSearchParams({ site_id: String(siteId), year: String(data.year), format }).toString();
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`/api/reports/osha-300a?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `Download failed: ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      let filename = `osha-300a-${data.year}.${format}`;
+      const cd = resp.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      if (m) filename = m[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setToast(e.message || 'Download failed');
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!data) return <ReportLoading/>;
 
@@ -937,7 +1038,27 @@ function Osha300AReport({ siteId }) {
           <div className="rpt-panel-title">OSHA 300A · Annual Summary</div>
           <div className="rpt-panel-sub">{data.site?.name} · Calendar year {data.year}</div>
         </div>
-        <div className="rpt-300a-cert-area">
+        <div className="rpt-300a-cert-area" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => downloadCertifiedFile('pdf')}
+            disabled={downloadingPdf}
+            title={data.snapshot?.has_snapshot
+              ? 'Download the certified Form 300A as PDF (29 CFR 1904.32(b)(2))'
+              : 'Download DRAFT Form 300A PDF — not for posting until certified'}
+          >
+            <Icon name="download" size={13}/>{downloadingPdf ? 'Generating…' : 'PDF'}
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => downloadCertifiedFile('csv')}
+            disabled={downloadingCsv || !data.snapshot?.has_snapshot}
+            title={data.snapshot?.has_snapshot
+              ? 'Download the ITA-compatible CSV for electronic submission (29 CFR 1904.41)'
+              : 'Certify the 300A summary first — ITA submission requires a signed snapshot'}
+          >
+            <Icon name="export" size={13}/>{downloadingCsv ? 'Generating…' : 'ITA CSV'}
+          </button>
           {data.certification ? (
             <div className="rpt-300a-cert-stamp">
               <div className="rpt-300a-cert-stamp-icon"><Icon name="check" size={14}/></div>
@@ -945,7 +1066,7 @@ function Osha300AReport({ siteId }) {
                 <div className="rpt-300a-cert-stamp-title">Signed</div>
                 <div className="rpt-300a-cert-stamp-meta">
                   by <b>{data.certification.certifier_name}</b>
-                  {data.certification.certifier_title ? `, ${data.certification.certifier_title}` : ''}
+                  {data.certification.certifier_title_label ? `, ${data.certification.certifier_title_label}` : (data.certification.certifier_title || '')}
                   {' · '}
                   {formatDate(data.certification.signed_at)}
                 </div>
@@ -960,6 +1081,42 @@ function Osha300AReport({ siteId }) {
           )}
         </div>
       </div>
+      {/* WI-02: 1904.41 designation banner — surfaces whether the
+          establishment must e-submit to OSHA. Reuses card/panel tokens. */}
+      {designation?.designation && (
+        <div
+          className="rpt-panel-banner"
+          style={{
+            padding: '10px 16px',
+            margin: '0 0 12px 0',
+            background: designation.designation.required
+              ? 'var(--sds-brand-primary-tint)'
+              : 'var(--sds-bg-surface-alt)',
+            borderLeft: `3px solid ${designation.designation.required ? 'var(--sds-brand-primary)' : 'var(--sds-border)'}`,
+            borderRadius: 'var(--sds-radius-sm)',
+            fontSize: 12,
+          }}
+        >
+          {designation.designation.required ? (
+            <>
+              <b>Electronic submission required.</b> Per {designation.designation.reg_ref},
+              this establishment ({designation.site.naics_code ? `NAICS ${designation.site.naics_code}, ` : ''}
+              {designation.annual_avg_employees} employees) must electronically submit
+              <b> {designation.designation.submission_type}</b> information to OSHA.
+              {designation.next_submission_deadline ? <> {designation.next_submission_deadline}.</> : null}
+            </>
+          ) : (
+            <>
+              <span style={{ color: 'var(--sds-fg-secondary)' }}>
+                Per 29 CFR 1904.41(b)(1), routine electronic submission is not required
+                for this establishment ({designation.site.naics_code ? `NAICS ${designation.site.naics_code}, ` : ''}
+                {designation.annual_avg_employees} employees). OSHA may still request
+                data ad-hoc under 1904.41(a)(3).
+              </span>
+            </>
+          )}
+        </div>
+      )}
       {showCertify && createPortal(
         <CertifyOsha300AModal
           siteId={siteId}
@@ -1083,7 +1240,11 @@ function RiddorReport({ siteId }) {
                   <td className="cell-ref">{r.riddor_number}</td>
                   <td className="cell-ref">{r.incident_number}</td>
                   <td>{formatDateShort(r.event_date)}</td>
-                  <td><span className="rpt-cat-pill"><span className="cat-dot"/>{r.category?.replace(/_/g, ' ')}</span></td>
+                  <td>
+                    <span className="rpt-cat-pill" title={riddorCategoryReg(r.category) ? `RIDDOR ${riddorCategoryReg(r.category)}` : ''}>
+                      <span className="cat-dot"/>{riddorCategoryLabel(r.category)}
+                    </span>
+                  </td>
                   <td>{r.description || r.incident_title}</td>
                   <td className="cell-ref">{r.hse_ref || '—'}</td>
                   <td>
@@ -1116,6 +1277,160 @@ function RiddorReport({ siteId }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// WI-06: SafeWork NSW notifiable-incident report (WHS Act 2011 (NSW)
+// ss.35–39). Mirrors the RiddorReport shape — read-only table of
+// notifications across the org (optionally filtered by selected site).
+// Each row shows the NSW number, source incident, event date, top-level
+// s.35 category labels, and the s.38 phone/written submission status.
+function SafeworkNswReport({ siteId }) {
+  const [data, setData] = useState(null);
+  const [lookups, setLookups] = useState({ serious_injury_types: [], dangerous_incident_types: [] });
+
+  useEffect(() => {
+    setData(null);
+    const params = siteId ? { site_id: siteId } : {};
+    listSafeworkNsw(params).then(setData).catch(() => setData({ notifications: [] }));
+  }, [siteId]);
+
+  useEffect(() => {
+    getSafeworkNswLookups().then(setLookups).catch(() => {});
+  }, []);
+
+  if (!data) return <ReportLoading/>;
+
+  const s36Map = new Map((lookups.serious_injury_types || []).map(r => [r.key, r.label]));
+  const s37Map = new Map((lookups.dangerous_incident_types || []).map(r => [r.key, r.label]));
+
+  const rows = data.notifications || [];
+
+  // Derive top-line counts from the visible rows so the panel header
+  // mirrors the RIDDOR stats block.
+  const stats = rows.reduce((acc, r) => {
+    if (r.is_fatality) acc.fatalities += 1;
+    if (r.is_serious_injury) acc.serious += 1;
+    if (r.is_dangerous_incident) acc.dangerous += 1;
+    if (r.excluded_mines_petroleum) acc.excluded += 1;
+    return acc;
+  }, { fatalities: 0, serious: 0, dangerous: 0, excluded: 0 });
+
+  // Compact label for the s.35 category column: list the top-level
+  // sections that apply with their paragraph numbers.
+  const categoryLabel = (r) => {
+    const parts = [];
+    if (r.is_fatality) parts.push('s.35(a) Death');
+    if (r.is_serious_injury) parts.push('s.35(b) Serious');
+    if (r.is_dangerous_incident) parts.push('s.35(c) Dangerous');
+    if (r.excluded_mines_petroleum) parts.push('M&P excluded');
+    return parts.length > 0 ? parts.join(' · ') : '—';
+  };
+
+  // Sub-categories — show the first verbatim Act label for context, with
+  // a count tail when more than one applies (full list is on the
+  // incident detail page).
+  const subLabel = (r) => {
+    const keys = [
+      ...(r.serious_injury_sub_categories || []).map(k => s36Map.get(k) || k),
+      ...(r.dangerous_incident_sub_categories || []).map(k => s37Map.get(k) || k),
+    ];
+    if (keys.length === 0) return '—';
+    if (keys.length === 1) return keys[0];
+    return `${keys[0]} (+${keys.length - 1})`;
+  };
+
+  // s.38 status pill: phone first, then written-clock state.
+  const statusFor = (r) => {
+    if (r.written_submitted_at)        return { txt: 'Written submitted', cls: 'rs-submitted' };
+    if (r.regulator_requested_written_at) return { txt: 'Written pending', cls: 'rs-pending' };
+    if (r.phone_notified_at)           return { txt: 'Phone notified',  cls: 'rs-submitted' };
+    return { txt: 'Without delay',     cls: 'rs-pending' };
+  };
+
+  return (
+    <div className="rpt-panel">
+      <div className="rpt-panel-header">
+        <div>
+          <div className="rpt-panel-title">SafeWork NSW · Notifiable Incidents</div>
+          <div className="rpt-panel-sub">WHS Act 2011 (NSW) ss.35–39 · {rows.length} record{rows.length === 1 ? '' : 's'}</div>
+        </div>
+      </div>
+      <div className="rpt-panel-body">
+        <div className="rpt-riddor-banner">
+          <div className="rpt-riddor-icon"><Icon name="info" size={16}/></div>
+          <div className="rpt-riddor-text">
+            <b>SafeWork NSW notification timelines:</b> Notify the regulator <i>immediately</i>
+            {' '}by the fastest possible means (s.38(1)/(3)) — telephone 13 10 50 or online portal at
+            {' '}notifyform.safework.nsw.gov.au. If the regulator requests a written notice (s.38(4)(b)),
+            {' '}submit it within 48 hours. This panel is the organisation's internal record; downloads
+            {' '}from the incident page produce a record-copy PDF, not the regulator's submission receipt.
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table className="rpt-table">
+            <thead>
+              <tr>
+                <th>NSW ref</th>
+                <th>Source</th>
+                <th>Event date</th>
+                <th>Site</th>
+                <th>s.35 category</th>
+                <th>Sub-category (verbatim)</th>
+                <th>s.38 status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => {
+                const s = statusFor(r);
+                return (
+                  <tr key={r.id}>
+                    <td className="cell-ref">{r.nsw_number}</td>
+                    <td className="cell-ref">{r.incident_number || '—'}</td>
+                    <td>{formatDateShort(r.event_date)}</td>
+                    <td>{r.site_name || '—'}</td>
+                    <td>
+                      <span className="rpt-cat-pill" title="WHS Act 2011 (NSW) Part 3">
+                        <span className="cat-dot"/>{categoryLabel(r)}
+                      </span>
+                    </td>
+                    <td title={subLabel(r)}>{subLabel(r)}</td>
+                    <td>
+                      <span className={`rpt-status ${s.cls}`}>
+                        <span className="rs-dot"/>{s.txt}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && (
+                <tr><td colSpan={7} className="cell-empty">No SafeWork NSW notifications for the selected site/year.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="rpt-riddor-stats">
+          <div className="rpt-riddor-stat">
+            <div className="rpt-riddor-stat-label">Fatalities (s.35(a))</div>
+            <div className="rpt-riddor-stat-val">{stats.fatalities}</div>
+          </div>
+          <div className="rpt-riddor-stat">
+            <div className="rpt-riddor-stat-label">Serious injuries (s.35(b))</div>
+            <div className="rpt-riddor-stat-val">{stats.serious}</div>
+          </div>
+          <div className="rpt-riddor-stat">
+            <div className="rpt-riddor-stat-label">Dangerous incidents (s.35(c))</div>
+            <div className="rpt-riddor-stat-val">{stats.dangerous}</div>
+          </div>
+          <div className="rpt-riddor-stat">
+            <div className="rpt-riddor-stat-label">Mines &amp; Petroleum carve-out</div>
+            <div className="rpt-riddor-stat-val">{stats.excluded}</div>
+          </div>
+        </div>
       </div>
     </div>
   );

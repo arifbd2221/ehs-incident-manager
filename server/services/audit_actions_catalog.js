@@ -142,4 +142,44 @@ export const AUDIT_ACTIONS_CATALOG = [
   { entity_type: 'system', action: 'voice_extracted' },
   { entity_type: 'system', action: 'audit_log_exported' },
   { entity_type: 'system', action: 'osha_300a_signed' },
+  { entity_type: 'system', action: 'osha_300_manual_entry' },
+  { entity_type: 'system', action: 'osha_300_pdf_downloaded' },
+  { entity_type: 'system', action: 'osha_300a_pdf_downloaded' },
+  { entity_type: 'system', action: 'osha_ita_csv_downloaded' },
+
+  // Regulatory submissions tied to a specific incident (WI-10).
+  // entity_type='incident' keeps them on the incident's timeline so the
+  // inspector narrative is "this incident produced this regulatory record".
+  { entity_type: 'incident', action: 'osha_300_auto_entry' },
+  { entity_type: 'incident', action: 'osha_301_pdf_downloaded' },
+  { entity_type: 'incident', action: 'generic_incident_pdf_downloaded' },
+  { entity_type: 'incident', action: 'osha_severe_opened' },
+  { entity_type: 'incident', action: 'osha_severe_phone_notified' },
+  { entity_type: 'incident', action: 'riddor_opened' },
+  { entity_type: 'incident', action: 'safework_nsw_opened' },
+  { entity_type: 'incident', action: 'safework_nsw_phone_notified' },
+  { entity_type: 'incident', action: 'safework_nsw_regulator_requested_written' },
+  { entity_type: 'incident', action: 'safework_nsw_written_submitted' },
+  { entity_type: 'incident', action: 'safework_nsw_site_preservation_updated' },
+  { entity_type: 'incident', action: 'safework_nsw_pdf_downloaded' },
+
+  // Multi-person incident management (WI-A). All entries hang off the
+  // parent incident so the timeline reads as a single narrative:
+  // "added affected person X → added injury Y → updated …".
+  { entity_type: 'incident', action: 'affected_person_added' },
+  { entity_type: 'incident', action: 'affected_person_updated' },
+  { entity_type: 'incident', action: 'affected_person_removed' },
+  { entity_type: 'incident', action: 'injury_added' },
+  { entity_type: 'incident', action: 'injury_updated' },
+  { entity_type: 'incident', action: 'injury_removed' },
+
+  // Classification override approval workflow (WI-B). Lifecycle:
+  // requested → (approved | rejected | withdrawn). On approval the
+  // boolean flip on the incidents row also writes a regular
+  // `incident_updated` (or future `classification_changed`) row, so the
+  // timeline reads as two events: the approval AND the resulting change.
+  { entity_type: 'incident', action: 'override_requested' },
+  { entity_type: 'incident', action: 'override_approved' },
+  { entity_type: 'incident', action: 'override_rejected' },
+  { entity_type: 'incident', action: 'override_withdrawn' },
 ];

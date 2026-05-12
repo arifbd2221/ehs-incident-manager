@@ -1,8 +1,43 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
 import { calculateMetrics } from '../services/metrics.js';
-import { writeActivity } from '../services/activity_log.js';
+import { writeActivity, auditCtx } from '../services/activity_log.js';
 import { AUDIT_ACTIONS_CATALOG } from '../services/audit_actions_catalog.js';
+import { verifyChain } from '../db/activity_log_chain.js';
+import { renderOsha300Pdf } from '../services/pdf/osha_300.js';
+import { renderOsha301Pdf } from '../services/pdf/osha_301.js';
+import { renderGenericIncidentPdf, ALL_SECTIONS as GENERIC_ALL_SECTIONS } from '../services/pdf/generic_incident.js';
+import { renderSafeworkNswPdf } from '../services/pdf/safework_nsw.js';
+import { listAffectedPersons } from '../services/affected_persons.js';
+import {
+  listSevereNotificationsForIncident,
+  getSevereNotification,
+  logPhoneNotification,
+} from '../services/osha_severe.js';
+import {
+  listSeriousInjuryTypes,
+  listDangerousIncidentTypes,
+  getNotificationForIncident as getNswForIncident,
+  getNotificationByNumber as getNswByNumber,
+  listNotificationsForOrg as listNswForOrg,
+  logPhoneNotification as logNswPhone,
+  logRegulatorRequestedWritten as logNswRegulatorRequested,
+  logWrittenSubmitted as logNswWrittenSubmitted,
+  setSitePreservation as setNswSitePreservation,
+  setPcbu as setNswPcbu,
+} from '../services/safework_nsw.js';
+import { validateAbn } from '../services/abn_validator.js';
+import {
+  aggregate300A,
+  createCertifiedSnapshot,
+  getCertifiedSnapshot,
+  CERTIFIER_TITLE_OPTIONS,
+  OSHA_300A_AFFIRMATION_TEXT,
+} from '../services/osha_300a.js';
+import { itaDesignation } from '../services/osha_ita_designation.js';
+import { renderOsha300APdf } from '../services/pdf/osha_300a.js';
+import { generateItaCsv, buildItaRow } from '../services/csv/osha_ita.js';
+import { validateItaSubmission } from '../services/csv/osha_ita_validator.js';
 
 const router = Router();
 
@@ -20,8 +55,10 @@ const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
 const AUDIT_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 const canSeeAudit = (user) => AUDIT_ROLES.has(user?.role);
 
-const OSHA_300A_AFFIRMATION =
-  'I certify that I have examined this document and that to the best of my knowledge the entries are true, accurate, and complete.';
+// Legacy alias retained for any callers that still reference the
+// pre-WI-02 constant. New code reads OSHA_300A_AFFIRMATION_TEXT from
+// services/osha_300a.js — the verbatim 29 CFR 1904.32(b)(3) wording.
+const OSHA_300A_AFFIRMATION = OSHA_300A_AFFIRMATION_TEXT;
 
 // Site-scoped metrics for live KPI cards (SiteDetail, embed components).
 // Returns the same `calculateMetrics` shape used by /osha-300a, but standalone
@@ -41,7 +78,7 @@ router.get('/site-metrics', (req, res) => {
 });
 
 router.get('/osha-300', (req, res) => {
-  const { site_id, year } = req.query;
+  const { site_id, year, format } = req.query;
   const currentYear = year || new Date().getFullYear();
   const orgId = req.user.org_id;
 
@@ -64,7 +101,45 @@ router.get('/osha-300', (req, res) => {
     return e;
   });
 
-  const site = site_id ? db.prepare('SELECT * FROM sites WHERE id = ?').get(Number(site_id)) : null;
+  const site = site_id ? db.prepare('SELECT * FROM sites WHERE id = ? AND org_id = ?')
+    .get(Number(site_id), orgId) : null;
+  if (site_id && !site) return res.status(404).json({ error: 'Site not found' });
+
+  if (format === 'pdf') {
+    // 29 CFR 1904.30(a): the OSHA 300 Log is kept per-establishment. The
+    // PDF rendering preserves that — without a site_id the renderer would
+    // have to invent an establishment line, which would be confusing to an
+    // inspector. Require it explicitly.
+    if (!site) {
+      return res.status(400).json({ error: 'site_id is required for PDF format (one Log per establishment, 29 CFR 1904.30(a)).' });
+    }
+    const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+    const filename = `osha-300-${(site.establishment_id || site.name || 'site').toString().replace(/[^A-Za-z0-9_.-]/g, '_')}-${currentYear}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    writeActivity({
+      org_id: orgId,
+      entity_type: 'system',
+      entity_id: null,
+      action: 'osha_300_pdf_downloaded',
+      description: `downloaded OSHA 300 PDF for ${site.name} (CY ${currentYear}) — ${entries.length} case(s)`,
+      user_id: req.user.id,
+      metadata: {
+        site_id: site.id,
+        period_year: Number(currentYear),
+        case_count: entries.length,
+      },
+      ...auditCtx(req),
+    });
+
+    return renderOsha300Pdf(res, {
+      year: Number(currentYear),
+      entries,
+      site,
+      orgName: org?.name || '',
+    });
+  }
 
   res.json({
     entries,
@@ -74,97 +149,237 @@ router.get('/osha-300', (req, res) => {
 });
 
 router.get('/osha-300a', (req, res) => {
-  const { site_id, year } = req.query;
+  const { site_id, year, format } = req.query;
   const currentYear = year || new Date().getFullYear() - 1;
   const orgId = req.user.org_id;
 
   if (!site_id) return res.status(400).json({ error: 'site_id is required' });
 
-  const metrics = calculateMetrics(Number(site_id), Number(currentYear));
+  const site = db.prepare('SELECT * FROM sites WHERE id = ? AND org_id = ?')
+    .get(Number(site_id), orgId);
+  if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  const cases = db.prepare(`
-    SELECT
-      SUM(classification_death) as deaths,
-      SUM(classification_days_away) as days_away,
-      SUM(classification_job_transfer) as job_transfer,
-      SUM(classification_other) as other_recordable,
-      SUM(days_away_count) as total_days_away,
-      SUM(days_restricted_count) as total_days_restricted
-    FROM osha_300_log WHERE site_id = ? AND calendar_year = ?
-  `).get(Number(site_id), Number(currentYear));
+  // WI-02: prefer the certified snapshot when one exists. Live aggregate
+  // is the DRAFT view for in-progress summaries. Per 29 CFR 1904.32(b)(5)
+  // the posted summary must not be altered; the snapshot is the
+  // immutable artifact.
+  const snapshot = getCertifiedSnapshot(orgId, site.id, Number(currentYear));
 
-  const types = db.prepare(`
-    SELECT injury_type, COUNT(*) as count
-    FROM osha_300_log WHERE site_id = ? AND calendar_year = ?
-    GROUP BY injury_type
-  `).all(Number(site_id), Number(currentYear));
-
-  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(Number(site_id));
-
-  // Surface the 300A signed cert for this site/year if one exists. The
-  // UI uses this to show "Signed by X on Y" instead of the Certify button.
-  const certification = db.prepare(`
-    SELECT rc.id, rc.signed_at, rc.affirmation_text, rc.certifier_title,
-           u.name as certifier_name, u.initials as certifier_initials
-    FROM regulatory_certifications rc
-    LEFT JOIN users u ON u.id = rc.certifier_user_id
-    WHERE rc.type = 'osha_300a' AND rc.site_id = ? AND rc.period_year = ?
-    ORDER BY rc.signed_at DESC LIMIT 1
-  `).get(Number(site_id), Number(currentYear));
-
-  // OSHA 300A line 13/14: hours + employee count come from work_hours (live
-  // sum / period-length-weighted avg). When work_hours has no entries for the
-  // year, fall back to the onboarding-time `sites.annual_avg_employees` so a
-  // brand-new tenant doesn't see "0 employees" on a 300A draft. Hours have no
-  // sensible fallback — empty work_hours means zero recorded hours.
+  const live = aggregate300A({ orgId, siteId: site.id, periodYear: Number(currentYear) });
+  const metrics = calculateMetrics(site.id, Number(currentYear));
+  const liveAvgEmployees = metrics.annualAvgEmployees || site.annual_avg_employees || 0;
   const liveHours = metrics.totalHoursWorked || 0;
-  const liveAvgEmployees = metrics.annualAvgEmployees || site?.annual_avg_employees || 0;
 
+  // Helper: pick certified totals when present, else live aggregate.
+  const totalsFor = snapshot ? snapshot : live;
+
+  // --- PDF / CSV download branches ---
+  if (format === 'pdf' || format === 'csv') {
+    const baseFn = (site.establishment_id || site.name || 'site').toString().replace(/[^A-Za-z0-9_.-]/g, '_');
+    const company = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+
+    if (format === 'pdf') {
+      const filename = `osha-300a-${baseFn}-${currentYear}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      writeActivity({
+        org_id: orgId, entity_type: 'system', entity_id: null,
+        action: 'osha_300a_pdf_downloaded',
+        description: `downloaded OSHA 300A PDF for ${site.name} (CY ${currentYear})${snapshot ? ' — certified' : ' — DRAFT'}`,
+        user_id: req.user.id,
+        metadata: {
+          site_id: site.id, period_year: Number(currentYear),
+          certified: !!snapshot,
+          certification_id: snapshot?.certification_id || null,
+        },
+        ...auditCtx(req),
+      });
+      return renderOsha300APdf(res, {
+        year: Number(currentYear),
+        establishmentName: snapshot?.establishment_name || site.name,
+        establishmentAddress: snapshot?.establishment_address || site.address,
+        naicsCode: snapshot?.naics_code || site.naics_code,
+        ein: snapshot?.ein || null,
+        annualAvgEmployees: snapshot?.annual_avg_employees ?? liveAvgEmployees,
+        totalHoursWorked: snapshot?.total_hours_worked ?? liveHours,
+        totals: snapshot ? snapshot : live,
+        certified: !!snapshot,
+        cert: snapshot ? {
+          signed_at: snapshot.signed_at,
+          certifier_name: snapshot.certifier_name,
+          certifier_title_label: snapshot.certifier_title_label,
+        } : null,
+        companyName: company?.name || '',
+      });
+    }
+
+    if (format === 'csv') {
+      // ITA CSV upload format per 29 CFR 1904.41. Requires a certified
+      // snapshot — submitting un-certified totals would violate the
+      // sign-then-submit ordering of 1904.32(b)(3) + 1904.41(a)(1).
+      if (!snapshot) {
+        return res.status(409).json({
+          error: 'OSHA ITA CSV requires a certified 300A snapshot. Certify the summary before generating the submission file.',
+          spec_ref: '29 CFR 1904.32(b)(3), 29 CFR 1904.41(a)(1)',
+        });
+      }
+      // Pull the supplemental fields not on the cert snapshot: company
+      // name + city/state/zip + industry_description + size +
+      // establishment_type + change_reason. v1 takes them from query
+      // string so the FE can pre-fill from a confirmation modal.
+      const extra = {
+        company_name: req.query.company_name || company?.name || '',
+        ein: req.query.ein || '',
+        city: req.query.city || '',
+        state: req.query.state || '',
+        zip: req.query.zip || '',
+        industry_description: req.query.industry_description || '',
+        size: req.query.size ? Number(req.query.size) : null,
+        establishment_type: req.query.establishment_type ? Number(req.query.establishment_type) : null,
+        change_reason: req.query.change_reason || '',
+      };
+      const row = buildItaRow(snapshot, extra);
+      const validation = validateItaSubmission(row);
+      if (!validation.ok) {
+        return res.status(400).json({
+          error: 'ITA submission validation failed — OSHA would reject this file.',
+          ita_validation_errors: validation.errors,
+        });
+      }
+      const csv = generateItaCsv([row]);
+      const filename = `osha-ita-300a-${baseFn}-${currentYear}.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      writeActivity({
+        org_id: orgId, entity_type: 'system', entity_id: null,
+        action: 'osha_ita_csv_downloaded',
+        description: `downloaded OSHA ITA CSV for ${site.name} (CY ${currentYear})`,
+        user_id: req.user.id,
+        metadata: {
+          site_id: site.id, period_year: Number(currentYear),
+          certification_id: snapshot.certification_id,
+        },
+        ...auditCtx(req),
+      });
+      return res.send(csv);
+    }
+  }
+
+  // --- JSON branch (default) ---
+  // Backward-compat shape. New `snapshot` field added so the FE can
+  // detect "live vs certified" without an extra request.
   res.json({
     year: Number(currentYear),
     site: {
-      name: site?.name,
-      establishment_id: site?.establishment_id,
-      naics_code: site?.naics_code,
+      name: site.name,
+      establishment_id: site.establishment_id,
+      naics_code: site.naics_code,
       annual_avg_employees: liveAvgEmployees,
       total_hours_worked: liveHours,
     },
     cases: {
-      deaths: cases?.deaths || 0,
-      days_away: cases?.days_away || 0,
-      job_transfer: cases?.job_transfer || 0,
-      other_recordable: cases?.other_recordable || 0,
-      total_days_away: cases?.total_days_away || 0,
-      total_days_restricted: cases?.total_days_restricted || 0,
+      deaths: totalsFor.total_deaths || 0,
+      days_away: totalsFor.total_days_away_cases || 0,
+      job_transfer: totalsFor.total_job_transfer_cases || 0,
+      other_recordable: totalsFor.total_other_recordable_cases || 0,
+      total_days_away: totalsFor.total_days_away || 0,
+      total_days_restricted: totalsFor.total_days_restricted || 0,
     },
-    types,
+    types: {
+      injuries: totalsFor.total_injuries || 0,
+      skin_disorders: totalsFor.total_skin_disorders || 0,
+      respiratory: totalsFor.total_respiratory || 0,
+      poisonings: totalsFor.total_poisonings || 0,
+      hearing_loss: totalsFor.total_hearing_loss || 0,
+      other_illnesses: totalsFor.total_other_illnesses || 0,
+    },
     metrics,
-    certification: certification || null,
-    affirmation_text: OSHA_300A_AFFIRMATION,
+    certification: snapshot
+      ? {
+          id: snapshot.certification_id,
+          signed_at: snapshot.signed_at,
+          affirmation_text: snapshot.affirmation_text,
+          certifier_title_key: snapshot.certifier_title_key,
+          certifier_title_label: snapshot.certifier_title_label,
+          certifier_name: snapshot.certifier_name,
+          certifier_initials: snapshot.certifier_initials,
+        }
+      : null,
+    snapshot: snapshot ? { has_snapshot: true, snapshot_id: snapshot.id, case_count: JSON.parse(snapshot.case_ids_snapshot || '[]').length } : { has_snapshot: false },
+    affirmation_text: OSHA_300A_AFFIRMATION_TEXT,
+    certifier_title_options: CERTIFIER_TITLE_OPTIONS,
   });
 });
 
-// 300A annual sign-off (per OSHA 1904.32). Elevated roles only.
-// Body: { site_id, year, typed_name, certifier_title }
-//   typed_name must match the user's name (case-insensitive trim) — that's
-//   the OSHA-style "wet signature" stand-in. The activity_log row uses
-//   entity_type='system' since 300A spans an entire site/year and isn't
-//   tied to any single incident.
+// WI-02: ITA designation lookup per 29 CFR 1904.41 (a)(1)(i)/(ii) + (a)(2).
+// GET /reports/osha-300a/ita-designation?site_id=X[&employees=N]
+// Surfaces whether the establishment must e-submit to OSHA.
+router.get('/osha-300a/ita-designation', (req, res) => {
+  const { site_id, employees } = req.query;
+  if (!site_id) return res.status(400).json({ error: 'site_id is required' });
+  const site = db.prepare('SELECT id, name, naics_code, annual_avg_employees FROM sites WHERE id = ? AND org_id = ?')
+    .get(Number(site_id), req.user.org_id);
+  if (!site) return res.status(404).json({ error: 'Site not found' });
+  // employees override (query param) lets the FE preview "what if our
+  // headcount jumps to X"; default is the live work_hours / sites
+  // figure used elsewhere.
+  let employeeCount = employees ? Number(employees) : site.annual_avg_employees;
+  if (!employeeCount) {
+    const m = calculateMetrics(site.id);
+    employeeCount = m.annualAvgEmployees || 0;
+  }
+  const result = itaDesignation(site.naics_code, employeeCount);
+  res.json({
+    site: { id: site.id, name: site.name, naics_code: site.naics_code },
+    annual_avg_employees: employeeCount,
+    designation: result,
+    next_submission_deadline: result.required
+      ? `March 2, ${new Date().getFullYear() + 1} — covering CY ${new Date().getFullYear()} per 29 CFR 1904.41(c)`
+      : null,
+  });
+});
+
+// 300A annual sign-off per 29 CFR 1904.32. Elevated roles only.
+// Body: { site_id, year, typed_name, certifier_title_key }
+//   - typed_name must match the user's account name (case-insensitive
+//     trim) — the OSHA-style "wet signature" stand-in.
+//   - certifier_title_key must be one of the 4 keys per 1904.32(b)(4)
+//     (owner / corporate_officer / highest_ranking_official /
+//     immediate_supervisor_of_highest_ranking). Pre-WI-02 callers can
+//     also pass a `certifier_title` legacy field, which is treated as a
+//     candidate key for backward compatibility.
+// Atomic: creates the regulatory_certifications row AND an
+// osha_300a_certified_summaries snapshot (WI-02 / 1904.32(b)(5)) in a
+// single tx. The snapshot freezes the column totals that were certified
+// against, so future 300 Log edits cannot retroactively alter the
+// posted summary.
 router.post('/osha-300a/certify', (req, res) => {
   if (!isElevated(req.user)) {
     return res.status(403).json({ error: 'Only an elevated role can certify the 300A summary.' });
   }
-  const { site_id, year, typed_name, certifier_title } = req.body || {};
-  if (!site_id || !year || !typed_name || !certifier_title) {
-    return res.status(400).json({ error: 'site_id, year, typed_name, and certifier_title are required.' });
+  const { site_id, year, typed_name } = req.body || {};
+  const certifierTitleKey = req.body?.certifier_title_key || req.body?.certifier_title;
+  if (!site_id || !year || !typed_name || !certifierTitleKey) {
+    return res.status(400).json({
+      error: 'site_id, year, typed_name, and certifier_title_key are required.',
+      allowed_certifier_title_keys: CERTIFIER_TITLE_OPTIONS.map(o => o.key),
+    });
   }
 
-  const site = db.prepare('SELECT id, name FROM sites WHERE id = ? AND org_id = ?').get(site_id, req.user.org_id);
+  // 1904.32(b)(4) allowlist gate. Fail loud rather than store free-text
+  // titles that would defeat the dropdown contract.
+  const allowedKeys = new Set(CERTIFIER_TITLE_OPTIONS.map(o => o.key));
+  if (!allowedKeys.has(certifierTitleKey)) {
+    return res.status(400).json({
+      error: `certifier_title_key must be one of ${[...allowedKeys].join(', ')} per 29 CFR 1904.32(b)(4).`,
+    });
+  }
+
+  const site = db.prepare('SELECT * FROM sites WHERE id = ? AND org_id = ?')
+    .get(Number(site_id), req.user.org_id);
   if (!site) return res.status(404).json({ error: 'Site not found in your organization.' });
 
-  // OSHA-style: the certifier's typed name must match their account name.
-  // Loose match (trim + case-insensitive) so trailing spaces / case don't
-  // trip up an honest signer.
+  // Typed-name match (loose case-insensitive trim).
   const expected = (req.user.name || '').trim().toLowerCase();
   const actual = (typed_name || '').trim().toLowerCase();
   if (!expected || expected !== actual) {
@@ -173,8 +388,10 @@ router.post('/osha-300a/certify', (req, res) => {
     });
   }
 
-  // Idempotency: if already signed for this site/year, return the existing
-  // cert rather than 409. Easier UX — sign-once-per-year is the OSHA rule.
+  // Pre-check: already certified? Return 409 BEFORE running the
+  // aggregation + snapshot work. The partial UNIQUE on
+  // regulatory_certifications + the UNIQUE on osha_300a_certified_summaries
+  // would catch this anyway, but the upfront check gives a cleaner error.
   const existing = db.prepare(`
     SELECT id FROM regulatory_certifications WHERE type='osha_300a' AND site_id=? AND period_year=?
   `).get(Number(site_id), Number(year));
@@ -182,39 +399,62 @@ router.post('/osha-300a/certify', (req, res) => {
     return res.status(409).json({ error: `300A for ${site.name} ${year} is already signed.` });
   }
 
+  // Aggregate the live 300 Log + read employee count / hours from the
+  // metrics service. These values get frozen onto the snapshot.
+  const orgId = req.user.org_id;
+  const totals = aggregate300A({ orgId, siteId: site.id, periodYear: Number(year) });
+  const metrics = calculateMetrics(site.id, Number(year));
+  const annualAvgEmployees = metrics.annualAvgEmployees || site.annual_avg_employees || 0;
+  const totalHoursWorked = metrics.totalHoursWorked || 0;
+
   const ipAddress = req.ip || req.headers['x-forwarded-for'] || null;
   const userAgent = req.headers['user-agent'] || null;
 
-  const result = db.prepare(`
-    INSERT INTO regulatory_certifications (
-      type, site_id, period_year, certifier_user_id, certifier_title,
-      affirmation_text, ip_address, user_agent
-    ) VALUES ('osha_300a', ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    Number(site_id), Number(year), req.user.id,
-    certifier_title.trim(), OSHA_300A_AFFIRMATION,
-    ipAddress, userAgent,
-  );
+  let snapshotIds;
+  try {
+    snapshotIds = createCertifiedSnapshot({
+      orgId,
+      siteId: site.id,
+      periodYear: Number(year),
+      certifierUserId: req.user.id,
+      certifierTitleKey,
+      ipAddress, userAgent,
+      establishmentName: site.name,
+      establishmentAddress: site.address,
+      naicsCode: site.naics_code,
+      ein: req.body?.ein || null,
+      annualAvgEmployees,
+      totalHoursWorked,
+      totals,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    throw err;
+  }
 
-  db.prepare(`
-    INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
-    VALUES (?, 'system', NULL, 'osha_300a_signed', ?, ?, ?)
-  `).run(
-    req.user.org_id,
-    `signed OSHA 300A for ${site.name} (CY ${year}) as "${certifier_title.trim()}"`,
-    req.user.id,
-    JSON.stringify({ certification_id: result.lastInsertRowid, site_id: Number(site_id), period_year: Number(year) }),
-  );
+  writeActivity({
+    org_id: orgId,
+    entity_type: 'system',
+    entity_id: null,
+    action: 'osha_300a_signed',
+    description: `signed OSHA 300A for ${site.name} (CY ${year}) as "${certifierTitleKey}"`,
+    user_id: req.user.id,
+    metadata: {
+      certification_id: snapshotIds.certification_id,
+      snapshot_id: snapshotIds.snapshot_id,
+      site_id: site.id,
+      period_year: Number(year),
+      certifier_title_key: certifierTitleKey,
+      case_count: totals.case_ids_snapshot.length,
+    },
+    ip: ipAddress,
+    user_agent: userAgent,
+  });
 
-  const cert = db.prepare(`
-    SELECT rc.id, rc.signed_at, rc.affirmation_text, rc.certifier_title,
-           u.name as certifier_name, u.initials as certifier_initials
-    FROM regulatory_certifications rc
-    LEFT JOIN users u ON u.id = rc.certifier_user_id
-    WHERE rc.id = ?
-  `).get(result.lastInsertRowid);
-
-  res.status(201).json(cert);
+  const snapshot = getCertifiedSnapshot(orgId, site.id, Number(year));
+  res.status(201).json(snapshot);
 });
 
 router.post('/osha-300', (req, res) => {
@@ -262,6 +502,7 @@ router.post('/osha-300', (req, res) => {
     description: `manually added case #${caseNum} to OSHA 300 log for CY ${year}`,
     user_id: req.user.id,
     metadata: { osha_300_log_id: result.lastInsertRowid, site_id: Number(site_id), year },
+    ...auditCtx(req),
   });
 
   const entry = db.prepare('SELECT * FROM osha_300_log WHERE id = ?').get(result.lastInsertRowid);
@@ -283,6 +524,88 @@ router.get('/osha-301/:incidentId', (req, res) => {
   const td = JSON.parse(incident.type_data || '{}');
   const logEntry = db.prepare('SELECT case_number FROM osha_300_log WHERE incident_id = ?').get(incident.id);
 
+  // WI-A multi-person: the primary affected_person + their first injury take
+  // precedence over the legacy type_data.injured_person JSON when present.
+  // Pre-WI-A incidents (and any post-WI-A incident still using the legacy
+  // shape) fall back to type_data.
+  const persons = listAffectedPersons({ orgId: req.user.org_id, incidentId: incident.id });
+  const primaryAp = persons.find(p => p.is_primary === 1) || persons[0] || null;
+  const primaryInj = primaryAp?.injuries?.[0] || null;
+
+  if (req.query.format === 'pdf') {
+    // Form 301 is per-recordable case per 29 CFR 1904.29(b)(2). We don't
+    // hard-block non-recordable PDFs (the FE hides the button instead) so
+    // an inspector can still pull a "draft" 301 if needed during triage.
+
+    // Build the renderer payload from the same shape the JSON branch
+    // returns below — keeps the two surfaces in lockstep.
+    const employee = {
+      name: primaryAp?.name || td.injured_person?.name || td.affected_person?.name || '',
+      address: primaryAp?.address || td.injured_person?.address || '',
+      dob: primaryAp?.dob || td.injured_person?.dob || td.affected_person?.dob || '',
+      hire_date: primaryAp?.date_hired || td.injured_person?.date_hired || td.injured_person?.hire_date || '',
+      gender: primaryAp?.gender || td.injured_person?.gender || td.affected_person?.gender || '',
+    };
+    const physician = {
+      name: primaryInj?.physician_name || td.physician_name || '',
+      facility_name: primaryInj?.physician_facility || td.facility_name || '',
+      facility_address: td.facility_address || '',
+    };
+    const caseInfo = {
+      event_date: incident.incident_datetime,
+      time_began_work: td.time_began_work || null,
+      activity_before: td.activity_before || td.task_at_time || '',
+      what_happened: incident.description || incident.title || '',
+      description: incident.description || '',
+      injury_summary: [
+        (primaryInj?.body_part || (td.body_parts || []).join(', ')) || '',
+        primaryInj?.injury_type || td.injury_type || td.illness_category || '',
+      ].filter(Boolean).join(' — '),
+      object_substance: primaryInj?.object_substance || td.object_substance || td.substance?.name || '',
+      date_of_death: primaryInj?.date_of_death || incident.osha_date_of_death || '',
+    };
+    const completedBy = {
+      name: req.user.name || '',
+      title: req.user.role || '',
+      phone: '',
+      date: new Date().toISOString().slice(0, 10),
+    };
+
+    const year = incident.incident_datetime
+      ? new Date(incident.incident_datetime).getFullYear()
+      : new Date().getFullYear();
+    const filename = `osha-301-${(incident.incident_number || incident.id).toString().replace(/[^A-Za-z0-9_.-]/g, '_')}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: incident.id,
+      action: 'osha_301_pdf_downloaded',
+      description: `downloaded OSHA 301 PDF for incident ${incident.incident_number}`,
+      user_id: req.user.id,
+      metadata: {
+        incident_id: incident.id,
+        case_number: logEntry?.case_number || null,
+        osha_recordable: incident.osha_recordable || 0,
+      },
+      ...auditCtx(req),
+    });
+
+    return renderOsha301Pdf(res, {
+      incidentNumber: incident.incident_number,
+      year,
+      caseNumber: logEntry?.case_number,
+      employee,
+      physician,
+      erTreated: primaryInj?.er_treated ?? incident.er_treated ?? null,
+      hospitalized: primaryInj?.hospitalized ?? incident.hospitalized ?? null,
+      case: caseInfo,
+      completedBy,
+    });
+  }
+
   res.json({
     incident_number: incident.incident_number,
     case_number: logEntry?.case_number,
@@ -290,7 +613,14 @@ router.get('/osha-301/:incidentId', (req, res) => {
       name: td.injured_person?.name || td.affected_person?.name || '',
       job_title: td.injured_person?.job_title || td.affected_person?.job_title || '',
       department: td.injured_person?.department || incident.department || '',
-      hire_date: td.injured_person?.hire_date || '',
+      // Regulatory identity fields per 29 CFR 1904.29.
+      // date_hired is the canonical key (wizard + affected_persons table);
+      // hire_date kept as legacy fallback for any pre-wizard-rewrite data.
+      dob: td.injured_person?.dob || td.affected_person?.dob || '',
+      gender: td.injured_person?.gender || td.affected_person?.gender || '',
+      hire_date: td.injured_person?.date_hired || td.injured_person?.hire_date || '',
+      address: td.injured_person?.address || '',
+      phone: td.injured_person?.phone || '',
     },
     incident: {
       date: incident.incident_datetime,
@@ -325,6 +655,507 @@ router.get('/osha-301/:incidentId', (req, res) => {
     work_related: incident.osha_work_related || '',
     type_data: td,
   });
+});
+
+// ===================================================================
+// WI-09 Generic incident PDF (per PRD §4.6)
+//
+// Universal fallback record artifact. Renders for ANY incident
+// regardless of jurisdiction, classification, or completeness. The
+// document is explicitly NOT a regulatory submission — the footer
+// notes that any required regulatory reporting must go through OSHA
+// ITA / HSE RIDDOR / SafeWork NSW Notify.
+//
+// Section visibility configurable via ?sections=overview,affected_persons,
+// investigation,causes,capas,classifications,attachments,audit. Default
+// is all sections enabled. ?audit_limit=N caps the audit-trail slice
+// (default 25).
+// ===================================================================
+router.get('/incidents/:incidentId/generic', (req, res) => {
+  const orgId = req.user.org_id;
+  const incidentId = Number(req.params.incidentId);
+  const format = req.query.format || 'pdf';
+  if (format !== 'pdf') {
+    return res.status(400).json({ error: 'Only ?format=pdf is supported for the generic incident report.' });
+  }
+
+  const incident = db.prepare(`
+    SELECT i.*, s.name AS site_name, s.address AS site_address, s.naics_code AS site_naics
+    FROM incidents i
+    LEFT JOIN sites s ON s.id = i.site_id
+    WHERE i.id = ? AND i.org_id = ?
+  `).get(incidentId, orgId);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+
+  // Section filter — default all on.
+  let sections = GENERIC_ALL_SECTIONS;
+  if (req.query.sections) {
+    const requested = String(req.query.sections).split(',').map(s => s.trim()).filter(Boolean);
+    sections = requested.filter(s => GENERIC_ALL_SECTIONS.includes(s));
+    if (sections.length === 0) sections = GENERIC_ALL_SECTIONS;
+  }
+
+  // Always load the per-section data — cheap, lets the renderer
+  // decide what to render based on the sections array. Each loader
+  // is its own existing service / SQL, so the loaders no-op cleanly
+  // when there's nothing to load.
+  const affectedPersons = listAffectedPersons({ orgId, incidentId });
+
+  const investigation = db.prepare(`
+    SELECT * FROM investigations WHERE incident_id = ? ORDER BY id DESC LIMIT 1
+  `).get(incidentId);
+  const investigationLead = investigation?.lead_investigator
+    ? db.prepare('SELECT id, name FROM users WHERE id = ?').get(investigation.lead_investigator)
+    : null;
+  const fiveWhys = investigation
+    ? db.prepare('SELECT * FROM five_whys WHERE investigation_id = ? ORDER BY level ASC, id ASC').all(investigation.id)
+    : [];
+
+  const capas = db.prepare(`
+    SELECT c.*,
+           o.name AS owner_name,
+           v.name AS verifier_name
+    FROM capas c
+    LEFT JOIN users o ON o.id = c.owner_id
+    LEFT JOIN users v ON v.id = c.verifier_id
+    WHERE c.incident_id = ? AND c.org_id = ?
+    ORDER BY c.id ASC
+  `).all(incidentId, orgId);
+
+  const oshaSevereRows = db.prepare(`
+    SELECT * FROM osha_severe_notifications
+    WHERE org_id = ? AND incident_id = ?
+    ORDER BY id ASC
+  `).all(orgId, incidentId);
+
+  const riddorReport = db.prepare(`
+    SELECT * FROM riddor_reports WHERE incident_id = ? ORDER BY id DESC LIMIT 1
+  `).get(incidentId);
+
+  const nswNotification = db.prepare(`
+    SELECT * FROM safework_nsw_notifications WHERE org_id = ? AND incident_id = ?
+  `).get(orgId, incidentId);
+
+  const attachments = db.prepare(`
+    SELECT * FROM attachments
+    WHERE entity_type = 'incident' AND entity_id = ?
+    ORDER BY id ASC
+  `).all(incidentId);
+
+  const auditLimit = Math.min(100, Math.max(1, Number(req.query.audit_limit) || 25));
+  const auditEntries = db.prepare(`
+    SELECT al.*, u.name AS user_name
+    FROM activity_log al
+    LEFT JOIN users u ON u.id = al.user_id
+    WHERE al.org_id = ? AND al.entity_type = 'incident' AND al.entity_id = ?
+    ORDER BY al.created_at DESC, al.id DESC
+    LIMIT ?
+  `).all(orgId, incidentId, auditLimit);
+
+  const filename = `incident-report-${(incident.incident_number || incidentId).toString().replace(/[^A-Za-z0-9_.-]/g, '_')}.pdf`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  writeActivity({
+    org_id: orgId,
+    entity_type: 'incident',
+    entity_id: incidentId,
+    action: 'generic_incident_pdf_downloaded',
+    description: `downloaded generic incident PDF for ${incident.incident_number}`,
+    user_id: req.user.id,
+    metadata: {
+      incident_id: incidentId,
+      sections: sections,
+      audit_limit: auditLimit,
+    },
+    ...auditCtx(req),
+  });
+
+  return renderGenericIncidentPdf(res, {
+    orgName: org?.name || '',
+    site: { name: incident.site_name, address: incident.site_address, naics_code: incident.site_naics },
+    incident,
+    affectedPersons,
+    investigation, investigationLead, fiveWhys,
+    capas,
+    oshaSevereRows, riddorReport, nswNotification,
+    attachments,
+    auditEntries,
+    sections,
+    generatedAt: new Date().toISOString().slice(0, 10),
+  });
+});
+
+// ===================================================================
+// OSHA 1904.39 severe-injury notifications (WI-07)
+//
+// Rows are auto-created on POST /incidents when evaluateSevereInjury()
+// detects one of the four reportable categories — see
+// services/osha_severe.js and the hook in routes/incidents.js.
+// These endpoints expose the per-incident list and the phone-notified
+// write path that discharges the obligation.
+// ===================================================================
+
+// GET /reports/osha-severe/:incidentId — list all severe-notification
+// rows for this incident (zero or more, one per reportable category).
+// Returns 404 if the incident isn't in the caller's org.
+router.get('/osha-severe/:incidentId', (req, res) => {
+  const inc = db.prepare('SELECT id FROM incidents WHERE id = ? AND org_id = ?')
+    .get(Number(req.params.incidentId), req.user.org_id);
+  if (!inc) return res.status(404).json({ error: 'Incident not found' });
+  const rows = listSevereNotificationsForIncident(req.user.org_id, inc.id);
+  res.json({ notifications: rows });
+});
+
+// POST /reports/osha-severe/:notificationId/phone-notified — log the
+// 1904.39(a)(3) phone call discharging the obligation.
+// Body: { area_office, osha_reference, notes }
+// All fields optional. Captures who, when, which office, OSHA's case
+// reference. Idempotent — re-posting a notification that's already
+// submitted returns 200 with the unchanged row.
+router.post('/osha-severe/:notificationId/phone-notified', (req, res) => {
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can log a regulatory phone notification.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = getSevereNotification(req.user.org_id, id);
+  if (!existing) return res.status(404).json({ error: 'Severe notification not found' });
+
+  const { area_office, osha_reference, notes } = req.body || {};
+  const wasUnsubmitted = !existing.phone_notified_at;
+  const updated = logPhoneNotification({
+    orgId: req.user.org_id,
+    notificationId: id,
+    userId: req.user.id,
+    areaOffice: area_office,
+    oshaReference: osha_reference,
+    notes,
+  });
+
+  if (wasUnsubmitted) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: existing.incident_id,
+      action: 'osha_severe_phone_notified',
+      description: `logged OSHA 1904.39 phone notification (${existing.category}) — deadline ${existing.deadline_at}`,
+      user_id: req.user.id,
+      metadata: {
+        severe_notification_id: id,
+        category: existing.category,
+        area_office: area_office || null,
+        osha_reference: osha_reference || null,
+      },
+      ...auditCtx(req),
+    });
+  }
+
+  res.json(updated);
+});
+
+// ===================================================================
+// SafeWork NSW notifications (WI-06) — WHS Act 2011 (NSW) Part 3
+//
+// Rows are auto-created on POST /incidents (and PATCH) when
+// evaluateSafeworkNsw classifies the event as notifiable. These
+// endpoints expose the per-incident view + the lifecycle write paths.
+//
+// Compliance-framework gating: all routes require the caller's org
+// to list `safework_nsw` in compliance_frameworks. Otherwise 403.
+// ===================================================================
+
+function isNswOrg(req) {
+  const frameworks = req.user?.compliance_frameworks;
+  if (!Array.isArray(frameworks)) return false;
+  return frameworks.includes('safework_nsw');
+}
+
+function requireNswOrg(req, res) {
+  if (!isNswOrg(req)) {
+    res.status(403).json({ error: 'SafeWork NSW reporting is not enabled for your organization.' });
+    return false;
+  }
+  return true;
+}
+
+// GET /reports/safework-nsw/lookups — both enum tables for the
+// wizard / FE pickers. Returns verbatim Act labels + section refs.
+router.get('/safework-nsw/lookups', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  res.json({
+    serious_injury_types: listSeriousInjuryTypes(),
+    dangerous_incident_types: listDangerousIncidentTypes(),
+  });
+});
+
+// GET /reports/safework-nsw — list all notifications for the caller's
+// org (optionally filtered by site / year). Mirrors GET /reports/riddor.
+router.get('/safework-nsw', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  const { site_id, year } = req.query;
+  const rows = listNswForOrg(req.user.org_id, { siteId: site_id, year });
+  res.json({ notifications: rows, year: year ? Number(year) : null });
+});
+
+// GET /reports/safework-nsw/:incidentId — single notification row.
+// Default response is JSON; pass ?format=pdf to stream the WI-06 PDF
+// record copy (government-document styling, no logo impersonation —
+// see server/services/pdf/safework_nsw.js).
+router.get('/safework-nsw/:incidentId', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  const incidentId = Number(req.params.incidentId);
+  // Pull the incident with site fields so the PDF can render the
+  // narrative without a second join. JSON branch ignores the extras.
+  const incident = db.prepare(`
+    SELECT i.*, s.name AS site_name, s.address AS site_address
+    FROM incidents i
+    LEFT JOIN sites s ON s.id = i.site_id
+    WHERE i.id = ? AND i.org_id = ?
+  `).get(incidentId, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  const row = getNswForIncident(req.user.org_id, incident.id);
+  if (!row) return res.status(404).json({ error: 'No SafeWork NSW notification for this incident' });
+
+  if (req.query.format === 'pdf') {
+    const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(req.user.org_id);
+    // Resolve the primary affected person (if any) for the narrative
+    // section. Falls back to nothing when WI-A side tables are empty.
+    const primaryAffected = db.prepare(`
+      SELECT name, job_title
+      FROM affected_persons
+      WHERE incident_id = ? AND org_id = ? AND deleted_at IS NULL
+      ORDER BY is_primary DESC, id ASC
+      LIMIT 1
+    `).get(incident.id, req.user.org_id);
+    const phoneNotifier = row.phone_notified_by
+      ? db.prepare('SELECT name FROM users WHERE id = ?').get(row.phone_notified_by)
+      : null;
+    const writtenSubmitter = row.written_submitted_by
+      ? db.prepare('SELECT name FROM users WHERE id = ?').get(row.written_submitted_by)
+      : null;
+
+    const filename = `safework-nsw-${(row.nsw_number || incident.incident_number || incident.id).toString().replace(/[^A-Za-z0-9_.-]/g, '_')}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: incident.id,
+      action: 'safework_nsw_pdf_downloaded',
+      description: `downloaded SafeWork NSW PDF for ${row.nsw_number} (incident ${incident.incident_number})`,
+      user_id: req.user.id,
+      metadata: {
+        nsw_notification_id: row.id,
+        nsw_number: row.nsw_number,
+        incident_id: incident.id,
+      },
+      ...auditCtx(req),
+    });
+
+    return renderSafeworkNswPdf(res, {
+      orgName: org?.name || '',
+      notification: row,
+      incident,
+      site: { name: incident.site_name, address: incident.site_address },
+      primaryAffected: primaryAffected || null,
+      seriousInjuryTypes: listSeriousInjuryTypes(),
+      dangerousIncidentTypes: listDangerousIncidentTypes(),
+      phoneNotifierName: phoneNotifier?.name || null,
+      writtenSubmitterName: writtenSubmitter?.name || null,
+      generatedAt: new Date().toISOString().slice(0, 10),
+    });
+  }
+
+  res.json(row);
+});
+
+// POST /reports/safework-nsw/:notificationId/phone-notified — log the
+// s.38(1)/(3)/(4) phone call. Elevated-only. Idempotent.
+router.post('/safework-nsw/:notificationId/phone-notified', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can log a regulatory phone notification.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = db.prepare('SELECT * FROM safework_nsw_notifications WHERE id = ? AND org_id = ?')
+    .get(id, req.user.org_id);
+  if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
+
+  const { regulator_office, notes } = req.body || {};
+  const wasUnsubmitted = !existing.phone_notified_at;
+  const updated = logNswPhone({
+    orgId: req.user.org_id, notificationId: id, userId: req.user.id,
+    regulatorOffice: regulator_office, notes,
+  });
+
+  if (wasUnsubmitted) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: existing.incident_id,
+      action: 'safework_nsw_phone_notified',
+      description: `logged SafeWork NSW phone notification (${existing.nsw_number}) per WHS Act s.38(1)`,
+      user_id: req.user.id,
+      metadata: {
+        nsw_notification_id: id,
+        nsw_number: existing.nsw_number,
+        regulator_office: regulator_office || null,
+      },
+      ...auditCtx(req),
+    });
+  }
+  res.json(updated);
+});
+
+// POST /reports/safework-nsw/:notificationId/regulator-requested-written
+// — log the s.38(4)(b) "regulator requests written notice" event.
+// This is what starts the 48h written-deadline clock. Body may carry
+// an explicit `requested_at` ISO timestamp (defaults to now).
+router.post('/safework-nsw/:notificationId/regulator-requested-written', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can log a regulator request.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = db.prepare('SELECT * FROM safework_nsw_notifications WHERE id = ? AND org_id = ?')
+    .get(id, req.user.org_id);
+  if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
+
+  const wasNotRequested = !existing.regulator_requested_written_at;
+  const updated = logNswRegulatorRequested({
+    orgId: req.user.org_id, notificationId: id, userId: req.user.id,
+    requestedAtIso: req.body?.requested_at,
+  });
+  if (wasNotRequested) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: existing.incident_id,
+      action: 'safework_nsw_regulator_requested_written',
+      description: `regulator requested written notice for ${existing.nsw_number} — 48h deadline starts now (s.38(4)(b))`,
+      user_id: req.user.id,
+      metadata: {
+        nsw_notification_id: id,
+        nsw_number: existing.nsw_number,
+        written_deadline: updated.written_deadline,
+      },
+      ...auditCtx(req),
+    });
+  }
+  res.json(updated);
+});
+
+// POST /reports/safework-nsw/:notificationId/written-submitted — log
+// the submission of the s.38(5) written notice. Elevated-only.
+router.post('/safework-nsw/:notificationId/written-submitted', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can log a written submission.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = db.prepare('SELECT * FROM safework_nsw_notifications WHERE id = ? AND org_id = ?')
+    .get(id, req.user.org_id);
+  if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
+
+  const { reference, notes } = req.body || {};
+  const wasUnsubmitted = !existing.written_submitted_at;
+  const updated = logNswWrittenSubmitted({
+    orgId: req.user.org_id, notificationId: id, userId: req.user.id,
+    reference, notes,
+  });
+  if (wasUnsubmitted) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: existing.incident_id,
+      action: 'safework_nsw_written_submitted',
+      description: `submitted SafeWork NSW written notice for ${existing.nsw_number} (s.38(5))`,
+      user_id: req.user.id,
+      metadata: {
+        nsw_notification_id: id,
+        nsw_number: existing.nsw_number,
+        reference: reference || null,
+      },
+      ...auditCtx(req),
+    });
+  }
+  res.json(updated);
+});
+
+// POST /reports/safework-nsw/:notificationId/site-preservation — log
+// the s.39 site-preservation status + any permitted disturbance basis.
+router.post('/safework-nsw/:notificationId/site-preservation', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can update site preservation.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = db.prepare('SELECT * FROM safework_nsw_notifications WHERE id = ? AND org_id = ?')
+    .get(id, req.user.org_id);
+  if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
+
+  const { status, notes, inspector_arrived_at } = req.body || {};
+  const ALLOWED = new Set([
+    'preserved',
+    'disturbed_to_assist_injured',
+    'disturbed_to_remove_deceased',
+    'disturbed_to_make_safe',
+    'disturbed_for_police',
+    'disturbed_with_inspector_permission',
+    'released_by_inspector',
+  ]);
+  if (status && !ALLOWED.has(status)) {
+    return res.status(400).json({ error: `Invalid site_preservation_status. Allowed values: ${[...ALLOWED].join(', ')}` });
+  }
+  const updated = setNswSitePreservation({
+    orgId: req.user.org_id, notificationId: id, status, notes,
+    inspectorArrivedAt: inspector_arrived_at,
+  });
+  writeActivity({
+    org_id: req.user.org_id,
+    entity_type: 'incident',
+    entity_id: existing.incident_id,
+    action: 'safework_nsw_site_preservation_updated',
+    description: `site preservation status set to '${status || '—'}' for ${existing.nsw_number} (s.39)`,
+    user_id: req.user.id,
+    metadata: { nsw_notification_id: id, status: status || null },
+    ...auditCtx(req),
+  });
+  res.json(updated);
+});
+
+// POST /reports/safework-nsw/:notificationId/pcbu — set PCBU identity.
+// ABN is validated via the ATO mod-89 checksum.
+router.post('/safework-nsw/:notificationId/pcbu', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can update PCBU details.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = db.prepare('SELECT * FROM safework_nsw_notifications WHERE id = ? AND org_id = ?')
+    .get(id, req.user.org_id);
+  if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
+
+  const { name, abn, anzsic_code } = req.body || {};
+  if (abn) {
+    const v = validateAbn(abn);
+    if (!v.ok) {
+      return res.status(400).json({ error: `Invalid ABN — ${v.reason}.`, abn_validation: v });
+    }
+  }
+  if (anzsic_code !== undefined && anzsic_code !== null && anzsic_code !== '') {
+    if (!/^\d{4}$/.test(String(anzsic_code))) {
+      return res.status(400).json({ error: 'ANZSIC code must be 4 digits.' });
+    }
+  }
+  const updated = setNswPcbu({
+    orgId: req.user.org_id, notificationId: id,
+    name, abn: abn ? validateAbn(abn).normalized : null, anzsicCode: anzsic_code,
+  });
+  res.json(updated);
 });
 
 router.get('/riddor', (req, res) => {
@@ -557,6 +1388,8 @@ router.get('/audit-log', (req, res) => {
   const rows = db.prepare(`
     SELECT al.id, al.org_id, al.entity_type, al.entity_id, al.action, al.description,
            al.user_id, al.metadata, al.created_at,
+           al.ip_address, al.user_agent, al.field_diffs,
+           al.prev_hash, al.entry_hash,
            u.name AS user_name, u.initials AS user_initials, u.email AS user_email
     FROM activity_log al
     LEFT JOIN users u ON u.id = al.user_id
@@ -566,6 +1399,18 @@ router.get('/audit-log', (req, res) => {
   `).all(...params, limit, offset);
 
   res.json({ rows, total, page, limit });
+});
+
+// WI-C: forensic chain-integrity check. Admin-only; returns whether the
+// activity_log hash chain for the caller's org verifies cleanly or where
+// the first break is. Inspectors can request a run of this before pulling
+// an audit-log CSV so the exported trail is provably untampered.
+router.get('/audit-log/verify', (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Chain verification is admin-only.' });
+  }
+  const result = verifyChain(db, req.user.org_id);
+  res.json(result);
 });
 
 router.get('/audit-log/export.csv', (req, res) => {
@@ -578,6 +1423,7 @@ router.get('/audit-log/export.csv', (req, res) => {
   const rows = db.prepare(`
     SELECT al.id, al.created_at, al.entity_type, al.entity_id, al.action, al.description,
            al.user_id, al.metadata,
+           al.ip_address, al.user_agent, al.field_diffs, al.entry_hash,
            u.name AS user_name, u.email AS user_email
     FROM activity_log al
     LEFT JOIN users u ON u.id = al.user_id
@@ -598,6 +1444,7 @@ router.get('/audit-log/export.csv', (req, res) => {
   const header = [
     'id', 'created_at', 'entity_type', 'entity_id', 'action', 'description',
     'user_id', 'user_name', 'user_email', 'metadata',
+    'ip_address', 'user_agent', 'field_diffs', 'entry_hash',
   ];
 
   const lines = [header.join(',')];
@@ -606,6 +1453,8 @@ router.get('/audit-log/export.csv', (req, res) => {
       r.id, r.created_at, r.entity_type, r.entity_id ?? '', r.action,
       r.description, r.user_id ?? '', r.user_name ?? '', r.user_email ?? '',
       r.metadata ?? '{}',
+      r.ip_address ?? '', r.user_agent ?? '', r.field_diffs ?? '',
+      r.entry_hash ?? '',
     ].map(escape).join(','));
   }
   // Excel-compatible: BOM for UTF-8 + CRLF row separator (matches what tools
@@ -624,6 +1473,7 @@ router.get('/audit-log/export.csv', (req, res) => {
       row_count: rows.length,
       hit_hard_limit: rows.length >= AUDIT_EXPORT_HARD_LIMIT,
     },
+    ...auditCtx(req),
   });
 
   const filename = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;

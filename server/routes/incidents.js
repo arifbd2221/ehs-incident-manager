@@ -15,6 +15,25 @@ import { injuryTypeForOsha300, descriptionForOsha300 } from '../services/osha_30
 import { createCapaRow } from './capas.js';
 import { notifyUser, notifyElevatedAtSite, notifyRole } from '../services/notifications.js';
 import { evaluateClosureGates } from '../services/closure_gates.js';
+import { writeActivity, auditCtx } from '../services/activity_log.js';
+import {
+  computePendingDeadlines,
+  getPendingDeadlinesForIncident,
+  loadRiddorReportsForIncidents,
+  loadOshaSevereForIncidents,
+  loadNswNotificationsForIncidents,
+  mostUrgent,
+} from '../services/deadlines.js';
+import { syncSevereNotifications } from '../services/osha_severe.js';
+import { syncSafeworkNswNotification } from '../services/safework_nsw.js';
+import {
+  upsertPrimaryFromLegacy,
+  bulkInsertFromArray,
+  buildLegacyInjuredPerson,
+  updateAffectedPerson,
+  updateInjury,
+  mapInjuredPersonToColumns,
+} from '../services/affected_persons.js';
 
 const router = Router();
 
@@ -22,6 +41,156 @@ const router = Router();
 // Phase 2 collapses these to worker/ehs_manager/site_admin.
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
+
+// WI-A defensive: the wizard now lifts flat injured_* keys into a nested
+// injured_person sub-record at submit time, but a curl PATCH or older
+// client may still send the flat shape. Mirror the wizard's lift here
+// so both the incidents.type_data stored on disk AND the affected_persons
+// sync see the same complete injured_person object. Mutates typeData in
+// place; safe to call on any PATCH body that includes type_data.
+const FLAT_INJURED_KEYS = [
+  ['injured_name', 'name'],
+  ['injured_job_title', 'job_title'],
+  ['injured_department', 'department'],
+  ['injured_dob', 'dob'],
+  ['injured_gender', 'gender'],
+  ['injured_date_hired', 'date_hired'],
+  ['injured_address', 'address'],
+  ['injured_phone', 'phone'],
+];
+function liftFlatInjuredKeys(typeData) {
+  if (!typeData || typeof typeData !== 'object') return typeData;
+  const hasFlat = FLAT_INJURED_KEYS.some(([flat]) => typeData[flat] !== undefined);
+  if (!hasFlat) return typeData;
+  // Only lift keys actually present in the flat body. Don't default
+  // unspecified keys to null — that would wipe existing fields via the
+  // affected_persons sync downstream.
+  const lifted = { ...(typeData.injured_person || {}) };
+  for (const [flat, nested] of FLAT_INJURED_KEYS) {
+    if (typeData[flat] !== undefined) lifted[nested] = typeData[flat];
+  }
+  typeData.injured_person = lifted;
+  return typeData;
+}
+
+// WI-A: keep the primary affected_person + primary injury in sync with
+// whatever was PATCHed against an existing incident. Called from PATCH
+// /:id. Multi-person edits use /incidents/:id/affected-persons/... and
+// don't go through here.
+//
+// Safe to call on every PATCH — if no sync surface applies, returns
+// without writing.
+function syncAffectedPersonsOnPatch({ incident, body, req, userId }) {
+  const orgId = incident.org_id;
+  const incidentId = incident.id;
+
+  // ----- 1. Locate the active primary affected_person, if any. -----
+  let primary = db.prepare(`
+    SELECT * FROM affected_persons
+    WHERE org_id = ? AND incident_id = ? AND is_primary = 1 AND deleted_at IS NULL
+  `).get(orgId, incidentId);
+
+  // ----- 2. type_data.injured_person changes → upsert primary AP. -----
+  if (body.type_data !== undefined) {
+    const newTd = body.type_data || {};
+    const newIp = newTd.injured_person || newTd.affected_person || null;
+
+    if (newIp && primary) {
+      // Update existing primary with the new identity fields.
+      const apPatch = mapInjuredPersonToColumns(newIp);
+      // Drop keys whose value didn't actually change so we don't write
+      // a no-op diff to activity_log.
+      const realPatch = {};
+      for (const [k, v] of Object.entries(apPatch)) {
+        if (v !== undefined && (primary[k] ?? null) !== (v ?? null)) realPatch[k] = v;
+      }
+      if (Object.keys(realPatch).length > 0) {
+        updateAffectedPerson({ orgId, incidentId, apId: primary.id, patch: realPatch, userId, req });
+        // Re-fetch so downstream paths see the new values.
+        primary = db.prepare(`SELECT * FROM affected_persons WHERE id = ?`).get(primary.id);
+      }
+    } else if (newIp && !primary) {
+      // No primary today — create one from the merged type_data so the
+      // multi-person side-table doesn't drift from the JSON forever.
+      // Use upsertPrimaryFromLegacy (no audit row of its own; the parent
+      // PATCH activity_log captures the actor).
+      const merged = { ...(safeParse(incident.type_data) || {}), ...newTd };
+      upsertPrimaryFromLegacy({
+        orgId, incidentId,
+        typeData: merged,
+        incidentColumns: {
+          er_treated: body.er_treated ?? incident.er_treated,
+          hospitalized: body.hospitalized ?? incident.hospitalized,
+          hospitalization_date: body.hospitalization_date ?? incident.hospitalization_date,
+          body_parts_affected: body.body_parts_affected !== undefined
+            ? JSON.stringify(parseBodyParts(body.body_parts_affected))
+            : incident.body_parts_affected,
+          osha_privacy_case: body.osha_privacy_case ?? incident.osha_privacy_case ?? 0,
+          osha_days_away: body.osha_days_away ?? incident.osha_days_away ?? 0,
+          osha_days_restricted: body.osha_days_restricted ?? incident.osha_days_restricted ?? 0,
+          osha_date_of_death: body.osha_date_of_death ?? incident.osha_date_of_death,
+          description: body.description ?? incident.description,
+        },
+        userId,
+      });
+      primary = db.prepare(`
+        SELECT * FROM affected_persons
+        WHERE org_id = ? AND incident_id = ? AND is_primary = 1 AND deleted_at IS NULL
+      `).get(orgId, incidentId);
+    }
+  }
+
+  // ----- 3. osha_privacy_case flip → mirror onto primary AP. -----
+  if (body.osha_privacy_case !== undefined && primary) {
+    const desired = body.osha_privacy_case ? 1 : 0;
+    if (primary.is_privacy_case !== desired) {
+      updateAffectedPerson({
+        orgId, incidentId, apId: primary.id,
+        patch: { is_privacy_case: desired },
+        userId, req,
+      });
+    }
+  }
+
+  // ----- 4. Primary-injury mirror columns → patch the primary injury. -----
+  // The wizard's er_treated / hospitalized / osha_days_* / hospitalization_date /
+  // description path is the legacy "first injury" surface. body_parts_affected
+  // on the incident column also folds into body_part (comma-joined) for the
+  // primary injury.
+  if (!primary) return;
+
+  const injPatch = {};
+  if (body.er_treated !== undefined) injPatch.er_treated = body.er_treated;
+  if (body.hospitalized !== undefined) injPatch.hospitalized = body.hospitalized;
+  if (body.hospitalization_date !== undefined) injPatch.hospitalization_date = body.hospitalization_date;
+  if (body.osha_days_away !== undefined) injPatch.days_away = body.osha_days_away;
+  if (body.osha_days_restricted !== undefined) injPatch.days_restricted = body.osha_days_restricted;
+  if (body.osha_date_of_death !== undefined) injPatch.date_of_death = body.osha_date_of_death;
+  if (body.description !== undefined) injPatch.narrative = body.description;
+  if (body.body_parts_affected !== undefined) {
+    const parts = parseBodyParts(body.body_parts_affected);
+    injPatch.body_part = parts.length ? parts.join(', ') : null;
+  }
+
+  if (Object.keys(injPatch).length === 0) return;
+
+  const primaryInjury = db.prepare(`
+    SELECT id FROM injuries
+    WHERE affected_person_id = ? AND deleted_at IS NULL
+    ORDER BY id ASC LIMIT 1
+  `).get(primary.id);
+
+  if (primaryInjury) {
+    updateInjury({
+      orgId, incidentId, apId: primary.id, injuryId: primaryInjury.id,
+      patch: injPatch, userId, req,
+    });
+  }
+}
+
+function safeParse(s) {
+  try { return JSON.parse(s || '{}'); } catch { return {}; }
+}
 
 const RESTRICTED_FIELDS = new Set([
   'severity', 'track', 'status', 'assigned_to',
@@ -104,6 +273,26 @@ router.get('/', (req, res) => {
     }
   }
 
+  // WI-08: attach pending_deadlines + most_urgent_deadline per row so the
+  // IncidentsList can render a single inline badge without a follow-up
+  // fetch. One bulk SELECT loads RIDDOR rows for the listed incidents;
+  // a second loads WI-07 OSHA 1904.39 severe-notification rows.
+  // computePendingDeadlines merges them in row-by-row.
+  const incidentIds = incidents.map(i => i.id);
+  const riddorMap = loadRiddorReportsForIncidents(incidentIds);
+  const oshaSevereMap = loadOshaSevereForIncidents(req.user.org_id, incidentIds);
+  const nswMap = loadNswNotificationsForIncidents(req.user.org_id, incidentIds);
+  for (const inc of incidents) {
+    const deadlines = computePendingDeadlines(
+      inc,
+      riddorMap.get(inc.id),
+      oshaSevereMap.get(inc.id) || [],
+      nswMap.get(inc.id) || null,
+    );
+    inc.pending_deadlines = deadlines;
+    inc.most_urgent_deadline = mostUrgent(deadlines);
+  }
+
   res.json({ incidents, total, page: Number(page), limit: Number(limit) });
 });
 
@@ -150,7 +339,29 @@ router.get('/:id', (req, res) => {
     ORDER BY cr.created_at DESC LIMIT 1
   `).get(incident.id);
 
-  res.json({ ...incident, witnesses, attachments, activity, closure_request: closure_request || null });
+  // WI-08: attach pending_deadlines + most_urgent_deadline so the
+  // IncidentDetail header renders without a follow-up fetch. Reuses the
+  // same helper as the standalone /deadlines endpoint.
+  const pending_deadlines = getPendingDeadlinesForIncident(req.user.org_id, incident.id) || [];
+  const most_urgent_deadline = mostUrgent(pending_deadlines);
+
+  res.json({
+    ...incident,
+    witnesses, attachments, activity,
+    closure_request: closure_request || null,
+    pending_deadlines,
+    most_urgent_deadline,
+  });
+});
+
+// WI-08: aggregated regulatory deadlines for one incident. Today RIDDOR
+// is the only source; WI-06 (SafeWork NSW) and WI-07 (OSHA 1904.39) plug
+// in via deadlines.js when they land. Returns [] for incidents with no
+// applicable deadline (e.g. non-RIDDOR US injury), 404 for cross-tenant.
+router.get('/:id/deadlines', (req, res) => {
+  const deadlines = getPendingDeadlinesForIncident(req.user.org_id, Number(req.params.id));
+  if (deadlines === null) return res.status(404).json({ error: 'Incident not found' });
+  res.json({ pending_deadlines: deadlines });
 });
 
 router.post('/', async (req, res, next) => {
@@ -166,6 +377,11 @@ router.post('/', async (req, res, next) => {
     voice_user_confirmed,
     voice_user_edited,
     voice_user_rejected,
+    // WI-A: optional multi-person shape. When present, this REPLACES the
+    // legacy type_data.injured_person sub-record for purposes of OSHA
+    // recordability + RIDDOR classification — we synthesize a back-compat
+    // injured_person from the primary entry below.
+    affected_persons,
   } = req.body;
 
   if (!title || !type || !site_id || !incident_datetime) {
@@ -211,9 +427,25 @@ router.post('/', async (req, res, next) => {
   const incidentNumber = nextIncidentNumber();
   const { severity, track } = calculateSeverityAndTrack(likelihood, consequence, type);
 
+  // WI-A dual-write: if the caller supplied affected_persons[], synthesize
+  // type_data.injured_person from the primary entry BEFORE classification
+  // so OSHA recordability + RIDDOR engines see the same shape they
+  // always did. The new tables get the full multi-person data after INSERT.
+  const useArrayShape = Array.isArray(affected_persons) && affected_persons.length > 0;
+  let workingTypeData = type_data || {};
+  if (useArrayShape) {
+    let primaryIdx = affected_persons.findIndex(p => p?.is_primary);
+    if (primaryIdx < 0) primaryIdx = 0;
+    const primary = affected_persons[primaryIdx];
+    workingTypeData = {
+      ...workingTypeData,
+      injured_person: buildLegacyInjuredPerson(primary),
+    };
+  }
+
   const site = db.prepare('SELECT country FROM sites WHERE id = ?').get(site_id);
-  const osha = determineOshaRecordability(type, type_data);
-  const riddor = determineRiddorReportability(type, type_data, site?.country);
+  const osha = determineOshaRecordability(type, workingTypeData);
+  const riddor = determineRiddorReportability(type, workingTypeData, site?.country);
 
   const autoClose = shouldAutoClose(type, severity, track);
   const status = autoClose ? 'Closed' : 'New';
@@ -223,7 +455,7 @@ router.post('/', async (req, res, next) => {
   // scrubbed (user_id NULL, actor "Anonymous" in the description).
   const reportedBy = anonymous ? null : req.user.id;
 
-  const td = type_data || {};
+  const td = workingTypeData || {};
   const erTreated = td.er_treated ? 1 : 0;
   const hospitalized = td.hospitalized ? 1 : 0;
   const hospitalizationDate = td.hospitalization_date || null;
@@ -296,6 +528,34 @@ router.post('/', async (req, res, next) => {
     anonymous ? null : req.user.id,
   );
 
+  // WI-A dual-write: keep affected_persons + injuries tables in sync with
+  // whichever payload shape the caller used. Either path is a no-op when
+  // the incident type has no person data (nearmiss/property/env/unsafe/
+  // observation/dangerous without an injured_person).
+  const dualWriteCtx = {
+    er_treated: erTreated,
+    hospitalized,
+    hospitalization_date: hospitalizationDate,
+    body_parts_affected: bodyPartsJson,
+    osha_privacy_case: 0,
+    osha_days_away: 0,
+    osha_days_restricted: 0,
+    osha_date_of_death: null,
+    description: description || '',
+  };
+  if (useArrayShape) {
+    bulkInsertFromArray({
+      orgId, incidentId, persons: affected_persons, userId: reportedBy,
+    });
+  } else if (workingTypeData?.injured_person || workingTypeData?.affected_person) {
+    upsertPrimaryFromLegacy({
+      orgId, incidentId,
+      typeData: workingTypeData,
+      incidentColumns: dualWriteCtx,
+      userId: reportedBy,
+    });
+  }
+
   if (autoClose) {
     db.prepare(`
       INSERT INTO activity_log (org_id, entity_type, entity_id, action, description)
@@ -308,7 +568,7 @@ router.post('/', async (req, res, next) => {
     const maxCase = db.prepare('SELECT MAX(case_number) as m FROM osha_300_log WHERE site_id = ? AND calendar_year = ?').get(site_id, year);
     const caseNum = (maxCase?.m || 0) + 1;
 
-    db.prepare(`
+    const oshaResult = db.prepare(`
       INSERT INTO osha_300_log (org_id, site_id, incident_id, calendar_year, case_number, employee_name, job_title, injury_date, location, description,
         classification_death, classification_days_away, classification_job_transfer, classification_other, injury_type, is_privacy_case)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -325,16 +585,154 @@ router.post('/', async (req, res, next) => {
       injuryTypeForOsha300(type, type_data),
       0,
     );
+
+    // Regulatory-record creation gets its own audit row so inspectors can see
+    // "OSHA 300 entry opened for case #N" alongside the parent incident row.
+    // Anonymous incidents still log user_id=null per the scrub above.
+    writeActivity({
+      org_id: orgId,
+      entity_type: 'incident',
+      entity_id: incidentId,
+      action: 'osha_300_auto_entry',
+      description: `opened OSHA 300 case #${caseNum} (CY ${year}) — ${osha.type}`,
+      user_id: anonymous ? null : req.user.id,
+      metadata: {
+        osha_300_log_id: oshaResult.lastInsertRowid,
+        site_id, calendar_year: year, case_number: caseNum,
+        classification_type: osha.type,
+      },
+      ...auditCtx(req),
+    });
+  }
+
+  // --- WI-07: OSHA 1904.39 severe-injury notifications ---
+  // Auto-create osha_severe_notifications rows for any of the four
+  // reportable categories (fatality / hospitalization / amputation /
+  // loss_of_eye). Detection signals:
+  //   - osha_date_of_death set → fatality
+  //   - hospitalized = 1 → hospitalization
+  //   - type_data.osha_severe.{amputation, loss_of_eye} === true → those
+  // See services/osha_severe.js for the 1904.39(b) carve-outs.
+  //
+  // 1904.39 is a US OSH Act obligation. Gate on site.country = 'US' so a
+  // UK / AU incident doesn't get a phantom OSHA deadline attached. (RIDDOR
+  // and SafeWork NSW have their own paths.) The site row was already loaded
+  // above into `site` (for the framework gate).
+  if (site?.country === 'US') {
+  try {
+    const justCreatedIncident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incidentId);
+    const aps = db.prepare(`
+      SELECT * FROM affected_persons
+      WHERE org_id = ? AND incident_id = ? AND deleted_at IS NULL
+      ORDER BY is_primary DESC, id ASC
+    `).all(orgId, incidentId);
+    const primaryAp = aps.find(p => p.is_primary === 1) || aps[0] || null;
+    const primaryInj = primaryAp
+      ? db.prepare(`SELECT * FROM injuries WHERE org_id = ? AND affected_person_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1`)
+          .get(orgId, primaryAp.id)
+      : null;
+    const rowsBefore = db.prepare('SELECT id FROM osha_severe_notifications WHERE incident_id = ?')
+      .all(incidentId).map(r => r.id);
+    const allRows = syncSevereNotifications({
+      orgId, incidentId, incident: justCreatedIncident,
+      primaryAp, primaryInjury: primaryInj,
+      userId: anonymous ? null : req.user.id,
+    });
+    for (const row of allRows) {
+      if (rowsBefore.includes(row.id)) continue;
+      writeActivity({
+        org_id: orgId,
+        entity_type: 'incident',
+        entity_id: incidentId,
+        action: 'osha_severe_opened',
+        description: `opened OSHA 1904.39 ${row.category} notification — deadline ${row.deadline_at}`,
+        user_id: anonymous ? null : req.user.id,
+        metadata: {
+          severe_notification_id: row.id,
+          category: row.category,
+          deadline_at: row.deadline_at,
+        },
+        ...auditCtx(req),
+      });
+    }
+  } catch (severeErr) {
+    // Non-fatal — the incident is created, just flag the classification miss.
+    console.error('[WI-07] syncSevereNotifications failed for incident', incidentId, severeErr);
+  }
+  } // close `if (site?.country === 'US')`
+
+  // --- WI-06: SafeWork NSW notifiable incidents ---
+  // WHS Act 2011 (NSW) Part 3. Gated on site.country = 'AU' so US / UK
+  // incidents don't get a phantom NSW notification. The classifier
+  // returns null when the incident doesn't meet s.35/s.36/s.37 criteria.
+  if (site?.country === 'AU') {
+    try {
+      const justCreatedIncident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incidentId);
+      const aps = db.prepare(`
+        SELECT * FROM affected_persons
+        WHERE org_id = ? AND incident_id = ? AND deleted_at IS NULL
+        ORDER BY is_primary DESC, id ASC
+      `).all(orgId, incidentId);
+      const primaryAp = aps.find(p => p.is_primary === 1) || aps[0] || null;
+      const primaryInj = primaryAp
+        ? db.prepare(`SELECT * FROM injuries WHERE org_id = ? AND affected_person_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1`)
+            .get(orgId, primaryAp.id)
+        : null;
+      const result = syncSafeworkNswNotification({
+        orgId, incidentId, incident: justCreatedIncident,
+        primaryAp, primaryInjury: primaryInj,
+        userId: anonymous ? null : req.user.id,
+      });
+      if (result?.created) {
+        writeActivity({
+          org_id: orgId,
+          entity_type: 'incident',
+          entity_id: incidentId,
+          action: 'safework_nsw_opened',
+          description: `opened SafeWork NSW notification ${result.row.nsw_number} per WHS Act 2011 (NSW) Part 3`,
+          user_id: anonymous ? null : req.user.id,
+          metadata: {
+            nsw_notification_id: result.row.id,
+            nsw_number: result.row.nsw_number,
+            is_fatality: result.row.is_fatality,
+            is_serious_injury: result.row.is_serious_injury,
+            is_dangerous_incident: result.row.is_dangerous_incident,
+            excluded_mines_petroleum: result.row.excluded_mines_petroleum,
+          },
+          ...auditCtx(req),
+        });
+      }
+    } catch (nswErr) {
+      console.error('[WI-06] syncSafeworkNswNotification failed for incident', incidentId, nswErr);
+    }
   }
 
   if (riddor.reportable) {
     const riddorNum = nextRiddorNumber();
     const deadline = calculateDeadline(incident_datetime, riddor.writtenDeadlineDays);
 
-    db.prepare(`
+    const riddorResult = db.prepare(`
       INSERT INTO riddor_reports (riddor_number, org_id, site_id, incident_id, event_date, category, description, written_deadline, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     `).run(riddorNum, orgId, site_id, incidentId, incident_datetime, riddor.category, title, deadline);
+
+    // Inspector-visible audit row tied to the parent incident's timeline.
+    writeActivity({
+      org_id: orgId,
+      entity_type: 'incident',
+      entity_id: incidentId,
+      action: 'riddor_opened',
+      description: `opened RIDDOR ${riddorNum} — ${riddor.category}${riddor.phoneRequired ? ' (phone required)' : ` (written by ${deadline?.slice(0, 10)})`}`,
+      user_id: anonymous ? null : req.user.id,
+      metadata: {
+        riddor_report_id: riddorResult.lastInsertRowid,
+        riddor_number: riddorNum,
+        category: riddor.category,
+        phone_required: !!riddor.phoneRequired,
+        written_deadline: deadline,
+      },
+      ...auditCtx(req),
+    });
 
     db.prepare(`
       INSERT INTO notifications (org_id, type, incident_id, title, body, severity, deadline)
@@ -940,6 +1338,7 @@ router.patch('/:id', (req, res) => {
   const updatable = ['title', 'description', 'severity', 'track', 'status', 'assigned_to', 'triage_due', 'triage_notes',
     'osha_recordable', 'osha_recordability_type', 'osha_days_away', 'osha_days_restricted',
     'osha_privacy_case', 'osha_work_related', 'er_treated', 'hospitalized', 'hospitalization_date',
+    'osha_date_of_death',
     'riddor_reportable', 'immediate_actions_taken', 'area', 'specific_location', 'department'];
 
   const requestedRestricted = updatable.filter(k => RESTRICTED_FIELDS.has(k) && req.body[k] !== undefined);
@@ -948,6 +1347,21 @@ router.patch('/:id', (req, res) => {
       error: 'Worker role cannot modify severity, track, status, assignment, or regulatory fields.',
       restricted_fields: requestedRestricted,
     });
+  }
+
+  // WI-B: warn (but do not block) when osha_recordable / riddor_reportable
+  // are flipped via the direct PATCH path. The override-request workflow
+  // is the preferred separation-of-duties route. Leaving the direct path
+  // working lets us measure usage before forbidding it in a follow-up WI
+  // (per docs/plan-2026-05-11.md Part 2 — "Existing direct-edit path:
+  // keep working for now, but emit a console.warn server-side").
+  const recordabilityFlips = ['osha_recordable', 'riddor_reportable']
+    .filter(k => req.body[k] !== undefined && Number(req.body[k]) !== Number(incident[k]));
+  if (recordabilityFlips.length > 0) {
+    console.warn(
+      `[WI-B] Direct PATCH on ${recordabilityFlips.join(', ')} for incident ${incident.incident_number ?? incident.id} ` +
+      `by user ${req.user.id} (${req.user.email}) — bypasses override-request workflow.`,
+    );
   }
 
   const sets = [];
@@ -959,6 +1373,7 @@ router.patch('/:id', (req, res) => {
     }
   }
   if (req.body.type_data !== undefined) {
+    liftFlatInjuredKeys(req.body.type_data);
     sets.push('type_data = ?');
     params.push(JSON.stringify(req.body.type_data));
   }
@@ -990,6 +1405,142 @@ router.patch('/:id', (req, res) => {
   params.push(req.params.id);
 
   db.prepare(`UPDATE incidents SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  // WI-A dual-write on PATCH: keep the primary affected_person + primary
+  // injury in sync with whatever was touched. Multi-person edits go
+  // through /incidents/:id/affected-persons/... — this hook only handles
+  // the legacy single-person shape per the WI-A spec.
+  //
+  // Three sync paths:
+  //  1) type_data.injured_person was PATCHed → patch primary AP's
+  //     identity fields (name, dob, gender, job_title, etc.).
+  //  2) osha_privacy_case was PATCHed → flip primary AP's is_privacy_case.
+  //  3) er_treated/hospitalized/hospitalization_date/osha_days_*/
+  //     description were PATCHed → patch the primary injury.
+  // Each path no-ops cleanly when there's no primary AP (e.g. nearmiss
+  // incident, or legacy incident that never had injured_person data).
+  syncAffectedPersonsOnPatch({
+    incident,
+    body: req.body,
+    req,
+    userId: req.user.id,
+  });
+
+  // WI-07: re-run severe-injury classification when a triggering field
+  // changed (osha_date_of_death / hospitalized / type_data.osha_severe.*).
+  // Per 1904.39(b)(7) the 8-h/24-h clock starts when the employer learns,
+  // and on this code path we treat the PATCH as the learning event. The
+  // hook is idempotent (UNIQUE(incident_id, category)) so re-running on
+  // unrelated PATCHes is harmless. Gated on US sites per the POST hook.
+  const wi07Triggered = (
+    req.body.osha_date_of_death !== undefined ||
+    req.body.hospitalized !== undefined ||
+    (req.body.type_data && req.body.type_data.osha_severe !== undefined)
+  );
+  if (wi07Triggered) {
+    const patchedIncident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(req.params.id);
+    const patchedSite = db.prepare('SELECT country FROM sites WHERE id = ?').get(patchedIncident.site_id);
+    if (patchedSite?.country === 'US') {
+      try {
+        const aps = db.prepare(`
+          SELECT * FROM affected_persons
+          WHERE org_id = ? AND incident_id = ? AND deleted_at IS NULL
+          ORDER BY is_primary DESC, id ASC
+        `).all(incident.org_id, incident.id);
+        const primaryAp = aps.find(p => p.is_primary === 1) || aps[0] || null;
+        const primaryInj = primaryAp
+          ? db.prepare(`SELECT * FROM injuries WHERE org_id = ? AND affected_person_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1`)
+              .get(incident.org_id, primaryAp.id)
+          : null;
+        const rowsBefore = db.prepare('SELECT id FROM osha_severe_notifications WHERE incident_id = ?')
+          .all(incident.id).map(r => r.id);
+        const allRows = syncSevereNotifications({
+          orgId: incident.org_id, incidentId: incident.id,
+          incident: patchedIncident, primaryAp, primaryInjury: primaryInj,
+          userId: req.user.id,
+        });
+        for (const row of allRows) {
+          if (rowsBefore.includes(row.id)) continue;
+          writeActivity({
+            org_id: incident.org_id,
+            entity_type: 'incident',
+            entity_id: incident.id,
+            action: 'osha_severe_opened',
+            description: `opened OSHA 1904.39 ${row.category} notification (on PATCH) — deadline ${row.deadline_at}`,
+            user_id: req.user.id,
+            metadata: {
+              severe_notification_id: row.id,
+              category: row.category,
+              deadline_at: row.deadline_at,
+              triggered_by: 'patch',
+            },
+            ...auditCtx(req),
+          });
+        }
+      } catch (severeErr) {
+        console.error('[WI-07] syncSevereNotifications on PATCH failed for incident', incident.id, severeErr);
+      }
+    }
+  }
+
+  // WI-06: re-run SafeWork NSW classification on PATCH for the same
+  // trigger fields (osha_date_of_death = death; hospitalized = s.36(a);
+  // type_data.safework_nsw.* updates the sub-categories or mines flag).
+  // Gated on site.country='AU'. syncSafeworkNswNotification is
+  // idempotent (UNIQUE(incident_id)).
+  const wi06Triggered = (
+    req.body.osha_date_of_death !== undefined ||
+    req.body.hospitalized !== undefined ||
+    (req.body.type_data && (
+      req.body.type_data.safework_nsw !== undefined ||
+      Object.prototype.hasOwnProperty.call(req.body.type_data, 'safework_nsw')
+    ))
+  );
+  if (wi06Triggered) {
+    const patchedIncident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(req.params.id);
+    const patchedSite = db.prepare('SELECT country FROM sites WHERE id = ?').get(patchedIncident.site_id);
+    if (patchedSite?.country === 'AU') {
+      try {
+        const aps = db.prepare(`
+          SELECT * FROM affected_persons
+          WHERE org_id = ? AND incident_id = ? AND deleted_at IS NULL
+          ORDER BY is_primary DESC, id ASC
+        `).all(incident.org_id, incident.id);
+        const primaryAp = aps.find(p => p.is_primary === 1) || aps[0] || null;
+        const primaryInj = primaryAp
+          ? db.prepare(`SELECT * FROM injuries WHERE org_id = ? AND affected_person_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1`)
+              .get(incident.org_id, primaryAp.id)
+          : null;
+        const result = syncSafeworkNswNotification({
+          orgId: incident.org_id, incidentId: incident.id,
+          incident: patchedIncident, primaryAp, primaryInjury: primaryInj,
+          userId: req.user.id,
+        });
+        if (result?.created) {
+          writeActivity({
+            org_id: incident.org_id,
+            entity_type: 'incident',
+            entity_id: incident.id,
+            action: 'safework_nsw_opened',
+            description: `opened SafeWork NSW notification ${result.row.nsw_number} on PATCH per WHS Act 2011 (NSW) Part 3`,
+            user_id: req.user.id,
+            metadata: {
+              nsw_notification_id: result.row.id,
+              nsw_number: result.row.nsw_number,
+              is_fatality: result.row.is_fatality,
+              is_serious_injury: result.row.is_serious_injury,
+              is_dangerous_incident: result.row.is_dangerous_incident,
+              excluded_mines_petroleum: result.row.excluded_mines_petroleum,
+              triggered_by: 'patch',
+            },
+            ...auditCtx(req),
+          });
+        }
+      } catch (nswErr) {
+        console.error('[WI-06] syncSafeworkNswNotification on PATCH failed for incident', incident.id, nswErr);
+      }
+    }
+  }
 
   if (severityChanged) {
     const newSeverity = Number(req.body.severity);
