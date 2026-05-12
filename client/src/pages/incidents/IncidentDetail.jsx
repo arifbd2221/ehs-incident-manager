@@ -195,6 +195,7 @@ export default function IncidentDetail() {
 
   const [downloading301, setDownloading301] = useState(false);
   const [downloadingGeneric, setDownloadingGeneric] = useState(false);
+  const [downloadingNsw, setDownloadingNsw] = useState(false);
   // WI-07: OSHA 1904.39 severe-injury notification rows for this incident.
   const [oshaSevere, setOshaSevere] = useState([]);
   // null = closed; severeRow = open for that row.
@@ -390,6 +391,41 @@ export default function IncidentDetail() {
       showToast(e.message || 'Download failed.');
     } finally {
       setDownloadingGeneric(false);
+    }
+  };
+
+  // WI-06: SafeWork NSW record-copy PDF. Reuses the same auth-fetch +
+  // blob-<a> pattern. Only renders when the incident has a NSW
+  // notification row attached.
+  const downloadSafeworkNswPdf = async () => {
+    if (!r?.id) return;
+    setDownloadingNsw(true);
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`/api/reports/safework-nsw/${r.id}?format=pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `Download failed: ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      let filename = `safework-nsw-${r.incident_number || r.id}.pdf`;
+      const cd = resp.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      if (m) filename = m[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      showToast(e.message || 'Download failed.');
+    } finally {
+      setDownloadingNsw(false);
     }
   };
 
@@ -1014,6 +1050,8 @@ export default function IncidentDetail() {
                     lookups={nswLookups}
                     canVerify={canVerify}
                     onAction={(action) => setNswModal(action)}
+                    onDownloadPdf={downloadSafeworkNswPdf}
+                    downloading={downloadingNsw}
                   />
                 )}
                 <div className="idet-triage-divider"/>
@@ -1388,7 +1426,7 @@ const SITE_PRESERVATION_LABELS = {
   released_by_inspector: 'Released by inspector',
 };
 
-function SafeworkNswCardRows({ notification, lookups, canVerify, onAction }) {
+function SafeworkNswCardRows({ notification, lookups, canVerify, onAction, onDownloadPdf, downloading }) {
   const n = notification;
   const s36Map = new Map((lookups.serious_injury_types || []).map(x => [x.key, x]));
   const s37Map = new Map((lookups.dangerous_incident_types || []).map(x => [x.key, x]));
@@ -1507,6 +1545,22 @@ function SafeworkNswCardRows({ notification, lookups, canVerify, onAction }) {
             )}
           </div>
         </>
+      )}
+      {/* WI-06 PDF: internal record copy of the s.38 notification.
+          Submission to SafeWork NSW happens via phone (13 10 50) or the
+          online portal — the PDF is not a substitute. */}
+      {onDownloadPdf && (
+        <div className="idet-triage-row">
+          <span className="idet-triage-label">Record copy</span>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={onDownloadPdf}
+            disabled={!!downloading}
+            title="Download the internal record copy of this notification. Submit to SafeWork NSW via phone (13 10 50) or online portal — this PDF is not a substitute."
+          >
+            <Icon name="download" size={13}/>{downloading ? 'Generating…' : 'Download PDF'}
+          </button>
+        </div>
       )}
     </>
   );

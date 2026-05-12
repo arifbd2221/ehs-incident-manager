@@ -161,6 +161,7 @@ export const AUDIT_ACTIONS_CATALOG = [
   { entity_type: 'incident', action: 'safework_nsw_regulator_requested_written' },
   { entity_type: 'incident', action: 'safework_nsw_written_submitted' },
   { entity_type: 'incident', action: 'safework_nsw_site_preservation_updated' },
+  { entity_type: 'incident', action: 'safework_nsw_pdf_downloaded' },
 
   // Multi-person incident management (WI-A). All entries hang off the
   // parent incident so the timeline reads as a single narrative:

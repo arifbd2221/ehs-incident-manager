@@ -186,10 +186,13 @@ export function getNotificationByNumber(orgId, nswNumber) {
 }
 
 export function listNotificationsForOrg(orgId, { siteId, year } = {}) {
-  const where = ['org_id = ?'];
+  // Column refs must be table-qualified — `incidents` and `sites` both
+  // have an `org_id` column, so unqualified `org_id =` raises
+  // "ambiguous column name" once those tables are joined.
+  const where = ['n.org_id = ?'];
   const params = [orgId];
-  if (siteId) { where.push('site_id = ?'); params.push(Number(siteId)); }
-  if (year)   { where.push("strftime('%Y', event_date) = ?"); params.push(String(year)); }
+  if (siteId) { where.push('n.site_id = ?'); params.push(Number(siteId)); }
+  if (year)   { where.push("strftime('%Y', n.event_date) = ?"); params.push(String(year)); }
   const rows = db.prepare(`
     SELECT n.*, i.incident_number, i.title AS incident_title, s.name AS site_name
     FROM safework_nsw_notifications n

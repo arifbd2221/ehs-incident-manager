@@ -40,3 +40,14 @@ export const setSafeworkNswSitePreservation = (notificationId, data) =>
 // ABN is validated server-side via the ATO checksum.
 export const setSafeworkNswPcbu = (notificationId, data) =>
   api.post(`/reports/safework-nsw/${notificationId}/pcbu`, data).then(r => r.data);
+
+// WI-06 PDF: internal record copy of the s.38 notification. The page
+// component uses an inline auth-fetch to drive the blob-<a> download so
+// the Content-Disposition filename is honoured by the browser. This
+// blob helper is exposed for callers (tests, future export buttons)
+// that just need the raw bytes.
+export const downloadSafeworkNswPdf = (incidentId) =>
+  api.get(`/reports/safework-nsw/${incidentId}`, {
+    params: { format: 'pdf' },
+    responseType: 'blob',
+  }).then(r => r.data);

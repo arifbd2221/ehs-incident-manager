@@ -6,18 +6,18 @@ Live status for what's open, what's done, and how to operate on this codebase. D
 
 ## Current state
 
-- **Branch:** `backend` at this turn's WI-09 commit (universal generic incident PDF). Preceded by `8cb2c7d` (WI-02), `1a02ed6` (WI-06), `89d0a27` (WI-07), `2d765af` (WI-03), `b7e3507` (WI-01). Working tree clean (only `PRD.md` + NSW source PDFs left untracked — owner reference docs).
+- **Branch:** `backend` at this turn's WI-06 PDF follow-up commit. Preceded by `84f62f6` (WI-09), `8cb2c7d` (WI-02), `1a02ed6` (WI-06 engine), `89d0a27` (WI-07), `2d765af` (WI-03), `b7e3507` (WI-01). Working tree clean (only `PRD.md` + NSW source PDFs left untracked — owner reference docs).
 - **`origin/main`** at `b3dbb08` (last known). Backend is many commits ahead: WI-A + WI-04 + WI-B + WI-08 + WI-D + OSHA sources. Check `gh pr list` for current PR state.
 - **PR #11** ✅ merged 2026-05-11.
 - **Phase 2:** code complete; F6.2 manual walkthrough open.
 - **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OB2, OB3, OP1, OP2, OP3.
 - **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1. (RG1 superseded by PRD-remediation WI-06 SafeWork NSW.)
-- **PRD-remediation done:** Chunks 1–7a + 8 (WI-01) + 9 (WI-03) + 10 (WI-07) + 11 (WI-06 engine) + 12 (WI-02 OSHA 300A + ITA) + **13 (WI-09 Generic PDF)**. Next: WI-06 PDF renderer (follow-up) + WI-05 (gated).
-- **Migrations applied:** 001–029 + letter fixups `014a`, `017a`, `023a/b/c`. Next available: **030**. WI-09 added no schema (pure rendering).
+- **PRD-remediation done:** Chunks 1–7a + 8 (WI-01) + 9 (WI-03) + 10 (WI-07) + 11 (WI-06 engine) + 12 (WI-02 OSHA 300A + ITA) + 13 (WI-09 Generic PDF) + **14 (WI-06 SafeWork NSW PDF follow-up)**. Next: WI-05 (gated).
+- **Migrations applied:** 001–029 + letter fixups `014a`, `017a`, `023a/b/c`. Next available: **030**. WI-06 PDF follow-up added no schema (pure rendering).
 - (Migration row consolidated above.)
 - **Demo accounts** (all `password123`): `priya@sdsmanager.com` (admin, SDS Manager Inc., org=1), `elena@sdsmanager.com` (ehs_manager, org=1, multi-framework — owns Sheffield UK site), `marcus`, `james`, `mehta`, `wendy`; plus empty test orgs `acme@sdsmanager.com` (admin, Acme Manufacturing org=2, OSHA US — used for cross-tenant tests), `riddor-test@example.com` (RIDDOR UK), `sydney-test@example.com` (SafeWork NSW AU).
 - **Dev servers:** `cd server && node --watch index.js` (BE :3001) + `cd client && npm run dev` (FE :5173).
-- **Test suites:** `wia-regression.sh` 77/78, `wi04-e2e.sh` 49/49, `wib-e2e.sh` 42/42, `wi08-e2e.sh` 19/19, `wi07-e2e.sh` 46/46, `wi06-e2e.sh` 57/57, `wi02-e2e.sh` 45/45, **`wi09-e2e.sh` 30/30**, `abn-validator.test.js` 12/12, `osha-ita-csv.test.js` 36/36 (ITA template parity gate), **`generic-incident-pdf.test.js` 20/20**, `riddor-reg5-reg11.test.js` 23/23, `frameworks.test.js` 27/27.
+- **Test suites:** `wia-regression.sh` 77/78, `wi04-e2e.sh` 49/49, `wib-e2e.sh` 42/42, `wi08-e2e.sh` 19/19, `wi07-e2e.sh` 46/46, `wi06-e2e.sh` 57/57, `wi02-e2e.sh` 45/45, `wi09-e2e.sh` 30/30, **`wi06-pdf-e2e.sh` 43/43**, `abn-validator.test.js` 12/12, `osha-ita-csv.test.js` 36/36 (ITA template parity gate), `generic-incident-pdf.test.js` 20/20, `riddor-reg5-reg11.test.js` 23/23, `frameworks.test.js` 27/27.
 
 ---
 
@@ -49,7 +49,7 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 | 11 | WI-06 SafeWork NSW (engine + tables + routes + FE; PDF deferred) | ✅ this turn (single BE+FE commit). Owner approved verbatim s.35–s.39 extraction before any code. Migration 028 `safework_nsw_notifications` + two seeded lookup tables (10+1 s.36 + 11+1 s.37, each row carries verbatim Act `label` + `section_ref`). `services/safework_nsw.js` classification engine — auto-derive s.36(a) from `hospitalized`, explicit s.36(b)(i)–(viii)+(c) and s.37 sub-categories via `type_data.safework_nsw.*`, Mines & Petroleum carve-out per s.38(8)/s.39(4). `services/abn_validator.js` (ATO mod-89) + 12-test suite. 7 new routes (lookups, list, GET, phone-notified, regulator-requested-written, written-submitted, site-preservation, PCBU). Deadlines aggregator emits `safework_nsw_phone` (without_delay→submitted) and `safework_nsw_written` (only after regulator request; deadline = +48h per s.38(4)(b)). FE: `SafeworkNswCardRows` + `SafeworkNswModal` on IncidentDetail behind `showNsw` framework gate. 57-assertion `wi06-e2e.sh`. 5 new audit verbs. |
 | 12 | WI-02 OSHA 300A PDF + ITA CSV (29 CFR 1904.32 + 1904.41) | ✅ this turn. Migration 029 `osha_300a_certified_summaries` snapshot + `services/osha_300a.js` (atomic cert+snapshot + verbatim 4-key allowlist + verbatim 1904.32(b)(3) affirmation) + `services/osha_ita_designation.js` (Appendix A 65 entries + Appendix B 95 entries verbatim per 88 FR 47347/47348) + `services/pdf/osha_300a.js` + `services/csv/osha_ita.js` (28 cols, RFC 4180, leading-zero quoting) + `services/csv/osha_ita_validator.js` (per-field + 7 cross-field + 500..<8760 hours/employee bounds + non-contiguous size enum). 3 new routes (PDF, CSV, designation). FE: Download buttons + 1904.41 designation banner + cert dropdown. 36-test `osha-ita-csv.test.js` (byte-for-byte template parity gate) + 45-assertion `wi02-e2e.sh`. 3 new audit verbs. |
 | 13 | WI-09 Generic Incident PDF | ✅ this turn. `services/pdf/generic_incident.js` 8-section renderer (overview / affected_persons / investigation / causes / capas / classifications / attachments / audit). Multi-page manual pagination via `nextPageIfNeeded()`. Each section no-ops cleanly when data missing. Customer-branded (org.name header), platform-footer + internal-record disclaimer naming OSHA ITA / HSE RIDDOR / SafeWork NSW Notify. `GET /reports/incidents/:incidentId/generic?format=pdf` — no framework gate, no elevated-only; universal. `?sections=` filter + `?audit_limit=N`. FE: Download-PDF button in IncidentDetail Details card (always visible). 20-test `generic-incident-pdf.test.js` (text extraction via `pdftotext`) + 30-assertion `wi09-e2e.sh`. |
-| 14 | WI-06 PDF renderer (follow-up) | After owner confirms layout. Adds `services/pdf/safework_nsw.js` + Download-PDF button on the NSW card. Per standing instruction: government-document styling, no logo impersonation, footer noting submission still happens via phone + online portal. |
+| 14 | WI-06 PDF renderer (follow-up) | ✅ this turn. `server/services/pdf/safework_nsw.js` — 7-section US-Letter portrait renderer (notifying entity / s.35 categories / s.36 sub-categories / s.37 sub-categories / narrative / s.39 site preservation / s.38 notification log) + Mines & Petroleum carve-out determination block. Government-document styling, no SafeWork NSW logo, explicit "Internal record copy" header label, footer carries verbatim s.38 submission channels (phone 13 10 50 + notifyform.safework.nsw.gov.au) plus "not a substitute" disclaimer. Verbatim Act labels for every s.36/s.37 sub-category pulled live from the lookup tables. `GET /reports/safework-nsw/:incidentId?format=pdf` branch. New audit verb `safework_nsw_pdf_downloaded`. FE: Download-PDF button row on `SafeworkNswCardRows`. 43-assertion `server/scripts/wi06-pdf-e2e.sh`. Drive-by fix: `listNotificationsForOrg` had an ambiguous `org_id` column after the incidents/sites joins — qualified to `n.org_id` (broke `GET /reports/safework-nsw` listing endpoint since chunk 11). |
 | 14+ | WI-05 F2508 (gated) | reorder allowed by gate readiness |
 
 **Hallucination-risk gates** (memory `feedback_regulatory_truth.md`) — do NOT start without owner-supplied source material in `docs/regulatory-sources/`:
@@ -65,17 +65,16 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 
 ## Next session priority
 
-WI-01 + WI-03 + WI-07 + WI-06 (engine) + WI-02 + WI-09 shipped. Deadlines aggregator covers US-OSHA + UK-RIDDOR + AU-NSW. PDF infrastructure proven across 5 form layouts. Remaining chunks:
+WI-01 + WI-03 + WI-07 + WI-06 (engine + PDF) + WI-02 + WI-09 shipped. Deadlines aggregator covers US-OSHA + UK-RIDDOR + AU-NSW. PDF infrastructure proven across 6 form layouts. Remaining chunk:
 
-- **WI-06 PDF renderer (follow-up)** — design from WHS Act requirements per the owner's standing instruction (government-document styling, no logo impersonation, footer noting submission still happens via phone + online portal). Data shape ready in `safework_nsw_notifications`.
 - **WI-05 RIDDOR F2508 PDF** — still gated on HSE F2508 visual reference.
 
-**WI-06 PDF cold files for the next session:**
-- `server/services/pdf/safework_nsw.js` — new renderer (US Letter portrait). Mirror the osha_301 + generic_incident page structure. Sections: header (NSW number + event date + PCBU + site), s.35 categories, sub-categories with verbatim labels resolved from the lookup tables, narrative (description), s.39 site preservation status, phone/written submission record, footer noting "Submitted via SafeWork NSW phone line / online portal — this PDF is a record copy, not a substitute."
-- `server/routes/reports.js` — extend `GET /reports/safework-nsw/:incidentId` for `?format=pdf` branch. Audit verb `safework_nsw_pdf_downloaded`.
-- `client/src/api/safework_nsw.js` — add `downloadSafeworkNswPdf(incidentId)` blob helper.
-- `client/src/pages/incidents/IncidentDetail.jsx` — Download-PDF button on `SafeworkNswCardRows`.
-- Source: `docs/regulatory-sources/safework-nsw/whs-act-2011-nsw.pdf` (the Act doesn't prescribe a form layout — design per the standing instruction).
+**WI-05 cold files for the next session:**
+- `server/services/pdf/riddor_f2508.js` — new renderer. The pattern is identical to `services/pdf/osha_301.js` + `services/pdf/safework_nsw.js`: pdfkit with `margins.bottom: 0`, `lineBreak: false` on every text() call, manual word-wrap, manual pagination. HSE F2508 has a fixed multi-page layout (different from OSHA 300/300A landscape) — need the HSE visual reference before drafting.
+- `server/routes/reports.js` — extend the existing `/reports/riddor/:incidentId` GET handler (currently JSON-only) with a `?format=pdf` branch. Audit verb `riddor_f2508_pdf_downloaded` (add to `services/audit_actions_catalog.js`).
+- `client/src/api/reports.js` — add `downloadRiddorF2508Pdf(incidentId)` blob helper.
+- `client/src/pages/incidents/IncidentDetail.jsx` — Download-PDF button on the RIDDOR section. Only render when `riddor_reportable === 1`.
+- **Hallucination gate:** WI-05 stays blocked until owner provides the HSE F2508 visual reference PDF. The HSE form has very specific field numbering and section ordering that we MUST NOT invent. Place in `docs/regulatory-sources/riddor/`.
 
 **Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
 
@@ -192,6 +191,27 @@ Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink
 ---
 
 ## Recent session log
+
+### 2026-05-12 (late night, ctd.) — WI-06 SafeWork NSW PDF follow-up shipped (record-copy renderer); 43-assertion e2e
+
+Chunk 14 closed in a single BE+FE commit. Final PDF chunk for SafeWork NSW; the engine + tables + routes shipped in chunk 11 (`1a02ed6`). Pure rendering work — no schema, no new regulatory citations (s.36/s.37 verbatim labels already in the seeded lookup tables from chunk 11).
+
+| Commit | Scope |
+|---|---|
+| (this) | `server/services/pdf/safework_nsw.js` — 7-section US-Letter portrait renderer. Header: "Notifiable Incident Record" + "Internal record copy — Work Health and Safety Act 2011 (NSW), Part 3" + right-aligned reference column (NSW number + event date) + organisation byline. Sections: (1) Notifying entity (PCBU name / ABN / ANZSIC / site), (2) s.35 categories with X-mark checkboxes (death / serious injury / dangerous incident), (3) s.36 sub-categories with verbatim Act labels + section_ref lookup, (4) s.37 sub-categories ditto, (5) Incident narrative (title / area / department / affected person / description / immediate actions), (6) s.39 site preservation with paragraph references on every status label, (7) s.38 notification log (phone + regulator-requested-written + 48h deadline + written-submitted). Mines & Petroleum carve-out renders an explicit "NOT NOTIFIABLE" determination block citing s.38(8)/s.39(4). Footer: s.38 submission channels verbatim — telephone (13 10 50) + online portal (notifyform.safework.nsw.gov.au) + "not a substitute" disclaimer. Government-document styling — no SafeWork NSW logo, no impersonation, Helvetica monochrome, conservative rule lines. Reuses the WI-09 manual-pagination pattern (`margins.bottom: 0` + `lineBreak: false`, `nextPageIfNeeded()` guard before every block). `GET /reports/safework-nsw/:incidentId?format=pdf` branch; JSON branch unchanged. New audit verb `safework_nsw_pdf_downloaded` (entity_type='incident', metadata={nsw_notification_id, nsw_number, incident_id}). FE: `downloadSafeworkNswPdf` API helper + `downloadingNsw` state + Download-PDF button row on `SafeworkNswCardRows` (renders even under the Mines & Petroleum carve-out so the determination record can be downloaded). 43-assertion `server/scripts/wi06-pdf-e2e.sh` covering happy path / verbatim labels / footer disclaimer / no-impersonation negative-grep / activity_log + WI-C hash chain / cross-tenant 403 (acme OSHA) + framework-gate 403 (riddor-test UK) / unknown incident 404 + missing-notification 404 / Mines & Petroleum carve-out determination rendering / phone + written log values surfacing after lifecycle writes. roadmap.md updated. |
+
+**Drive-by fix:** `server/services/safework_nsw.js` `listNotificationsForOrg` had an ambiguous `org_id` column reference once the SELECT joined `incidents` + `sites` (both carry their own `org_id`). SQLite returned `error: ambiguous column name: org_id` on every call to `GET /reports/safework-nsw`. Qualified to `n.org_id` (also `n.site_id`, `n.event_date`). Pre-existing bug introduced in `1a02ed6`; not caught by `wi06-e2e.sh` because it never hit the list endpoint with a populated table.
+
+**Hallucination-risk discipline:** Verbatim s.36 / s.37 labels are looked up by `key` from the lookup tables (which were owner-reviewed in chunk 11) at render time — there is zero text duplication between the renderer and the Act. The s.38 submission channel string is the only piece of regulator-published text in the renderer that isn't in the Act itself; it surfaces SafeWork NSW's published phone line + portal URL and is explicitly framed as "channels" not "form requirements". The footer disclaimer makes clear this PDF is not the regulator-issued submission.
+
+**Test results (full sweep):** wi06-pdf-e2e 43/43 (new), wi09-e2e 30/30, wi06-e2e 57/57, wi02-e2e 45/45, wi07-e2e 46/46, wi08-e2e 19/19, wi04-e2e 49/49, wib-e2e 42/42, node:test 118/118 (12 ABN + 36 ITA-CSV + 20 generic-incident-pdf + 23 RIDDOR + 27 frameworks), wia 77/78 (F1 unchanged), Vite production build clean.
+
+**Carry-forward TODOs:**
+- Organisation logo embedding — same status as WI-09. No `organizations.logo_path` column today; renderer ready to pick one up via a `payload.orgLogoPath` argument when added.
+- The renderer always uses today's date (UTC) for the footer "Generated" stamp; if the FE needs to print a record copy of a state from a specific historical time, that would need a new `at` query param + reconstruct logic (deferred).
+- ANZSIC code list seeding still deferred (v1 accepts 4-digit text in the PCBU section; PDF prints whatever was captured).
+
+**Servers running.** Branch `backend` at this turn's commit. Next chunk per plan: WI-05 RIDDOR F2508 PDF (still gated on HSE F2508 visual reference).
 
 ### 2026-05-12 (late night, ctd.) — WI-09 Generic Incident PDF shipped (universal floor); 30-assertion e2e + 20-test unit suite
 

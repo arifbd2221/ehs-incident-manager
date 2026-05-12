@@ -7,6 +7,7 @@ import { verifyChain } from '../db/activity_log_chain.js';
 import { renderOsha300Pdf } from '../services/pdf/osha_300.js';
 import { renderOsha301Pdf } from '../services/pdf/osha_301.js';
 import { renderGenericIncidentPdf, ALL_SECTIONS as GENERIC_ALL_SECTIONS } from '../services/pdf/generic_incident.js';
+import { renderSafeworkNswPdf } from '../services/pdf/safework_nsw.js';
 import { listAffectedPersons } from '../services/affected_persons.js';
 import {
   listSevereNotificationsForIncident,
@@ -899,13 +900,75 @@ router.get('/safework-nsw', (req, res) => {
 });
 
 // GET /reports/safework-nsw/:incidentId — single notification row.
+// Default response is JSON; pass ?format=pdf to stream the WI-06 PDF
+// record copy (government-document styling, no logo impersonation —
+// see server/services/pdf/safework_nsw.js).
 router.get('/safework-nsw/:incidentId', (req, res) => {
   if (!requireNswOrg(req, res)) return;
-  const inc = db.prepare('SELECT id FROM incidents WHERE id = ? AND org_id = ?')
-    .get(Number(req.params.incidentId), req.user.org_id);
-  if (!inc) return res.status(404).json({ error: 'Incident not found' });
-  const row = getNswForIncident(req.user.org_id, inc.id);
+  const incidentId = Number(req.params.incidentId);
+  // Pull the incident with site fields so the PDF can render the
+  // narrative without a second join. JSON branch ignores the extras.
+  const incident = db.prepare(`
+    SELECT i.*, s.name AS site_name, s.address AS site_address
+    FROM incidents i
+    LEFT JOIN sites s ON s.id = i.site_id
+    WHERE i.id = ? AND i.org_id = ?
+  `).get(incidentId, req.user.org_id);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  const row = getNswForIncident(req.user.org_id, incident.id);
   if (!row) return res.status(404).json({ error: 'No SafeWork NSW notification for this incident' });
+
+  if (req.query.format === 'pdf') {
+    const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(req.user.org_id);
+    // Resolve the primary affected person (if any) for the narrative
+    // section. Falls back to nothing when WI-A side tables are empty.
+    const primaryAffected = db.prepare(`
+      SELECT name, job_title
+      FROM affected_persons
+      WHERE incident_id = ? AND org_id = ? AND deleted_at IS NULL
+      ORDER BY is_primary DESC, id ASC
+      LIMIT 1
+    `).get(incident.id, req.user.org_id);
+    const phoneNotifier = row.phone_notified_by
+      ? db.prepare('SELECT name FROM users WHERE id = ?').get(row.phone_notified_by)
+      : null;
+    const writtenSubmitter = row.written_submitted_by
+      ? db.prepare('SELECT name FROM users WHERE id = ?').get(row.written_submitted_by)
+      : null;
+
+    const filename = `safework-nsw-${(row.nsw_number || incident.incident_number || incident.id).toString().replace(/[^A-Za-z0-9_.-]/g, '_')}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: incident.id,
+      action: 'safework_nsw_pdf_downloaded',
+      description: `downloaded SafeWork NSW PDF for ${row.nsw_number} (incident ${incident.incident_number})`,
+      user_id: req.user.id,
+      metadata: {
+        nsw_notification_id: row.id,
+        nsw_number: row.nsw_number,
+        incident_id: incident.id,
+      },
+      ...auditCtx(req),
+    });
+
+    return renderSafeworkNswPdf(res, {
+      orgName: org?.name || '',
+      notification: row,
+      incident,
+      site: { name: incident.site_name, address: incident.site_address },
+      primaryAffected: primaryAffected || null,
+      seriousInjuryTypes: listSeriousInjuryTypes(),
+      dangerousIncidentTypes: listDangerousIncidentTypes(),
+      phoneNotifierName: phoneNotifier?.name || null,
+      writtenSubmitterName: writtenSubmitter?.name || null,
+      generatedAt: new Date().toISOString().slice(0, 10),
+    });
+  }
+
   res.json(row);
 });
 
