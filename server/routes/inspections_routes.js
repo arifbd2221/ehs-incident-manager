@@ -14,6 +14,7 @@
 import { Router } from 'express';
 import db from '../db/connection.js';
 import { writeActivity, diffFields } from '../services/activity_log.js';
+import { requireAssigneeOrElevated } from '../services/permissions.js';
 
 const router = Router();
 
@@ -275,6 +276,7 @@ router.patch('/:id', (req, res) => {
     'SELECT * FROM inspections WHERE id = ? AND org_id = ?'
   ).get(req.params.id, req.user.org_id);
   if (!inspection) return res.status(404).json({ error: 'Inspection not found' });
+  if (!requireAssigneeOrElevated(req, res, inspection, 'started_by', 'this inspection')) return;
 
   const updatable = ['title', 'conducted_on', 'location'];
   const sets = [];
@@ -341,6 +343,7 @@ router.put('/:id/items/:item_key', (req, res) => {
     'SELECT * FROM inspections WHERE id = ? AND org_id = ?'
   ).get(req.params.id, req.user.org_id);
   if (!inspection) return res.status(404).json({ error: 'Inspection not found' });
+  if (!requireAssigneeOrElevated(req, res, inspection, 'started_by', 'this inspection')) return;
 
   if (inspection.status !== 'in_progress') {
     return res.status(409).json({ error: 'Cannot modify items on a completed or abandoned inspection.' });
@@ -398,6 +401,7 @@ router.post('/:id/complete', (req, res) => {
     'SELECT * FROM inspections WHERE id = ? AND org_id = ?'
   ).get(req.params.id, req.user.org_id);
   if (!inspection) return res.status(404).json({ error: 'Inspection not found' });
+  if (!requireAssigneeOrElevated(req, res, inspection, 'started_by', 'this inspection')) return;
 
   if (inspection.status !== 'in_progress') {
     return res.status(409).json({ error: `Cannot complete — current status is "${inspection.status}"` });
@@ -438,6 +442,7 @@ router.post('/:id/abandon', (req, res) => {
     'SELECT * FROM inspections WHERE id = ? AND org_id = ?'
   ).get(req.params.id, req.user.org_id);
   if (!inspection) return res.status(404).json({ error: 'Inspection not found' });
+  if (!requireAssigneeOrElevated(req, res, inspection, 'started_by', 'this inspection')) return;
 
   if (inspection.status !== 'in_progress') {
     return res.status(409).json({ error: `Cannot abandon — current status is "${inspection.status}"` });

@@ -26,6 +26,7 @@ import {
 } from '../services/deadlines.js';
 import { syncSevereNotifications } from '../services/osha_severe.js';
 import { syncSafeworkNswNotification } from '../services/safework_nsw.js';
+import { canActOnAssignment, requireAssigneeOrElevated } from '../services/permissions.js';
 import {
   upsertPrimaryFromLegacy,
   bulkInsertFromArray,
@@ -1592,9 +1593,9 @@ router.patch('/:id', (req, res) => {
 // the chain of custody on the witness list is auditable.
 // ---------------------------------------------------------------------------
 router.post('/:id/witnesses', (req, res) => {
-  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot add witnesses post-creation.' });
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!requireAssigneeOrElevated(req, res, incident, 'assigned_to', 'this incident')) return;
   const name = (req.body.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Witness name is required.' });
   const contact = (req.body.contact || '').trim() || null;
@@ -1616,9 +1617,9 @@ router.post('/:id/witnesses', (req, res) => {
 });
 
 router.patch('/:id/witnesses/:wid', (req, res) => {
-  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot edit witnesses.' });
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!requireAssigneeOrElevated(req, res, incident, 'assigned_to', 'this incident')) return;
   const witness = db.prepare('SELECT * FROM witnesses WHERE id = ? AND incident_id = ?').get(req.params.wid, incident.id);
   if (!witness) return res.status(404).json({ error: 'Witness not found' });
 
@@ -1657,9 +1658,9 @@ router.patch('/:id/witnesses/:wid', (req, res) => {
 });
 
 router.delete('/:id/witnesses/:wid', (req, res) => {
-  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot remove witnesses.' });
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!requireAssigneeOrElevated(req, res, incident, 'assigned_to', 'this incident')) return;
   const witness = db.prepare('SELECT * FROM witnesses WHERE id = ? AND incident_id = ?').get(req.params.wid, incident.id);
   if (!witness) return res.status(404).json({ error: 'Witness not found' });
   db.prepare('DELETE FROM witnesses WHERE id = ?').run(witness.id);
@@ -1705,10 +1706,10 @@ router.post('/:id/assign', (req, res) => {
 });
 
 router.post('/:id/escalate', (req, res) => {
-  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot escalate incidents.' });
   const { lead_investigator, track, notes } = req.body;
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!requireAssigneeOrElevated(req, res, incident, 'assigned_to', 'this incident')) return;
 
   const invNumber = nextInvestigationNumber();
 
@@ -1761,10 +1762,10 @@ router.get('/:id/closure-checklist', (req, res) => {
 
 // --- Close: tiered by track ---
 router.post('/:id/close', (req, res) => {
-  if (!isElevated(req.user)) return res.status(403).json({ error: 'Worker role cannot close incidents.' });
   const { reason, notes, force } = req.body;
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  if (!requireAssigneeOrElevated(req, res, incident, 'assigned_to', 'this incident')) return;
   if (incident.status === 'Closed') return res.status(409).json({ error: 'Incident is already closed.' });
 
   const gates = evaluateClosureGates(incident.id, req.user.org_id);

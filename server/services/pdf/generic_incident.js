@@ -45,7 +45,7 @@ const LEFT_X = 36;
 const HEADER_HEIGHT = 50;    // first-page header band; subsequent pages get a compact header
 const FOOTER_RESERVE = 60;   // bottom region reserved for footer disclaimer
 
-const PLATFORM_NAME = 'EHS Incident Management';
+const PLATFORM_NAME = 'Safelync';
 
 // ---------------------------------------------------------------------------
 // Section visibility

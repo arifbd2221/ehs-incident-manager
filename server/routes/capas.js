@@ -2,11 +2,9 @@ import { Router } from 'express';
 import db from '../db/connection.js';
 import { nextCapaNumber } from '../services/numbering.js';
 import { notifyUser } from '../services/notifications.js';
+import { isElevated, requireAssigneeOrElevated } from '../services/permissions.js';
 
 const router = Router();
-
-const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
-const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
 
 // Shared INSERT used by both /capas (polymorphic) and /incidents/:id/create-capa.
 // Validates source_type ↔ id shape against the migration-003 CHECK constraint
@@ -245,6 +243,7 @@ router.post('/', (req, res) => {
 router.patch('/:id', (req, res) => {
   const capa = db.prepare('SELECT * FROM capas WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!capa) return res.status(404).json({ error: 'CAPA not found' });
+  if (!requireAssigneeOrElevated(req, res, capa, 'owner_id', 'this CAPA')) return;
 
   const updatable = ['title', 'description', 'priority', 'progress', 'status', 'due_date', 'category'];
   const sets = [];
@@ -285,6 +284,7 @@ router.patch('/:id', (req, res) => {
 router.post('/:id/complete', (req, res) => {
   const capa = db.prepare('SELECT * FROM capas WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!capa) return res.status(404).json({ error: 'CAPA not found' });
+  if (!requireAssigneeOrElevated(req, res, capa, 'owner_id', 'this CAPA')) return;
 
   const { completion_notes } = req.body;
 

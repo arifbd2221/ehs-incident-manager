@@ -466,7 +466,7 @@ export default function TopBar() {
             </div>
 
             <div className="help-footer">
-              <div className="help-footer-line">EHS Incident Management v1.0</div>
+              <div className="help-footer-line">Safelync v1.0</div>
               <div className="help-footer-line">
                 Need help? <a href="mailto:support@sdsmanager.com">support@sdsmanager.com</a>
               </div>

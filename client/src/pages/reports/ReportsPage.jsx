@@ -43,6 +43,27 @@ function ReportLoading() {
   );
 }
 
+// Rendered when "All sites" is picked but the regulator requires the report
+// to be scoped to a single establishment (OSHA 300, 300A).
+function PerEstablishmentNotice({ title, cite }) {
+  return (
+    <div className="rpt-panel">
+      <div className="rpt-panel-header">
+        <div>
+          <div className="rpt-panel-title">{title}</div>
+          <div className="rpt-panel-sub">Per-establishment report</div>
+        </div>
+      </div>
+      <div className="rpt-panel-body">
+        <div className="cell-empty" style={{ padding: '32px 20px', lineHeight: 1.55 }}>
+          Select a single site from the filter above.<br/>
+          The {title} is maintained per establishment per <b>{cite}</b> — cross-site aggregation is non-conformant.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ReportsPage() {
   const { user } = useAuth();
   const canSeeAudit = AUDIT_ROLES.has(user?.role);
@@ -63,7 +84,12 @@ export default function ReportsPage() {
   const [siteId, setSiteId] = useState('');
 
   useEffect(() => {
-    getSites().then(data => { setSites(data); if (data.length > 0) setSiteId(String(data[0].id)); });
+    getSites().then(data => {
+      setSites(data);
+      // Default to the first site so OSHA 300 / 300A render data on first load.
+      // "All sites" remains available as an explicit pick at the top of the list.
+      if (data.length > 0) setSiteId(String(data[0].id));
+    });
   }, []);
 
   // If the previously-selected tab is no longer in the visible set (org
@@ -75,7 +101,10 @@ export default function ReportsPage() {
     }
   }, [visibleReports, tab]);
 
-  const siteOpts = useMemo(() => sites.map(s => ({ value: String(s.id), label: s.name })), [sites]);
+  const siteOpts = useMemo(() => [
+    { value: '', label: 'All sites' },
+    ...sites.map(s => ({ value: String(s.id), label: s.name })),
+  ], [sites]);
 
   return (
     <div className="page">
@@ -666,6 +695,7 @@ function Osha300Report({ siteId }) {
 
   const load = () => {
     if (siteId) { setData(null); getOsha300({ site_id: siteId }).then(setData).catch(() => {}); }
+    else { setData(null); }
   };
   useEffect(load, [siteId]);
 
@@ -708,6 +738,7 @@ function Osha300Report({ siteId }) {
     }
   };
 
+  if (!siteId) return <PerEstablishmentNotice title="OSHA 300 Log" cite="29 CFR 1904.30(a)" />;
   if (!data) return <ReportLoading/>;
 
   return (
@@ -856,14 +887,14 @@ function Osha301Report({ siteId }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (siteId) {
-      getIncidents({ site_id: siteId, limit: 200 }).then(r => {
-        const recordable = (r.incidents || []).filter(i => i.osha_recordable);
-        setIncidents(recordable);
-        setSelectedId('');
-        setData(null);
-      }).catch(() => {});
-    }
+    const params = { limit: 200 };
+    if (siteId) params.site_id = siteId;
+    getIncidents(params).then(r => {
+      const recordable = (r.incidents || []).filter(i => i.osha_recordable);
+      setIncidents(recordable);
+      setSelectedId('');
+      setData(null);
+    }).catch(() => {});
   }, [siteId]);
 
   useEffect(() => {
@@ -979,6 +1010,9 @@ function Osha300AReport({ siteId }) {
             .then(setDesignation).catch(() => setDesignation(null));
         }
       });
+    } else {
+      setData(null);
+      setDesignation(null);
     }
   };
   useEffect(load, [siteId]);
@@ -1022,6 +1056,7 @@ function Osha300AReport({ siteId }) {
     }
   };
 
+  if (!siteId) return <PerEstablishmentNotice title="OSHA 300A Annual Summary" cite="29 CFR 1904.32(b)(1)" />;
   if (!data) return <ReportLoading/>;
 
   const totalCases = (data.cases?.deaths || 0) + (data.cases?.days_away || 0) + (data.cases?.job_transfer || 0) + (data.cases?.other_recordable || 0);
@@ -1202,7 +1237,8 @@ function RiddorReport({ siteId }) {
   const [data, setData] = useState(null);
   useEffect(() => {
     setData(null);
-    getRiddor({ site_id: siteId }).then(setData).catch(() => {});
+    const params = siteId ? { site_id: siteId } : {};
+    getRiddor(params).then(setData).catch(() => {});
   }, [siteId]);
 
   if (!data) return <ReportLoading/>;
@@ -1434,17 +1470,21 @@ function SafeworkNswReport({ siteId }) {
 function MetricsReport({ siteId }) {
   const [data, setData] = useState(null);
   useEffect(() => {
-    if (siteId) { setData(null); getMetrics({ site_id: siteId }).then(setData).catch(() => {}); }
+    setData(null);
+    const params = siteId ? { site_id: siteId } : {};
+    getMetrics(params).then(setData).catch(() => {});
   }, [siteId]);
 
   if (!data) return <ReportLoading/>;
+
+  const isOrgWide = data.scope === 'org';
 
   return (
     <div className="rpt-panel">
       <div className="rpt-panel-header">
         <div>
           <div className="rpt-panel-title">Safety Metrics</div>
-          <div className="rpt-panel-sub">Site-level incidence rates · YTD</div>
+          <div className="rpt-panel-sub">{isOrgWide ? `Org-wide rollup · all sites · YTD` : 'Site-level incidence rates · YTD'}</div>
         </div>
       </div>
       <div className="rpt-panel-body">
@@ -1470,7 +1510,10 @@ function MetricsReport({ siteId }) {
             <div className="rpt-metric-sub">Year-to-date</div>
           </div>
           <div className="rpt-metric-formula">
-            Formula: (cases × 200,000) ÷ total hours worked. Based on site-level data.
+            Formula: (cases × 200,000) ÷ total hours worked.
+            {isOrgWide
+              ? ` Pooled across ${data.sitesWithData || 0} of ${data.siteCount || 0} sites.`
+              : ' Based on site-level data.'}
           </div>
         </div>
       </div>

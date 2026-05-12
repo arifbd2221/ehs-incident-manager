@@ -4,11 +4,14 @@ import { Navigate, useNavigate, Link } from 'react-router-dom';
 import Icon from '../components/shared/Icon';
 
 const DEMO = [
-  { email: 'acme@sdsmanager.com', label: 'Aisha (Admin)', icon: 'gear' },
-  { email: 'elena@sdsmanager.com', label: 'Elena (EHS Manager)', icon: 'shield' },
-  { email: 'marcus@sdsmanager.com', label: 'Marcus (Supervisor)', icon: 'person' },
-  { email: 'james@sdsmanager.com', label: 'James (EHS Manager)', icon: 'settings' },
-  { email: 'wendy@sdsmanager.com', label: 'Wendy (Worker)', icon: 'pulse' },
+  { email: 'priya@sdsmanager.com', label: 'Priya (Admin · COO)',     icon: 'factory' },
+  { email: 'sarah@sdsmanager.com', label: 'Sarah (Admin · AU lead)', icon: 'location' },
+  { email: 'acme@sdsmanager.com',  label: 'Aisha (Admin · empty)',   icon: 'gear' },
+  { email: 'elena@sdsmanager.com', label: 'Elena (EHS Manager)',     icon: 'shield' },
+  { email: 'james@sdsmanager.com', label: 'James (EHS Manager)',     icon: 'settings' },
+  { email: 'mehta@sdsmanager.com', label: 'Dr. Mehta (EHS Officer)', icon: 'eye' },
+  { email: 'marcus@sdsmanager.com', label: 'Marcus (Supervisor)',    icon: 'person' },
+  { email: 'wendy@sdsmanager.com', label: 'Wendy (Worker)',          icon: 'pulse' },
 ];
 
 export default function Login() {
