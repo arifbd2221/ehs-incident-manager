@@ -285,12 +285,16 @@ function drawFooter(doc, generatedAt) {
 function sectionNotifyingEntity(doc, y, ctx) {
   const { notification, incident, site, orgName } = ctx;
   y = drawSectionHeader(doc, LEFT_X, y, USABLE_W, '1. Notifying entity (PCBU)', ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Organisation',  orgName, ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'PCBU name',     notification.pcbu_name, ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'ABN',           notification.pcbu_abn, ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'ANZSIC code',   notification.pcbu_anzsic_code, ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Site',          site?.name, ctx);
-  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Site address',  site?.address, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Organisation',     orgName, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'PCBU name',        notification.pcbu_name, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'PCBU trading name', notification.pcbu_trading_name, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'PCBU address',     notification.pcbu_address, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'ABN',              notification.pcbu_abn, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'ANZSIC code',      notification.pcbu_anzsic_code, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Worker count',
+    notification.pcbu_worker_count != null ? String(notification.pcbu_worker_count) : null, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Site',             site?.name, ctx);
+  y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Site address',     site?.address, ctx);
   y = drawFieldRow(doc, LEFT_X, y, USABLE_W, 'Incident number (linked)', incident?.incident_number, ctx);
   return y + 6;
 }

@@ -331,16 +331,23 @@ G2_BAD=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: applic
   "$BASE/api/reports/safework-nsw/$B1_NSW_ID/site-preservation")
 run "G2: invalid site preservation enum → 400"  "400" "$G2_BAD"
 
-# PCBU with VALID ABN
+# PCBU with VALID ABN + WI-06 carry-forward extended fields (trading
+# name + address + worker_count) per migration 033.
 PCBU_OK=$(curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $SYDNEY" \
-  -d '{"name":"Sydney Test PCBU","abn":"51 824 753 556","anzsic_code":"2412"}' \
+  -d '{"name":"Sydney Test PCBU","abn":"51 824 753 556","anzsic_code":"2412","trading_name":"Sydney Smelters","address":"1 Industrial Way, Sydney NSW 2000","worker_count":47}' \
   "$BASE/api/reports/safework-nsw/$B1_NSW_ID/pcbu")
 G3_ABN=$(echo "$PCBU_OK" | python3 -c "import sys,json; print(json.load(sys.stdin).get('pcbu_abn',''))")
 G3_NAME=$(echo "$PCBU_OK" | python3 -c "import sys,json; print(json.load(sys.stdin).get('pcbu_name',''))")
 G3_ANZ=$(echo "$PCBU_OK" | python3 -c "import sys,json; print(json.load(sys.stdin).get('pcbu_anzsic_code',''))")
-run "G3: ABN normalised on accept"  "51824753556"          "$G3_ABN"
-run "G3: PCBU name captured"        "Sydney Test PCBU"     "$G3_NAME"
-run "G3: ANZSIC 4-digit captured"   "2412"                 "$G3_ANZ"
+G3_TRADE=$(echo "$PCBU_OK" | python3 -c "import sys,json; print(json.load(sys.stdin).get('pcbu_trading_name',''))")
+G3_ADDR=$(echo "$PCBU_OK" | python3 -c "import sys,json; print(json.load(sys.stdin).get('pcbu_address',''))")
+G3_WC=$(echo "$PCBU_OK" | python3 -c "import sys,json; print(json.load(sys.stdin).get('pcbu_worker_count',''))")
+run "G3: ABN normalised on accept"          "51824753556"                       "$G3_ABN"
+run "G3: PCBU name captured"                "Sydney Test PCBU"                  "$G3_NAME"
+run "G3: ANZSIC 4-digit captured"           "2412"                              "$G3_ANZ"
+run "G3: trading_name captured"             "Sydney Smelters"                   "$G3_TRADE"
+run "G3: address captured"                  "1 Industrial Way, Sydney NSW 2000" "$G3_ADDR"
+run "G3: worker_count captured"             "47"                                "$G3_WC"
 
 # PCBU with INVALID ABN (checksum fail) → 400
 G4_BAD_ABN=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $SYDNEY" \
@@ -351,6 +358,20 @@ run "G4: invalid ABN checksum → 400"  "400" "$G4_BAD_ABN"
 G5_BAD_ANZ=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $SYDNEY" \
   -d '{"anzsic_code":"24"}' "$BASE/api/reports/safework-nsw/$B1_NSW_ID/pcbu")
 run "G5: 2-digit ANZSIC code → 400"  "400" "$G5_BAD_ANZ"
+
+# G6: worker_count must be a non-negative integer
+G6_BAD_WC=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $SYDNEY" \
+  -d '{"worker_count":-3}' "$BASE/api/reports/safework-nsw/$B1_NSW_ID/pcbu")
+run "G6: negative worker_count → 400"  "400" "$G6_BAD_WC"
+
+# G7: ANZSIC lookup endpoint returns seeded=false + empty array until a
+# code list is populated (chunk-11 v1 ships unseeded). Confirms the
+# anzsic_codes table exists from migration 033.
+G7_RESP=$(curl -s -H "Authorization: Bearer $SYDNEY" "$BASE/api/reports/safework-nsw/anzsic-codes")
+G7_SEEDED=$(echo "$G7_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('seeded'))")
+G7_COUNT=$(echo "$G7_RESP" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('codes',[])))")
+run "G7: anzsic-codes endpoint reports seeded=False"  "False"  "$G7_SEEDED"
+run "G7: anzsic-codes table empty until seeded"       "0"      "$G7_COUNT"
 
 # ============================================================
 echo ""

@@ -406,10 +406,14 @@ export function setSitePreservation({ orgId, notificationId, status, notes, insp
 }
 
 /**
- * Capture PCBU identity (name + ABN + ANZSIC). ABN is validated by the
- * route layer (server/services/abn_validator.js).
+ * Capture PCBU identity. v2 (migration 033) carries the full set the
+ * original SafeWork NSW Notify form asks for: registered name, ABN,
+ * ANZSIC code, trading name (often differs from registered name),
+ * primary address, and worker count. ABN is validated by the route
+ * layer (server/services/abn_validator.js). Every field is COALESCE-
+ * merged so partial updates only touch the columns the caller passes.
  */
-export function setPcbu({ orgId, notificationId, name, abn, anzsicCode }) {
+export function setPcbu({ orgId, notificationId, name, abn, anzsicCode, tradingName, address, workerCount }) {
   const row = db.prepare(`
     SELECT * FROM safework_nsw_notifications
     WHERE id = ? AND org_id = ?
@@ -419,8 +423,43 @@ export function setPcbu({ orgId, notificationId, name, abn, anzsicCode }) {
     UPDATE safework_nsw_notifications
        SET pcbu_name = COALESCE(?, pcbu_name),
            pcbu_abn = COALESCE(?, pcbu_abn),
-           pcbu_anzsic_code = COALESCE(?, pcbu_anzsic_code)
+           pcbu_anzsic_code = COALESCE(?, pcbu_anzsic_code),
+           pcbu_trading_name = COALESCE(?, pcbu_trading_name),
+           pcbu_address = COALESCE(?, pcbu_address),
+           pcbu_worker_count = COALESCE(?, pcbu_worker_count)
      WHERE id = ? AND org_id = ?
-  `).run(name || null, abn || null, anzsicCode || null, notificationId, orgId);
+  `).run(
+    name || null,
+    abn || null,
+    anzsicCode || null,
+    tradingName ?? null,
+    address ?? null,
+    Number.isInteger(workerCount) && workerCount >= 0 ? workerCount : null,
+    notificationId, orgId,
+  );
   return getNotificationForIncident(orgId, row.incident_id);
+}
+
+/**
+ * Lookup helper for the ANZSIC code table. Returns an empty array when
+ * the table is not yet seeded; the PCBU route falls through to format
+ * validation in that case.
+ */
+export function listAnzsicCodes({ division, q } = {}) {
+  const where = [];
+  const params = [];
+  if (division) { where.push('division = ?'); params.push(String(division).toUpperCase()); }
+  if (q) { where.push('(code LIKE ? OR label LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
+  const sql = `
+    SELECT code, label, division
+    FROM anzsic_codes
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+    ORDER BY code ASC
+  `;
+  return db.prepare(sql).all(...params);
+}
+
+export function isAnzsicTableSeeded() {
+  const r = db.prepare('SELECT COUNT(*) AS n FROM anzsic_codes').get();
+  return (r?.n || 0) > 0;
 }

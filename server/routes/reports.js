@@ -26,6 +26,8 @@ import {
   logWrittenSubmitted as logNswWrittenSubmitted,
   setSitePreservation as setNswSitePreservation,
   setPcbu as setNswPcbu,
+  listAnzsicCodes,
+  isAnzsicTableSeeded,
 } from '../services/safework_nsw.js';
 import { validateAbn } from '../services/abn_validator.js';
 import {
@@ -913,6 +915,20 @@ function requireNswOrg(req, res) {
   return true;
 }
 
+// GET /reports/safework-nsw/anzsic-codes — lookup endpoint for the FE
+// PCBU modal autocomplete. Returns [] until the anzsic_codes table is
+// seeded; callers fall back to free-text 4-digit entry in that case.
+// Defined BEFORE the /:incidentId wildcard so Express dispatches the
+// specific path first (same idiom as /lookups).
+router.get('/safework-nsw/anzsic-codes', (req, res) => {
+  if (!requireNswOrg(req, res)) return;
+  const { division, q } = req.query;
+  res.json({
+    seeded: isAnzsicTableSeeded(),
+    codes: listAnzsicCodes({ division, q }),
+  });
+});
+
 // GET /reports/safework-nsw/lookups — both enum tables for the
 // wizard / FE pickers. Returns verbatim Act labels + section refs.
 router.get('/safework-nsw/lookups', (req, res) => {
@@ -1173,7 +1189,7 @@ router.post('/safework-nsw/:notificationId/pcbu', (req, res) => {
     .get(id, req.user.org_id);
   if (!existing) return res.status(404).json({ error: 'SafeWork NSW notification not found' });
 
-  const { name, abn, anzsic_code } = req.body || {};
+  const { name, abn, anzsic_code, trading_name, address, worker_count } = req.body || {};
   if (abn) {
     const v = validateAbn(abn);
     if (!v.ok) {
@@ -1184,13 +1200,37 @@ router.post('/safework-nsw/:notificationId/pcbu', (req, res) => {
     if (!/^\d{4}$/.test(String(anzsic_code))) {
       return res.status(400).json({ error: 'ANZSIC code must be 4 digits.' });
     }
+    // If the anzsic_codes lookup is seeded, gate on a known code. When
+    // unseeded (default), accept any 4-digit string — chunk-11 behaviour.
+    if (isAnzsicTableSeeded()) {
+      const hit = listAnzsicCodes({ q: String(anzsic_code) }).find(r => r.code === String(anzsic_code));
+      if (!hit) {
+        return res.status(400).json({ error: `ANZSIC code ${anzsic_code} not found in the seeded ABS 1292.0 list.` });
+      }
+    }
+  }
+  // WI-06 carry-forward: optional address / trading_name / worker_count.
+  // worker_count must be a non-negative integer when provided; bad
+  // input gets rejected before the DB-level CHECK fires.
+  let workerCountInt;
+  if (worker_count !== undefined && worker_count !== null && worker_count !== '') {
+    workerCountInt = Number(worker_count);
+    if (!Number.isInteger(workerCountInt) || workerCountInt < 0) {
+      return res.status(400).json({ error: 'worker_count must be a non-negative integer.' });
+    }
   }
   const updated = setNswPcbu({
     orgId: req.user.org_id, notificationId: id,
-    name, abn: abn ? validateAbn(abn).normalized : null, anzsicCode: anzsic_code,
+    name,
+    abn: abn ? validateAbn(abn).normalized : null,
+    anzsicCode: anzsic_code,
+    tradingName: trading_name,
+    address,
+    workerCount: workerCountInt,
   });
   res.json(updated);
 });
+
 
 router.get('/riddor', (req, res) => {
   const { site_id, year } = req.query;
