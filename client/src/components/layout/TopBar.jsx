@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { getNotifications, markAllRead, markRead } from '../../api/notifications';
 import { globalSearch } from '../../api/search';
 import StopWorkModal from '../modals/StopWorkModal';
+import SiteSelector from './SiteSelector';
 
 const PAGE_TIPS = {
   '/': [
@@ -367,6 +368,7 @@ export default function TopBar() {
             </>
           )}
         </div>
+        <SiteSelector />
         <div className="module-tag"><span className="pulse" />EHS Module</div>
         <div className="grow" />
         <button className="btn btn-danger btn-sm topbar-stopwork" onClick={() => setStopWorkOpen(true)} title="Submit a stop-work — imminent danger">

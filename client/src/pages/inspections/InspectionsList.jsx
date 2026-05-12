@@ -13,7 +13,7 @@ const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 export default function InspectionsList() {
   const navigate = useNavigate();
-  const { refreshKey } = useApp();
+  const { refreshKey, activeSiteId } = useApp();
   const { user } = useAuth();
   const canCreate = ELEVATED.has(user?.role);
 
@@ -65,6 +65,7 @@ export default function InspectionsList() {
         title: newTitle.trim(),
         location: newLocation.trim() || null,
         conducted_on: new Date().toISOString(),
+        site_id: activeSiteId || null,
       });
       setShowStart(false);
       setSelectedTemplate('');

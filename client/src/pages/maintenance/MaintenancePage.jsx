@@ -13,6 +13,7 @@ import ComboBox from '../../components/shared/ComboBox';
 import { listSchedules, getSchedule, deleteSchedule } from '../../api/maintenance';
 import { getSites } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
 import { formatDateShort, dueLabel } from '../../utils/time';
 import ScheduleModal from '../../components/maintenance/ScheduleModal';
 import CompleteModal from '../../components/maintenance/CompleteModal';
@@ -66,6 +67,7 @@ const TYPE_FILTERS = [
 export default function MaintenancePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refreshKey, activeSiteId } = useApp();
   const canEdit = ELEVATED.has(user?.role);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -112,7 +114,7 @@ export default function MaintenancePage() {
       .then(d => setSchedules(d.schedules || []))
       .catch(() => setSchedules([]))
       .finally(() => setLoading(false));
-  }, [tab, siteFilter, typeFilter]);
+  }, [tab, siteFilter, typeFilter, refreshKey]);
 
   useEffect(load, [load]);
 
@@ -142,7 +144,7 @@ export default function MaintenancePage() {
         due30: (ds.schedules || []).length,
       });
     });
-  }, [siteFilter]);
+  }, [siteFilter, refreshKey]);
   useEffect(refreshCounts, [refreshCounts]);
 
   // Tab counts as raw numbers for the badge.
@@ -191,7 +193,7 @@ export default function MaintenancePage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {sites.length > 1 && (
+          {sites.length > 1 && !activeSiteId && (
             <div style={{ minWidth: 180 }}>
               <ComboBox
                 className="cb-sm"

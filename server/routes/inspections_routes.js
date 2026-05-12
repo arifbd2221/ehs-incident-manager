@@ -62,12 +62,16 @@ function nextInspectionNumber() {
 // GET / — list inspections
 // ---------------------------------------------------------------------------
 router.get('/', (req, res) => {
-  const { status, search, template_id } = req.query;
+  const { status, search, template_id, site_id } = req.query;
   const orgId = req.user.org_id;
 
   const where = ['i.org_id = ?'];
   const params = [orgId];
 
+  if (site_id) {
+    where.push('i.site_id = ?');
+    params.push(Number(site_id));
+  }
   if (status) {
     where.push('i.status = ?');
     params.push(status);
@@ -89,11 +93,13 @@ router.get('/', (req, res) => {
 
   const inspections = db.prepare(`
     SELECT i.*, t.name as template_name, u.name as started_by_name,
-           tv.version_number as template_version_number
+           tv.version_number as template_version_number,
+           s.name as site_name
     FROM inspections i
     LEFT JOIN templates t ON t.id = i.template_id
     LEFT JOIN users u ON u.id = i.started_by
     LEFT JOIN template_versions tv ON tv.id = i.template_version_id
+    LEFT JOIN sites s ON s.id = i.site_id
     WHERE ${whereClause}
     ORDER BY i.created_at DESC
   `).all(...params);
@@ -106,6 +112,10 @@ router.get('/', (req, res) => {
 // ---------------------------------------------------------------------------
 router.get('/summary', (req, res) => {
   const orgId = req.user.org_id;
+  const siteId = req.query.site_id ? Number(req.query.site_id) : null;
+
+  const sc = siteId ? ' AND site_id = ?' : '';
+  const sp = siteId ? [siteId] : [];
 
   const row = db.prepare(`
     SELECT
@@ -114,8 +124,8 @@ router.get('/summary', (req, res) => {
       SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
       SUM(CASE WHEN status = 'abandoned' THEN 1 ELSE 0 END) as abandoned
     FROM inspections
-    WHERE org_id = ?
-  `).get(orgId);
+    WHERE org_id = ?${sc}
+  `).get(orgId, ...sp);
 
   res.json({
     in_progress: row.in_progress || 0,
@@ -133,7 +143,7 @@ router.post('/', (req, res) => {
     return res.status(403).json({ error: 'Insufficient permissions to create inspections.' });
   }
 
-  const { template_id, title, conducted_on, location } = req.body;
+  const { template_id, title, conducted_on, location, site_id } = req.body;
   if (!template_id) {
     return res.status(400).json({ error: 'template_id is required' });
   }
@@ -161,8 +171,8 @@ router.post('/', (req, res) => {
 
   const create = db.transaction(() => {
     const result = db.prepare(`
-      INSERT INTO inspections (org_id, template_id, template_version_id, inspection_number, title, status, conducted_on, location, started_by)
-      VALUES (?, ?, ?, ?, ?, 'in_progress', ?, ?, ?)
+      INSERT INTO inspections (org_id, template_id, template_version_id, inspection_number, title, status, conducted_on, location, started_by, site_id)
+      VALUES (?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?)
     `).run(
       req.user.org_id,
       template.id,
@@ -172,6 +182,7 @@ router.post('/', (req, res) => {
       conducted_on || null,
       location || null,
       req.user.id,
+      site_id || null,
     );
 
     const inspectionId = result.lastInsertRowid;

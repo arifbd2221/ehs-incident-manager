@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
 import { listAssets, createAsset, updateAsset, deleteAsset, importAssets, assetImportTemplateUrl } from '../../api/assets';
 import { listSchedules } from '../../api/maintenance';
 import ImportModal from '../../components/shared/ImportModal';
@@ -35,6 +36,7 @@ const MODAL_SECTIONS = [
 export default function AssetsList() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refreshKey, activeSiteId } = useApp();
   const canEdit = ELEVATED.has(user?.role);
 
   const [assets, setAssets] = useState([]);
@@ -91,7 +93,7 @@ export default function AssetsList() {
     listSites().then(setSites).catch(() => setSites([]));
     refreshCategories();
   }, []);
-  useEffect(refreshAssets, [activeTab, siteFilter, catFilter]);
+  useEffect(refreshAssets, [activeTab, siteFilter, catFilter, refreshKey]);
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -102,7 +104,7 @@ export default function AssetsList() {
     return () => document.removeEventListener('mousedown', handler);
   }, [filterOpen]);
 
-  const activeFilterCount = (siteFilter ? 1 : 0) + (catFilter ? 1 : 0);
+  const activeFilterCount = (!activeSiteId && siteFilter ? 1 : 0) + (catFilter ? 1 : 0);
   const activeSiteName = sites.find(s => String(s.id) === String(siteFilter))?.name;
   const activeCatObj = categories.find(c => String(c.id) === String(catFilter));
 
@@ -384,28 +386,32 @@ export default function AssetsList() {
           </button>
           {filterOpen && (
             <div className="af-dropdown">
-              <div className="af-section">
-                <div className="af-section-label">Site</div>
-                <div className="af-option-list">
-                  <button
-                    className={`af-option ${!siteFilter ? 'active' : ''}`}
-                    onClick={() => setSiteFilter('')}
-                  >
-                    All sites
-                  </button>
-                  {sites.map(s => (
-                    <button
-                      key={s.id}
-                      className={`af-option ${String(siteFilter) === String(s.id) ? 'active' : ''}`}
-                      onClick={() => { setSiteFilter(String(s.id)); }}
-                    >
-                      <Icon name="factory" size={12} />
-                      {s.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="af-divider" />
+              {!activeSiteId && (
+                <>
+                  <div className="af-section">
+                    <div className="af-section-label">Site</div>
+                    <div className="af-option-list">
+                      <button
+                        className={`af-option ${!siteFilter ? 'active' : ''}`}
+                        onClick={() => setSiteFilter('')}
+                      >
+                        All sites
+                      </button>
+                      {sites.map(s => (
+                        <button
+                          key={s.id}
+                          className={`af-option ${String(siteFilter) === String(s.id) ? 'active' : ''}`}
+                          onClick={() => { setSiteFilter(String(s.id)); }}
+                        >
+                          <Icon name="factory" size={12} />
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="af-divider" />
+                </>
+              )}
               <div className="af-section">
                 <div className="af-section-label">Type</div>
                 <div className="af-option-list">

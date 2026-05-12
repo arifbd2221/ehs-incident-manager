@@ -602,39 +602,13 @@ export default function IncidentDetail() {
       <div className="idet-hero" style={{ '--idet-color': heroColor }}>
         <div className="idet-hero-strip" />
         <div className="idet-hero-body">
-          <div className="idet-hero-left">
+          <div className="idet-hero-top">
             <div className="idet-meta-row">
               <span className="idet-number">{r.incident_number}</span>
               <span className="idet-meta-sep">·</span>
               <span className="idet-date">Reported {formatDate(r.created_at)}</span>
             </div>
-            <h1 className="idet-title">{r.title}</h1>
-            <div className="idet-badges">
-              <TypePill tid={r.type}/>
-              <SevBadge s={r.severity}/>
-              <TrackBadge t={r.track}/>
-              <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
-                <span className="st-dot"/>{r.status}
-              </span>
-              {showOsha && r.osha_recordable === 1 && <span className="inc-card-status st-triage"><span className="st-dot"/>OSHA</span>}
-              {showRiddor && r.riddor_reportable === 1 && (
-                <span
-                  className="inc-card-status"
-                  style={{ background: '#fef2f2', color: '#dc2626' }}
-                  title={r.riddor_category ? `RIDDOR ${riddorCategoryReg(r.riddor_category)} · ${riddorCategoryLabel(r.riddor_category)}` : 'RIDDOR reportable'}
-                >
-                  <span className="st-dot" style={{ background: '#dc2626' }}/>
-                  RIDDOR{r.riddor_category ? ` · ${riddorCategoryLabel(r.riddor_category)}` : ''}
-                </span>
-              )}
-              {/* WI-08: one badge per outstanding regulatory deadline. */}
-              {(r.pending_deadlines || []).map((d, i) => (
-                <DeadlineBadge key={`${d.kind}-${i}`} deadline={d}/>
-              ))}
-            </div>
-          </div>
-
-          <div className="idet-header-actions">
+            <div className="idet-header-actions">
             {recommendedAction === 'closed' ? (
               <>
                 <button className="idet-act-btn" disabled>Closed</button>
@@ -670,6 +644,33 @@ export default function IncidentDetail() {
                 )}
               </>
             )}
+          </div>
+          </div>
+
+          <div className="idet-hero-left">
+            <h1 className="idet-title">{r.title}</h1>
+            <div className="idet-badges">
+              <TypePill tid={r.type}/>
+              <SevBadge s={r.severity}/>
+              <TrackBadge t={r.track}/>
+              <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
+                <span className="st-dot"/>{r.status}
+              </span>
+              {showOsha && r.osha_recordable === 1 && <span className="inc-card-status st-triage"><span className="st-dot"/>OSHA</span>}
+              {showRiddor && r.riddor_reportable === 1 && (
+                <span
+                  className="inc-card-status"
+                  style={{ background: '#fef2f2', color: '#dc2626' }}
+                  title={r.riddor_category ? `RIDDOR ${riddorCategoryReg(r.riddor_category)} · ${riddorCategoryLabel(r.riddor_category)}` : 'RIDDOR reportable'}
+                >
+                  <span className="st-dot" style={{ background: '#dc2626' }}/>
+                  RIDDOR{r.riddor_category ? ` · ${riddorCategoryLabel(r.riddor_category)}` : ''}
+                </span>
+              )}
+              {(r.pending_deadlines || []).map((d, i) => (
+                <DeadlineBadge key={`${d.kind}-${i}`} deadline={d}/>
+              ))}
+            </div>
           </div>
         </div>
 

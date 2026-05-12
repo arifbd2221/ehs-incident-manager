@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
 import { listDocuments, getDocument, uploadDocument, updateDocument, deleteDocument, createDocumentVersion, downloadVersion } from '../../api/documents';
 import { timeAgo } from '../../utils/time';
 import { listFolders, createFolder, updateFolder, deleteFolder } from '../../api/folders';
@@ -74,6 +75,7 @@ function fmtDate(d) {
 
 export default function DocumentsList() {
   const { user } = useAuth();
+  const { refreshKey } = useApp();
   const canEdit = ELEVATED.has(user?.role);
 
   const [docs, setDocs] = useState([]);
@@ -168,7 +170,7 @@ export default function DocumentsList() {
     refreshFolders();
   };
 
-  useEffect(refresh, [activeTab, typeFilter, currentFolderId, siteFilter, searchingGlobally]);
+  useEffect(refresh, [activeTab, typeFilter, currentFolderId, siteFilter, searchingGlobally, refreshKey]);
 
   // Deep-link: ?folder=N from a Referenced-by card row navigates straight into
   // the folder containing that document. Waits for `folders` to populate, then

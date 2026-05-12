@@ -125,8 +125,19 @@ function createCapaRow({ orgId, sourceType, investigationId, incidentId, mainten
 export { createCapaRow };
 
 router.get('/', (req, res) => {
-  const { status, owner_id, overdue, search, page = 1, limit = 50 } = req.query;
+  const { status, owner_id, overdue, search, site_id, page = 1, limit = 50 } = req.query;
   const orgId = req.user.org_id;
+  const siteId = site_id ? Number(site_id) : null;
+
+  const siteJoin = siteId
+    ? `LEFT JOIN incidents i_src ON i_src.id = c.incident_id
+       LEFT JOIN investigations inv_site ON inv_site.id = c.investigation_id
+       LEFT JOIN incidents i_inv ON i_inv.id = inv_site.incident_id`
+    : '';
+  const siteWhere = siteId
+    ? 'AND COALESCE(i_src.site_id, i_inv.site_id) = ?'
+    : '';
+  const siteParams = siteId ? [siteId] : [];
 
   let where = ['c.org_id = ?'];
   let params = [orgId];
@@ -142,7 +153,9 @@ router.get('/', (req, res) => {
   const whereClause = where.join(' AND ');
   const offset = (Number(page) - 1) * Number(limit);
 
-  const total = db.prepare(`SELECT COUNT(*) as count FROM capas c WHERE ${whereClause}`).get(...params).count;
+  const total = db.prepare(
+    `SELECT COUNT(*) as count FROM capas c ${siteJoin} WHERE ${whereClause} ${siteWhere}`
+  ).get(...params, ...siteParams).count;
 
   const capas = db.prepare(`
     SELECT c.*, inv.investigation_number, COALESCE(inv.incident_id, c.incident_id) as incident_id,
@@ -154,21 +167,32 @@ router.get('/', (req, res) => {
     LEFT JOIN incidents src_inc ON src_inc.id = c.incident_id
     LEFT JOIN users o ON o.id = c.owner_id
     LEFT JOIN users v ON v.id = c.verifier_id
-    WHERE ${whereClause}
+    ${siteId ? `LEFT JOIN incidents i_src2 ON i_src2.id = c.incident_id
+               LEFT JOIN incidents i_inv2 ON i_inv2.id = inv.incident_id` : ''}
+    WHERE ${whereClause} ${siteId ? 'AND COALESCE(i_src2.site_id, i_inv2.site_id) = ?' : ''}
     ORDER BY c.created_at DESC
     LIMIT ? OFFSET ?
-  `).all(...params, Number(limit), offset);
+  `).all(...params, ...siteParams, Number(limit), offset);
 
   for (const c of capas) {
     c.overdue = c.status !== 'closed' && c.due_date && new Date(c.due_date) < new Date();
   }
 
+  const statsBase = siteId
+    ? `FROM capas c2
+       LEFT JOIN incidents i_s ON i_s.id = c2.incident_id
+       LEFT JOIN investigations inv_s ON inv_s.id = c2.investigation_id
+       LEFT JOIN incidents i_vs ON i_vs.id = inv_s.incident_id
+       WHERE c2.org_id = ? AND COALESCE(i_s.site_id, i_vs.site_id) = ?`
+    : `FROM capas c2 WHERE c2.org_id = ?`;
+  const sp = siteId ? [orgId, siteId] : [orgId];
+
   const stats = {
-    total: db.prepare('SELECT COUNT(*) as c FROM capas WHERE org_id = ? AND status != ?').get(orgId, 'closed').c,
-    overdue: db.prepare("SELECT COUNT(*) as c FROM capas WHERE org_id = ? AND due_date < datetime('now') AND status NOT IN ('closed')").get(orgId).c,
-    corrective: db.prepare("SELECT COUNT(*) as c FROM capas WHERE org_id = ? AND type = 'corrective' AND status != 'closed'").get(orgId).c,
-    preventive: db.prepare("SELECT COUNT(*) as c FROM capas WHERE org_id = ? AND type = 'preventive' AND status != 'closed'").get(orgId).c,
-    pendingVerification: db.prepare("SELECT COUNT(*) as c FROM capas WHERE org_id = ? AND status = 'verify'").get(orgId).c,
+    total: db.prepare(`SELECT COUNT(*) as c ${statsBase} AND c2.status != 'closed'`).get(...sp).c,
+    overdue: db.prepare(`SELECT COUNT(*) as c ${statsBase} AND c2.due_date < datetime('now') AND c2.status NOT IN ('closed')`).get(...sp).c,
+    corrective: db.prepare(`SELECT COUNT(*) as c ${statsBase} AND c2.type = 'corrective' AND c2.status != 'closed'`).get(...sp).c,
+    preventive: db.prepare(`SELECT COUNT(*) as c ${statsBase} AND c2.type = 'preventive' AND c2.status != 'closed'`).get(...sp).c,
+    pendingVerification: db.prepare(`SELECT COUNT(*) as c ${statsBase} AND c2.status = 'verify'`).get(...sp).c,
   };
 
   res.json({ capas, total, stats, page: Number(page), limit: Number(limit) });
