@@ -75,7 +75,21 @@ function statusFromDeadline(deadlineAt, now = new Date()) {
   return 'upcoming';
 }
 
-export function computePendingDeadlines(incident, riddorReport) {
+// 1904.39 category → reg paragraph (for tooltip / chain-of-custody narrative).
+const OSHA_SEVERE_REG_REF = {
+  fatality:         '1904.39(a)(1)',  // 8 hours
+  hospitalization:  '1904.39(a)(2)',  // 24 hours
+  amputation:       '1904.39(a)(2)',
+  loss_of_eye:      '1904.39(a)(2)',
+};
+const OSHA_SEVERE_LABEL = {
+  fatality:         'OSHA 1904.39 — phone fatality',
+  hospitalization:  'OSHA 1904.39 — phone hospitalization',
+  amputation:       'OSHA 1904.39 — phone amputation',
+  loss_of_eye:      'OSHA 1904.39 — phone loss of eye',
+};
+
+export function computePendingDeadlines(incident, riddorReport, oshaSevereRows = []) {
   if (!incident) return [];
   const out = [];
 
@@ -113,10 +127,25 @@ export function computePendingDeadlines(incident, riddorReport) {
     }
   }
 
+  // OSHA 1904.39 severe-injury notifications (WI-07).
+  // Each row carries one category + its deadline (8h fatality / 24h others).
+  // Submitted state = phone_notified_at is set.
+  for (const sev of oshaSevereRows) {
+    out.push({
+      kind: `osha_severe_${sev.category}`,
+      jurisdiction: 'US-OSHA',
+      label: OSHA_SEVERE_LABEL[sev.category] || `OSHA 1904.39 — ${sev.category}`,
+      reg_ref: OSHA_SEVERE_REG_REF[sev.category] || '1904.39',
+      deadline_at: sev.deadline_at,
+      submitted_at: sev.phone_notified_at || null,
+      status: sev.phone_notified_at
+        ? 'submitted'
+        : statusFromDeadline(sev.deadline_at),
+    });
+  }
+
   // TODO: WI-06 SafeWork NSW — safework_nsw_notifications.written_deadline
   //   + s.38(2) phone-notification "without delay" semantics.
-  // TODO: WI-07 OSHA 1904.39 — osha_severe_notifications.deadline_at
-  //   (8h for fatality, 24h for hospitalization/amputation/loss of eye).
 
   return out;
 }
@@ -165,7 +194,14 @@ export function getPendingDeadlinesForIncident(orgId, incidentId) {
     LIMIT 1
   `).get(incidentId);
 
-  return computePendingDeadlines(incident, riddorReport);
+  // WI-07: one row per (incident_id, category) reportable event.
+  const oshaSevereRows = db.prepare(`
+    SELECT * FROM osha_severe_notifications
+    WHERE org_id = ? AND incident_id = ?
+    ORDER BY id ASC
+  `).all(orgId, incidentId);
+
+  return computePendingDeadlines(incident, riddorReport, oshaSevereRows);
 }
 
 // Bulk helper for the incidents list handler. Given an array of
@@ -186,5 +222,24 @@ export function loadRiddorReportsForIncidents(incidentIds) {
   // If multiple rows per incident_id, the ORDER BY id ASC + later
   // `set()` calls means the last (highest id) wins.
   for (const r of rows) map.set(r.incident_id, r);
+  return map;
+}
+
+// WI-07 bulk helper — load all osha_severe_notifications rows for a set
+// of incidents in one query. Returns Map<incident_id, row[]> (multiple
+// rows per incident possible — one per reportable category).
+export function loadOshaSevereForIncidents(orgId, incidentIds) {
+  const map = new Map();
+  if (!Array.isArray(incidentIds) || incidentIds.length === 0) return map;
+  const placeholders = incidentIds.map(() => '?').join(',');
+  const rows = db.prepare(`
+    SELECT * FROM osha_severe_notifications
+    WHERE org_id = ? AND incident_id IN (${placeholders})
+    ORDER BY id ASC
+  `).all(orgId, ...incidentIds);
+  for (const r of rows) {
+    if (!map.has(r.incident_id)) map.set(r.incident_id, []);
+    map.get(r.incident_id).push(r);
+  }
   return map;
 }

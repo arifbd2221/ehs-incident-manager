@@ -150,6 +150,8 @@ export const AUDIT_ACTIONS_CATALOG = [
   // inspector narrative is "this incident produced this regulatory record".
   { entity_type: 'incident', action: 'osha_300_auto_entry' },
   { entity_type: 'incident', action: 'osha_301_pdf_downloaded' },
+  { entity_type: 'incident', action: 'osha_severe_opened' },
+  { entity_type: 'incident', action: 'osha_severe_phone_notified' },
   { entity_type: 'incident', action: 'riddor_opened' },
 
   // Multi-person incident management (WI-A). All entries hang off the

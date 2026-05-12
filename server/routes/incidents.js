@@ -20,8 +20,10 @@ import {
   computePendingDeadlines,
   getPendingDeadlinesForIncident,
   loadRiddorReportsForIncidents,
+  loadOshaSevereForIncidents,
   mostUrgent,
 } from '../services/deadlines.js';
+import { syncSevereNotifications } from '../services/osha_severe.js';
 import {
   upsertPrimaryFromLegacy,
   bulkInsertFromArray,
@@ -272,10 +274,17 @@ router.get('/', (req, res) => {
   // WI-08: attach pending_deadlines + most_urgent_deadline per row so the
   // IncidentsList can render a single inline badge without a follow-up
   // fetch. One bulk SELECT loads RIDDOR rows for the listed incidents;
+  // a second loads WI-07 OSHA 1904.39 severe-notification rows.
   // computePendingDeadlines merges them in row-by-row.
-  const riddorMap = loadRiddorReportsForIncidents(incidents.map(i => i.id));
+  const incidentIds = incidents.map(i => i.id);
+  const riddorMap = loadRiddorReportsForIncidents(incidentIds);
+  const oshaSevereMap = loadOshaSevereForIncidents(req.user.org_id, incidentIds);
   for (const inc of incidents) {
-    const deadlines = computePendingDeadlines(inc, riddorMap.get(inc.id));
+    const deadlines = computePendingDeadlines(
+      inc,
+      riddorMap.get(inc.id),
+      oshaSevereMap.get(inc.id) || [],
+    );
     inc.pending_deadlines = deadlines;
     inc.most_urgent_deadline = mostUrgent(deadlines);
   }
@@ -591,6 +600,62 @@ router.post('/', async (req, res, next) => {
       ...auditCtx(req),
     });
   }
+
+  // --- WI-07: OSHA 1904.39 severe-injury notifications ---
+  // Auto-create osha_severe_notifications rows for any of the four
+  // reportable categories (fatality / hospitalization / amputation /
+  // loss_of_eye). Detection signals:
+  //   - osha_date_of_death set → fatality
+  //   - hospitalized = 1 → hospitalization
+  //   - type_data.osha_severe.{amputation, loss_of_eye} === true → those
+  // See services/osha_severe.js for the 1904.39(b) carve-outs.
+  //
+  // 1904.39 is a US OSH Act obligation. Gate on site.country = 'US' so a
+  // UK / AU incident doesn't get a phantom OSHA deadline attached. (RIDDOR
+  // and SafeWork NSW have their own paths.) The site row was already loaded
+  // above into `site` (for the framework gate).
+  if (site?.country === 'US') {
+  try {
+    const justCreatedIncident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(incidentId);
+    const aps = db.prepare(`
+      SELECT * FROM affected_persons
+      WHERE org_id = ? AND incident_id = ? AND deleted_at IS NULL
+      ORDER BY is_primary DESC, id ASC
+    `).all(orgId, incidentId);
+    const primaryAp = aps.find(p => p.is_primary === 1) || aps[0] || null;
+    const primaryInj = primaryAp
+      ? db.prepare(`SELECT * FROM injuries WHERE org_id = ? AND affected_person_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1`)
+          .get(orgId, primaryAp.id)
+      : null;
+    const rowsBefore = db.prepare('SELECT id FROM osha_severe_notifications WHERE incident_id = ?')
+      .all(incidentId).map(r => r.id);
+    const allRows = syncSevereNotifications({
+      orgId, incidentId, incident: justCreatedIncident,
+      primaryAp, primaryInjury: primaryInj,
+      userId: anonymous ? null : req.user.id,
+    });
+    for (const row of allRows) {
+      if (rowsBefore.includes(row.id)) continue;
+      writeActivity({
+        org_id: orgId,
+        entity_type: 'incident',
+        entity_id: incidentId,
+        action: 'osha_severe_opened',
+        description: `opened OSHA 1904.39 ${row.category} notification — deadline ${row.deadline_at}`,
+        user_id: anonymous ? null : req.user.id,
+        metadata: {
+          severe_notification_id: row.id,
+          category: row.category,
+          deadline_at: row.deadline_at,
+        },
+        ...auditCtx(req),
+      });
+    }
+  } catch (severeErr) {
+    // Non-fatal — the incident is created, just flag the classification miss.
+    console.error('[WI-07] syncSevereNotifications failed for incident', incidentId, severeErr);
+  }
+  } // close `if (site?.country === 'US')`
 
   if (riddor.reportable) {
     const riddorNum = nextRiddorNumber();
@@ -1223,6 +1288,7 @@ router.patch('/:id', (req, res) => {
   const updatable = ['title', 'description', 'severity', 'track', 'status', 'assigned_to', 'triage_due', 'triage_notes',
     'osha_recordable', 'osha_recordability_type', 'osha_days_away', 'osha_days_restricted',
     'osha_privacy_case', 'osha_work_related', 'er_treated', 'hospitalized', 'hospitalization_date',
+    'osha_date_of_death',
     'riddor_reportable', 'immediate_actions_taken', 'area', 'specific_location', 'department'];
 
   const requestedRestricted = updatable.filter(k => RESTRICTED_FIELDS.has(k) && req.body[k] !== undefined);
@@ -1309,6 +1375,63 @@ router.patch('/:id', (req, res) => {
     req,
     userId: req.user.id,
   });
+
+  // WI-07: re-run severe-injury classification when a triggering field
+  // changed (osha_date_of_death / hospitalized / type_data.osha_severe.*).
+  // Per 1904.39(b)(7) the 8-h/24-h clock starts when the employer learns,
+  // and on this code path we treat the PATCH as the learning event. The
+  // hook is idempotent (UNIQUE(incident_id, category)) so re-running on
+  // unrelated PATCHes is harmless. Gated on US sites per the POST hook.
+  const wi07Triggered = (
+    req.body.osha_date_of_death !== undefined ||
+    req.body.hospitalized !== undefined ||
+    (req.body.type_data && req.body.type_data.osha_severe !== undefined)
+  );
+  if (wi07Triggered) {
+    const patchedIncident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(req.params.id);
+    const patchedSite = db.prepare('SELECT country FROM sites WHERE id = ?').get(patchedIncident.site_id);
+    if (patchedSite?.country === 'US') {
+      try {
+        const aps = db.prepare(`
+          SELECT * FROM affected_persons
+          WHERE org_id = ? AND incident_id = ? AND deleted_at IS NULL
+          ORDER BY is_primary DESC, id ASC
+        `).all(incident.org_id, incident.id);
+        const primaryAp = aps.find(p => p.is_primary === 1) || aps[0] || null;
+        const primaryInj = primaryAp
+          ? db.prepare(`SELECT * FROM injuries WHERE org_id = ? AND affected_person_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1`)
+              .get(incident.org_id, primaryAp.id)
+          : null;
+        const rowsBefore = db.prepare('SELECT id FROM osha_severe_notifications WHERE incident_id = ?')
+          .all(incident.id).map(r => r.id);
+        const allRows = syncSevereNotifications({
+          orgId: incident.org_id, incidentId: incident.id,
+          incident: patchedIncident, primaryAp, primaryInjury: primaryInj,
+          userId: req.user.id,
+        });
+        for (const row of allRows) {
+          if (rowsBefore.includes(row.id)) continue;
+          writeActivity({
+            org_id: incident.org_id,
+            entity_type: 'incident',
+            entity_id: incident.id,
+            action: 'osha_severe_opened',
+            description: `opened OSHA 1904.39 ${row.category} notification (on PATCH) — deadline ${row.deadline_at}`,
+            user_id: req.user.id,
+            metadata: {
+              severe_notification_id: row.id,
+              category: row.category,
+              deadline_at: row.deadline_at,
+              triggered_by: 'patch',
+            },
+            ...auditCtx(req),
+          });
+        }
+      } catch (severeErr) {
+        console.error('[WI-07] syncSevereNotifications on PATCH failed for incident', incident.id, severeErr);
+      }
+    }
+  }
 
   if (severityChanged) {
     const newSeverity = Number(req.body.severity);

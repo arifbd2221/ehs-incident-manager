@@ -7,6 +7,11 @@ import { verifyChain } from '../db/activity_log_chain.js';
 import { renderOsha300Pdf } from '../services/pdf/osha_300.js';
 import { renderOsha301Pdf } from '../services/pdf/osha_301.js';
 import { listAffectedPersons } from '../services/affected_persons.js';
+import {
+  listSevereNotificationsForIncident,
+  getSevereNotification,
+  logPhoneNotification,
+} from '../services/osha_severe.js';
 
 const router = Router();
 
@@ -467,6 +472,73 @@ router.get('/osha-301/:incidentId', (req, res) => {
     work_related: incident.osha_work_related || '',
     type_data: td,
   });
+});
+
+// ===================================================================
+// OSHA 1904.39 severe-injury notifications (WI-07)
+//
+// Rows are auto-created on POST /incidents when evaluateSevereInjury()
+// detects one of the four reportable categories — see
+// services/osha_severe.js and the hook in routes/incidents.js.
+// These endpoints expose the per-incident list and the phone-notified
+// write path that discharges the obligation.
+// ===================================================================
+
+// GET /reports/osha-severe/:incidentId — list all severe-notification
+// rows for this incident (zero or more, one per reportable category).
+// Returns 404 if the incident isn't in the caller's org.
+router.get('/osha-severe/:incidentId', (req, res) => {
+  const inc = db.prepare('SELECT id FROM incidents WHERE id = ? AND org_id = ?')
+    .get(Number(req.params.incidentId), req.user.org_id);
+  if (!inc) return res.status(404).json({ error: 'Incident not found' });
+  const rows = listSevereNotificationsForIncident(req.user.org_id, inc.id);
+  res.json({ notifications: rows });
+});
+
+// POST /reports/osha-severe/:notificationId/phone-notified — log the
+// 1904.39(a)(3) phone call discharging the obligation.
+// Body: { area_office, osha_reference, notes }
+// All fields optional. Captures who, when, which office, OSHA's case
+// reference. Idempotent — re-posting a notification that's already
+// submitted returns 200 with the unchanged row.
+router.post('/osha-severe/:notificationId/phone-notified', (req, res) => {
+  if (!isElevated(req.user)) {
+    return res.status(403).json({ error: 'Only elevated roles can log a regulatory phone notification.' });
+  }
+  const id = Number(req.params.notificationId);
+  const existing = getSevereNotification(req.user.org_id, id);
+  if (!existing) return res.status(404).json({ error: 'Severe notification not found' });
+
+  const { area_office, osha_reference, notes } = req.body || {};
+  const wasUnsubmitted = !existing.phone_notified_at;
+  const updated = logPhoneNotification({
+    orgId: req.user.org_id,
+    notificationId: id,
+    userId: req.user.id,
+    areaOffice: area_office,
+    oshaReference: osha_reference,
+    notes,
+  });
+
+  if (wasUnsubmitted) {
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: existing.incident_id,
+      action: 'osha_severe_phone_notified',
+      description: `logged OSHA 1904.39 phone notification (${existing.category}) — deadline ${existing.deadline_at}`,
+      user_id: req.user.id,
+      metadata: {
+        severe_notification_id: id,
+        category: existing.category,
+        area_office: area_office || null,
+        osha_reference: osha_reference || null,
+      },
+      ...auditCtx(req),
+    });
+  }
+
+  res.json(updated);
 });
 
 router.get('/riddor', (req, res) => {

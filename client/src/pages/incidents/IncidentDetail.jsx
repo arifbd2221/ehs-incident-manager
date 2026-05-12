@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness, requestClosure, approveClosure, rejectClosure, reopenIncident, forceCloseIncident, getAffectedPersons, deleteAffectedPerson } from '../../api/incidents';
+import { getOshaSevere, logOshaSeverePhoneNotified } from '../../api/reports';
 import Icon from '../../components/shared/Icon';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
@@ -23,6 +24,14 @@ import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/incidents.css';
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+
+// WI-07: human labels for the 1904.39 reportable categories.
+const SEVERE_LABELS = {
+  fatality:        'Fatality (8h)',
+  hospitalization: 'Hospitalization (24h)',
+  amputation:      'Amputation (24h)',
+  loss_of_eye:     'Loss of eye (24h)',
+};
 
 const tlDotClass = (action) => {
   if (action === 'created') return 'tl-created';
@@ -177,6 +186,10 @@ export default function IncidentDetail() {
   const [postingNote, setPostingNote] = useState(false);
 
   const [downloading301, setDownloading301] = useState(false);
+  // WI-07: OSHA 1904.39 severe-injury notification rows for this incident.
+  const [oshaSevere, setOshaSevere] = useState([]);
+  // null = closed; severeRow = open for that row.
+  const [logSevereTarget, setLogSevereTarget] = useState(null);
 
   const [affectedPersons, setAffectedPersons] = useState([]);
   const [apModalOpen, setApModalOpen] = useState(false);
@@ -192,6 +205,9 @@ export default function IncidentDetail() {
     // parallel; failures are silent so the existing single-person UI keeps
     // working even if the new endpoint is temporarily down.
     getAffectedPersons(id).then(setAffectedPersons).catch(() => setAffectedPersons([]));
+    // WI-07: fetch any auto-created 1904.39 severe notifications for this
+    // incident. Empty array for incidents that don't trigger any category.
+    getOshaSevere(id).then(setOshaSevere).catch(() => setOshaSevere([]));
   };
   useEffect(load, [id]);
 
@@ -846,6 +862,40 @@ export default function IncidentDetail() {
                     </span>
                   </div>
                 )}
+                {/* WI-07: 1904.39 reporting deadlines surface independently of
+                    1904.7 recordability. A hospitalization can be reportable
+                    even before recordability is verified — both duties stand
+                    on their own. */}
+                {showOsha && oshaSevere.filter(s => !s.phone_notified_at).map(s => (
+                  <div className="idet-triage-row" key={`sev-${s.id}`}>
+                    <span className="idet-triage-label">
+                      1904.39 — {SEVERE_LABELS[s.category] || s.category}
+                    </span>
+                    {canVerify ? (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setLogSevereTarget(s)}
+                        title={`Log the phone notification to OSHA (deadline ${new Date(s.deadline_at).toLocaleString()})`}
+                      >
+                        <Icon name="phone" size={13}/>Log phone call
+                      </button>
+                    ) : (
+                      <span className="inc-card-status st-triage" title="Not yet phone-notified">
+                        <span className="st-dot"/>Pending
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {showOsha && oshaSevere.filter(s => !!s.phone_notified_at).map(s => (
+                  <div className="idet-triage-row" key={`sev-done-${s.id}`}>
+                    <span className="idet-triage-label">
+                      1904.39 — {SEVERE_LABELS[s.category] || s.category}
+                    </span>
+                    <span className="inc-card-status st-closed" title={`Phone-notified at ${s.phone_notified_at}${s.osha_area_office ? ' — ' + s.osha_area_office : ''}`}>
+                      <span className="st-dot"/>Notified
+                    </span>
+                  </div>
+                ))}
                 {showOsha && r.osha_recordable === 1 && (
                   <>
                     <div className="idet-triage-row">
@@ -1116,6 +1166,14 @@ export default function IncidentDetail() {
           onApprove={handleApproveClosure} onReject={handleRejectClosure}/>, document.body)}
       {modal === 'reopen' && createPortal(<ReopenModal incident={r} onCancel={() => setModal(null)} onConfirm={handleReopen}/>, document.body)}
       {modal === 'severity' && createPortal(<SeverityOverrideModal incident={r} onCancel={() => setModal(null)} onConfirm={handleSeverityOverride}/>, document.body)}
+      {logSevereTarget && createPortal(
+        <LogOshaSevereModal
+          target={logSevereTarget}
+          onClose={() => setLogSevereTarget(null)}
+          onSaved={() => { setLogSevereTarget(null); load(); }}
+        />,
+        document.body
+      )}
       {witnessModal === 'add' && createPortal(<WitnessModal incident={r} onCancel={() => setWitnessModal(null)} onConfirm={handleAddWitness}/>, document.body)}
       {witnessModal && witnessModal !== 'add' && createPortal(<WitnessModal incident={r} witness={witnessModal} onCancel={() => setWitnessModal(null)} onConfirm={handleUpdateWitness}/>, document.body)}
       <AffectedPersonModal
@@ -1141,6 +1199,87 @@ export default function IncidentDetail() {
         </div>,
         document.body
       )}
+    </div>
+  );
+}
+
+// WI-07: small modal capturing the 1904.39(a)(3) phone call details.
+// Captures the OSHA Area Office name + reference number + free-text notes.
+// All fields optional — the timestamp + caller identity is auto-populated
+// by the server. Idempotent on the server, so a double-submit is safe.
+function LogOshaSevereModal({ target, onClose, onSaved }) {
+  const [areaOffice, setAreaOffice] = useState('');
+  const [oshaReference, setOshaReference] = useState('');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    setSaving(true); setError('');
+    try {
+      await logOshaSeverePhoneNotified(target.id, {
+        area_office: areaOffice.trim() || undefined,
+        osha_reference: oshaReference.trim() || undefined,
+        notes: notes.trim() || undefined,
+      });
+      onSaved();
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to log notification.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-h">
+          <div>
+            <div className="modal-title">Log OSHA 1904.39 phone notification</div>
+            <div className="modal-sub">
+              {SEVERE_LABELS[target.category] || target.category} · deadline {new Date(target.deadline_at).toLocaleString()}
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Icon name="close" size={18}/></button>
+        </div>
+        <div className="modal-body">
+          <div className="field">
+            <label className="label">OSHA Area Office</label>
+            <input
+              className="input"
+              value={areaOffice}
+              onChange={e => setAreaOffice(e.target.value)}
+              placeholder="e.g. Chicago Regional Office"
+            />
+            <span className="helper">Per 1904.39(a)(3)(i) — the Area Office nearest the incident, or the 1-800-321-OSHA toll-free number.</span>
+          </div>
+          <div className="field">
+            <label className="label">OSHA reference / case number</label>
+            <input
+              className="input"
+              value={oshaReference}
+              onChange={e => setOshaReference(e.target.value)}
+              placeholder="OSHA case # if issued"
+            />
+          </div>
+          <div className="field">
+            <label className="label">Notes</label>
+            <textarea
+              className="textarea"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Who you spoke with, what you reported, follow-up agreed."
+            />
+          </div>
+          {error && <div className="helper" style={{ color: 'var(--sds-error)' }}>{error}</div>}
+        </div>
+        <div className="modal-f">
+          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-primary" onClick={submit} disabled={saving}>
+            {saving ? 'Saving…' : 'Mark notified'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -30,9 +30,10 @@ Defined in `plan-2026-05-11.md` Part 3. Each chunk ends with a ✋ owner checkpo
 | 7 | WI-08 Deadline countdown UI | ✅ Done — `449539b` (single BE+FE commit: `server/services/deadlines.js` aggregator + `GET /incidents/:id/deadlines` + list/detail attachment + `DeadlineBadge.jsx` rendered in IncidentDetail header & IncidentsList rows + 19-assertion `wi08-e2e.sh`). |
 | 7a | WI-D Jurisdiction-aware wizard + forms | ✅ Done — `2e708d0` (single FE commit: `jurisdictionForContext()` + `showField()` registry in `client/src/utils/frameworks.js`; wizard threads jurisdiction to InjuryForm + AffectedPersonModal with "Show all" override toggle; 25-test `frameworks.test.js`). |
 | 8 | WI-01 OSHA 300 PDF | ✅ Done — single BE+FE commit `b7e3507`. `server/services/pdf/osha_300.js` renderer + `?format=pdf` branch on `GET /reports/osha-300` + Download-PDF button on `Osha300Report` in `ReportsPage.jsx`. Privacy-case substitution per 29 CFR 1904.29(b)(7); per-establishment requirement per 1904.30(a). `pdfkit` landed on `server/package.json`. |
-| 9 | WI-03 OSHA 301 PDF | ✅ Done — single BE+FE commit. `server/services/pdf/osha_301.js` renderer (Form 301 Rev. 04/2004; fields 1–18 + Completed by) + `?format=pdf` branch on `GET /reports/osha-301/:incidentId` + Download-PDF button in IncidentDetail OSHA-recordable section. Pulls primary `affected_persons` + first `injuries` row (WI-A) with `type_data.injured_person` legacy fallback. Manual word-wrap utility added (bypasses pdfkit's pagination on wrapped text). Audit verb `osha_301_pdf_downloaded` in catalog. |
-| **10** | **WI-07 OSHA 1904.39 severe-injury flow** | **Next.** New `osha_severe_notifications` table + service + countdown plug-in for `deadlines.js`. |
-| 10+ | WI-05, WI-06, WI-02, WI-09 | RIDDOR F2508 → SafeWork NSW → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
+| 9 | WI-03 OSHA 301 PDF | ✅ Done — `2d765af`. `server/services/pdf/osha_301.js` renderer + `?format=pdf` branch + Download-PDF button. Pulls primary `affected_persons` + first `injuries` row (WI-A). Manual word-wrap utility (bypasses pdfkit pagination on wrapped text). |
+| 10 | WI-07 OSHA 1904.39 severe-injury flow | ✅ Done — this turn. Migration 027 (`osha_severe_notifications`) + `server/services/osha_severe.js` (pure `evaluateSevereInjury` + DB writers). POST `/incidents` hook auto-creates rows for fatality (8h, 1904.39(a)(1)) / hospitalization (24h, 1904.39(a)(2)) / amputation / loss_of_eye — gated on `sites.country='US'`. Plug-in to `deadlines.js` aggregator (the WI-08 TODO marker). New routes `GET /reports/osha-severe/:incidentId` + `POST /reports/osha-severe/:notificationId/phone-notified`. FE: per-row "Log phone call" button + capture modal on IncidentDetail OSHA-recordable section. Audit verbs `osha_severe_opened` + `osha_severe_phone_notified`. |
+| **11** | **WI-06 SafeWork NSW** | **Next** (partly unblocked — WHS Act + factsheet PDFs landed). Still needs ANZSIC code list + Notify form for full delivery. |
+| 11+ | WI-05, WI-02, WI-09 | RIDDOR F2508 → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
 
 ---
 
@@ -151,15 +152,26 @@ Largest in-scope item. Fully additive — all new tables, no touches to existing
 
 ---
 
-### WI-07: OSHA 1904.39 severe-injury notification flow (29 CFR 1904.39)
+### WI-07: OSHA 1904.39 severe-injury notification flow (29 CFR 1904.39) — ✅ DONE
 
-Death must be reported within 8 hours; in-patient hospitalization, amputation, or loss of an eye within 24 hours. The schema already enumerates these in `regulatory_certifications.type IN ('osha_fatality_report','osha_24hr_report')` (migration 001 line 145) but there is no routing or capture flow.
+Shipped 2026-05-12 in a single BE+FE commit. Per 1904.39(a)(1) fatalities are reportable within 8 hours; per 1904.39(a)(2) in-patient hospitalization, amputation, or loss of an eye within 24 hours.
 
-- **New migration** — new table only:
-  - `osha_severe_notifications` (id, incident_id, category enum `'fatality'|'hospitalization'|'amputation'|'loss_of_eye'`, deadline_at, phone_notified_at, phone_notified_by, osha_area_office, osha_reference, notes, created_at).
-- **Service** `server/services/osha_severe.js` — given an incident, decide whether s.1904.39 applies (using existing `incidents.osha_date_of_death`, `incidents.hospitalized`, body part flags) and compute the 8h or 24h deadline from `incidents.incident_datetime`.
-- **Routes:** `POST /reports/osha-severe/:incidentId`, `POST /reports/osha-severe/:id/phone-notified`.
-- **UI:** countdown badge in IncidentDetail when applicable; entry point to log the phone notification.
+- **Migration 027** `osha_severe_notifications` — additive. Columns: id, incident_id (FK), org_id (denormalized), category CHECK (`'fatality'|'hospitalization'|'amputation'|'loss_of_eye'`), deadline_at, phone_notified_at, phone_notified_by (FK users), osha_area_office, osha_reference, notes, created_at, created_by. UNIQUE(incident_id, category) so re-triggering the same category is idempotent. Two indexes on (org_id, incident_id) + (org_id, phone_notified_at, deadline_at) for the deadlines aggregator.
+- **Service** `server/services/osha_severe.js` — pure `evaluateSevereInjury(incident, primaryAp, primaryInjury)` returning `{category, deadline_at}[]`. Detection signals:
+  - **fatality**: `incidents.osha_date_of_death` OR `injuries.date_of_death` set, plus the 1904.39(b)(6) 30-day window gate. 8h clock from the death event.
+  - **hospitalization**: `incidents.hospitalized = 1` OR `injuries.hospitalized = 1`. 24h clock from incident_datetime.
+  - **amputation / loss_of_eye**: explicit reporter-set flag at `type_data.osha_severe.{amputation,loss_of_eye}`. Substring matching on `injury_type` is intentionally NOT used — 1904.39(b)(11) excludes avulsions, deglovings, scalpings, severed ears, chipped teeth, so a fuzzy match would over-report.
+  - Plus writers `syncSevereNotifications`, `listSevereNotificationsForIncident`, `getSevereNotification`, `logPhoneNotification`. All org-scoped.
+- **POST `/incidents` hook** — auto-creates osha_severe_notifications rows when the classifier matches. Gated on `sites.country = 'US'` so RIDDOR / SafeWork NSW incidents don't pick up phantom OSHA deadlines. Writes an `osha_severe_opened` activity_log entry per row.
+- **Deadlines plug-in** — `server/services/deadlines.js` `computePendingDeadlines(incident, riddorReport, oshaSevereRows)` now folds OSHA severe rows into the same `pending_deadlines` array (status enum: `without_delay` / `overdue` / `due_today` / `due_soon` / `upcoming` / `submitted`). New `loadOshaSevereForIncidents` bulk helper for the incidents-list handler. Picks up automatically on `GET /incidents`, `GET /incidents/:id`, `GET /incidents/:id/deadlines`.
+- **Routes** — `GET /reports/osha-severe/:incidentId` (list) + `POST /reports/osha-severe/:notificationId/phone-notified` (write). Phone-notified is elevated-only, idempotent, captures `area_office` + `osha_reference` + free-text notes per 1904.39(a)(3)(i)/(ii). Audit verb `osha_severe_phone_notified` on `entity_type='incident'`.
+- **FE** — `client/src/api/reports.js` gains `getOshaSevere` + `logOshaSeverePhoneNotified`. `IncidentDetail.jsx` loads severe rows alongside incident + affected_persons, renders one row per category in the OSHA-recordable section (with category-specific labels like "Fatality (8h)"), shows a "Log phone call" button for elevated users on each unsubmitted row, and renders the `LogOshaSevereModal` capturing area office + reference + notes. The existing `DeadlineBadge` automatically picks up `osha_severe_*` kinds since the BE attaches them to `pending_deadlines`.
+- **PATCH /incidents/:id hook** — `osha_date_of_death`, `hospitalized`, or `type_data.osha_severe.*` change → re-runs `syncSevereNotifications` (idempotent via UNIQUE(incident_id, category)). Fixes the "fatality realized later" / "hospitalized next day" cases that don't surface at POST time. Writes the same `osha_severe_opened` audit verb, with `metadata.triggered_by: 'patch'`. `osha_date_of_death` was also added to the PATCH updatable allowlist.
+- **FE deadline-block placement fix** — initially the WI-07 phone-notif rows were rendered inside `r.osha_recordable === 1`, which hid them when the wizard's recordability auto-detect hadn't flipped the flag yet. 1904.39 (reporting) and 1904.7 (recordability) are independent duties, so the WI-07 rows now render alongside the OSHA recordable row, gated only on `showOsha` and the presence of severe rows. Caught during click-flow testing.
+- **E2E coverage** — `server/scripts/wi07-e2e.sh` (46 assertions, all pass). Covers hospitalization auto-create, amputation/loss-of-eye explicit flags, no-amputation-from-substring (1904.39(b)(11) carve-outs), multi-category via PATCH, idempotent PATCH, US-only gate (UK + AU sites get zero rows), phone-notified write + idempotency + worker 403, cross-tenant 404 on GET + write, list-endpoint integration, activity_log entries for both POST + PATCH paths, WI-C hash chain still verifies.
+- **Carry-forward TODOs:**
+  - 1904.39(b)(7) "employer learns later" clock — currently computes from `incident_datetime` (or `osha_date_of_death` for fatality). Requires reporter signal about when they learned; deferred owner approval.
+  - 1904.39(b)(10) observation-only carve-out — trusted to the reporter's `hospitalized` flag. No DB signal exists to distinguish "care/treatment" vs "observation/diagnostic".
 
 **Complexity:** M. **New tables:** 1.
 

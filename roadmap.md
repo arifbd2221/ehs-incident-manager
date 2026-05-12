@@ -6,17 +6,18 @@ Live status for what's open, what's done, and how to operate on this codebase. D
 
 ## Current state
 
-- **Branch:** `backend` at this turn's WI-03 commit (OSHA 301 PDF renderer + `?format=pdf` route + IncidentDetail Download-PDF button). Preceded by `b7e3507` (WI-01), `753ec42` (OSHA source PDFs), `2e708d0` (WI-D). Working tree clean (only `PRD.md` left untracked — owner reference doc).
+- **Branch:** `backend` at this turn's WI-07 commit (OSHA 1904.39 severe-injury reporting — migration 027 + service + POST/PATCH hooks + deadlines plug-in + FE phone-notif UI + 46-assertion `wi07-e2e.sh`). Preceded by `2d765af` (WI-03 OSHA 301 PDF), `b7e3507` (WI-01 OSHA 300 PDF), `753ec42` (OSHA source PDFs), `2e708d0` (WI-D). Working tree clean (only `PRD.md` + SafeWork NSW source PDFs untracked).
 - **`origin/main`** at `b3dbb08` (last known). Backend is many commits ahead: WI-A + WI-04 + WI-B + WI-08 + WI-D + OSHA sources. Check `gh pr list` for current PR state.
 - **PR #11** ✅ merged 2026-05-11.
 - **Phase 2:** code complete; F6.2 manual walkthrough open.
 - **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OB2, OB3, OP1, OP2, OP3.
 - **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1. (RG1 superseded by PRD-remediation WI-06 SafeWork NSW.)
-- **PRD-remediation done:** Chunk 1 (setup), Chunk 2 (WI-04), Chunk 3 (WI-10), Chunk 4 (WI-C), Chunk 5 (WI-A), Chunk 6 (WI-B), Chunk 7 (WI-08), Chunk 7a (WI-D), Chunk 8 (WI-01 OSHA 300 PDF), **Chunk 9 (WI-03 OSHA 301 PDF)**.
-- **Migrations applied:** 001–026 + letter fixups `014a`, `017a`, `023a`, `023b`, `023c`. Next available: **027**. (024 = WI-C hash chain; 025 = WI-A `affected_persons` + `injuries`; 026 = WI-B `classification_override_requests` + self-approval triggers. WI-08 + WI-D added no schema.)
+- **PRD-remediation done:** Chunks 1–7a + 8 (WI-01) + 9 (WI-03) + **10 (WI-07 OSHA 1904.39)**. Next: WI-06 SafeWork NSW (partly unblocked).
+- **Migrations applied:** 001–027 + letter fixups `014a`, `017a`, `023a/b/c`. Next available: **028**. 027 = WI-07 `osha_severe_notifications`.
+- (Migration row consolidated above.)
 - **Demo accounts** (all `password123`): `priya@sdsmanager.com` (admin, SDS Manager Inc., org=1), `elena@sdsmanager.com` (ehs_manager, org=1, multi-framework — owns Sheffield UK site), `marcus`, `james`, `mehta`, `wendy`; plus empty test orgs `acme@sdsmanager.com` (admin, Acme Manufacturing org=2, OSHA US — used for cross-tenant tests), `riddor-test@example.com` (RIDDOR UK), `sydney-test@example.com` (SafeWork NSW AU).
 - **Dev servers:** `cd server && node --watch index.js` (BE :3001) + `cd client && npm run dev` (FE :5173).
-- **Test suites:** `server/scripts/wia-regression.sh` (78, 77 pass + 1 known F1 script bug), `server/scripts/wi04-e2e.sh` (49, all pass), `server/scripts/wib-e2e.sh` (42, all pass), `server/scripts/wi08-e2e.sh` (19, all pass), `server/scripts/riddor-reg5-reg11.test.js` (23 `node:test`, all pass), `client/src/utils/frameworks.test.js` (25 `node:test`, all pass).
+- **Test suites:** `server/scripts/wia-regression.sh` (78, 77 pass + 1 known F1 script bug), `server/scripts/wi04-e2e.sh` (49, all pass), `server/scripts/wib-e2e.sh` (42, all pass), `server/scripts/wi08-e2e.sh` (19, all pass), `server/scripts/wi07-e2e.sh` (46, all pass), `server/scripts/riddor-reg5-reg11.test.js` (23 `node:test`, all pass), `client/src/utils/frameworks.test.js` (25 `node:test`, all pass).
 
 ---
 
@@ -43,8 +44,9 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 | 7 | WI-08 Deadline countdown UI | ✅ `449539b` (single commit, BE+FE — pure presentation). `server/services/deadlines.js` aggregator; `GET /incidents/:id/deadlines`; `pending_deadlines` + `most_urgent_deadline` attached to list rows + detail payload; `DeadlineBadge` component rendered in IncidentDetail header (all) and IncidentsList rows (most-urgent compact). 19-assertion `server/scripts/wi08-e2e.sh`. |
 | 7a | WI-D Jurisdiction-aware wizard + forms | ✅ `2e708d0` (single FE commit). `jurisdictionForContext({user, siteId, sites})` + `showField()` registry in `client/src/utils/frameworks.js`. Wizard threads jurisdiction to InjuryForm + AffectedPersonModal; "Show all regulatory fields" toggle defaults off. WI-04 "UK RIDDOR edge cases" card + WI-A address/phone/DOB/gender/date_hired rows now jurisdiction-gated. 25-test `node:test` suite at `client/src/utils/frameworks.test.js`. |
 | 8 | WI-01 OSHA 300 PDF | ✅ `b7e3507` (single BE+FE commit). `server/services/pdf/osha_300.js` (Form 300 Rev. 04/2004 grid: A..F header cols + G..J classification X-marks + K..L day counts + M1..M6 type X-marks + page-totals strip on final page). `GET /reports/osha-300?format=pdf` branch — requires `site_id` per 29 CFR 1904.30(a) (400 with cite otherwise; 404 cross-tenant). Privacy-case substitution per 29 CFR 1904.29(b)(7). Audit verb `osha_300_pdf_downloaded`. FE: Download-PDF btn in `Osha300Report` panel header on ReportsPage. `pdfkit` ^0.18.0 added — WI-03/02/09 reuse. |
-| 9 | WI-03 OSHA 301 PDF | ✅ this turn (single BE+FE commit). `server/services/pdf/osha_301.js` (Form 301 Rev. 04/2004 portrait — three sections + Completed by; fields 1–18 with verbatim OSHA numbering; manual word-wrap utility for fields 14–17 since pdfkit auto-paginates on wrap). `GET /reports/osha-301/:incidentId?format=pdf` reads primary `affected_persons` row + first `injuries` (WI-A) with `type_data.injured_person` fallback. Audit verb `osha_301_pdf_downloaded` on `entity_type='incident'` so it lands on the incident timeline. FE: Download-PDF button in `IncidentDetail` OSHA-recordable section — only renders when `osha_recordable === 1` per 29 CFR 1904.29(b)(2). |
-| 10+ | WI-07 1904.39 → WI-05 F2508 → WI-06 SafeWork NSW → WI-02 300A+ITA → WI-09 Generic PDF | reorder allowed by gate readiness |
+| 9 | WI-03 OSHA 301 PDF | ✅ `2d765af`. `server/services/pdf/osha_301.js` (Form 301 Rev. 04/2004 portrait — three sections + Completed by; fields 1–18 with verbatim OSHA numbering; manual word-wrap utility for fields 14–17). `GET /reports/osha-301/:incidentId?format=pdf` reads primary `affected_persons` row + first `injuries` (WI-A) with legacy fallback. FE: Download-PDF button in IncidentDetail OSHA-recordable section. |
+| 10 | WI-07 OSHA 1904.39 severe-injury flow | ✅ this turn (single BE+FE commit). Migration 027 `osha_severe_notifications` + `services/osha_severe.js` (pure `evaluateSevereInjury` + DB writers). POST + PATCH hooks on `/incidents` auto-create rows for fatality (8h, 1904.39(a)(1)) / hospitalization / amputation / loss_of_eye (24h, 1904.39(a)(2)) — gated on `sites.country='US'`. Plug-in to `deadlines.js` aggregator. New routes `GET /reports/osha-severe/:incidentId` + `POST /reports/osha-severe/:notificationId/phone-notified` (elevated-only, idempotent). FE: per-row "Log phone call" button + `LogOshaSevereModal` capturing area_office + reference + notes. 46-assertion `wi07-e2e.sh` covering POST + PATCH paths, multi-category, US-only gate, idempotency, cross-tenant, list-endpoint integration, activity_log, hash chain. |
+| 11+ | WI-06 SafeWork NSW (partly unblocked — WHS Act + factsheet landed) → WI-05 F2508 → WI-02 300A+ITA → WI-09 Generic PDF | reorder allowed by gate readiness |
 
 **Hallucination-risk gates** (memory `feedback_regulatory_truth.md`) — do NOT start without owner-supplied source material in `docs/regulatory-sources/`:
 - WI-01 — ✅ DONE. 29 CFR 1904.29 + Form 300 visual reference both cited in `server/services/pdf/osha_300.js`.
@@ -53,30 +55,32 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 - WI-04 — ✅ DONE. Owner-provided SI 2013/1471 + HSE INDG453 used; verbatim text cited in code comments.
 - WI-05 — HSE F2508 visual reference — **still gated**.
 - WI-06 — WHS Act 2011 (NSW) s.36 / s.37 enumerations, official Notify SafeWork NSW form, ANZSIC code list — **still gated**.
-- WI-07 — no hallucination gate; 1904.39 is in `29 CFR Part 1904.pdf` (now in repo).
+- WI-07 — ✅ DONE. 29 CFR 1904.39 verbatim text cited in `server/services/osha_severe.js`.
 
 ---
 
 ## Next session priority
 
-WI-01 + WI-03 (OSHA 300/301 PDFs) shipped. Remaining chunks per the plan:
+All OSHA chunks done (WI-01 + WI-03 + WI-07). PDF infrastructure proven; deadlines aggregator now spans US-OSHA + UK-RIDDOR. Remaining:
 
-- **WI-07 OSHA 1904.39 severe-injury notification flow** — 8h (fatality) / 24h (hospitalization, amputation, loss of eye). New `osha_severe_notifications` table; new service; phone-notified-at logging. Plugs into the WI-08 `deadlines.js` aggregator (TODO marker already in place).
-- **WI-02 OSHA 300A PDF + ITA CSV** — reuses `pdfkit`. ITA CSV column headers need owner clarification (not in the RK package).
-- **WI-09 Generic Incident PDF** — universal fallback. No hallucination gate.
+- **WI-06 SafeWork NSW** — owner dropped initial NSW source material in `docs/regulatory-sources/safework-nsw/` (WHS Act 2011 (NSW) + Safe Work Australia factsheet). Largest remaining in-scope item. Spec at `docs/implementation-plan.md` WI-06: 4 new tables, classification engine matching ss.35–37, ABN validator, Notify-NSW PDF, AU section on ReportsPage, wizard hook for s.39 site preservation. **Still need from owner:** ANZSIC 2006 code list (CSV) + official Notify SafeWork NSW form PDF for pixel-perfect layout. Engine + table shape can land first.
+- **WI-02 OSHA 300A PDF + ITA CSV** — reuses `pdfkit` + the `osha_300_helpers` shape. 1904.32 (paper) + 1904.41 (ITA CSV). The OSHA ITA CSV column-header template is not in the source PDFs — check ITA portal or owner can supply.
+- **WI-09 Generic Incident PDF** — universal fallback per PRD §4.6. No hallucination gate. Probably the smallest remaining chunk.
 
 **Still gated** (owner needs to supply source material before starting):
 - **WI-05 RIDDOR F2508 PDF** — HSE F2508 visual reference.
-- **WI-06 SafeWork NSW** — WHS Act s.36 / s.37 enumerations + Notify form + ANZSIC code list.
 
-**WI-07 cold files for the next session:**
-- `server/db/migrations/027_osha_severe_notifications.sql` — new migration. Columns: id, incident_id (FK), org_id (denormalized), category enum (`'fatality'|'hospitalization'|'amputation'|'loss_of_eye'`), deadline_at, phone_notified_at, phone_notified_by (FK users), osha_area_office, osha_reference, notes, created_at.
-- `server/services/osha_severe.js` — new service. `evaluateSevereInjury(incident, primaryAp, primaryInjury)` decides whether 1904.39 applies (fatality OR hospitalization OR amputation OR eye loss) and computes deadline = `incident_datetime + (8h if fatality else 24h)`.
-- `server/services/deadlines.js` — extend the aggregator to load `osha_severe_notifications` rows + plug into the same status enum (without_delay / overdue / due_today / due_soon / upcoming / submitted). The "TODO: WI-07" marker is already in place.
-- `server/routes/reports.js` — `POST /reports/osha-severe/:incidentId` (create) + `POST /reports/osha-severe/:id/phone-notified` (log notification).
-- `client/src/components/incidents/DeadlineBadge.jsx` — already renders any `pending_deadlines` item; will pick up OSHA severe deadlines once the aggregator emits them.
-- `client/src/pages/incidents/IncidentDetail.jsx` — add a phone-notification capture UI (mirrors RIDDOR phone-notified pattern in `RecordabilityVerifyCard.jsx`).
-- Source: `docs/regulatory-sources/osha/29 CFR Part 1904 (up to date as of 5-07-2026).pdf` § 1904.39 (full text).
+**WI-06 cold files for the next session:**
+- `server/db/migrations/028_safework_nsw.sql` — new tables only (no ALTER on existing). `safework_nsw_notifications` (per-event), `anzsic_codes` (lookup), `safework_nsw_dangerous_incident_types` (lookup, seeded from s.37), `safework_nsw_serious_injury_types` (lookup, seeded from s.36).
+- `server/services/safework_nsw.js` — classification engine matching ss.35–37. Pattern matches `services/riddor.js`.
+- `server/services/abn_validator.js` — ATO ABN checksum (public algorithm; no source needed).
+- `server/services/pdf/safework_nsw.js` — PDF for the Notify form. Reuse the pdfkit pattern from `server/services/pdf/osha_300.js` (margins.bottom: 0, manual word-wrap for free-text fields).
+- `server/services/deadlines.js` — final TODO marker (WI-06) for s.38(2) phone "without delay" + s.38(4) written deadline plug-in.
+- `server/routes/reports.js` — `GET/POST /reports/safework-nsw/*` routes; gated on `compliance_frameworks` including `safework_nsw`.
+- `client/src/api/safework_nsw.js` — new API client.
+- `client/src/pages/reports/ReportsPage.jsx` — AU section, gated on `safework_nsw` framework via the existing `frameworkVisibility` helper.
+- Wizard hook: when AU-jurisdiction triggers + engine flags notifiability, prompt for s.39 site-preservation status + NSW fields. The jurisdiction-aware infrastructure (WI-D) already lives in `client/src/utils/frameworks.js`.
+- Sources in repo: `docs/regulatory-sources/safework-nsw/whs-act-2011-nsw.pdf` + `docs/regulatory-sources/safework-nsw/safe-work-australia-incident-notification-factsheet.pdf`.
 
 **Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
 
@@ -193,6 +197,26 @@ Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink
 ---
 
 ## Recent session log
+
+### 2026-05-12 (late night, ctd.) — WI-07 OSHA 1904.39 severe-injury reporting shipped (BE + FE + 46-assertion e2e)
+
+Chunk 10 closed in a single BE+FE commit. First non-PDF OSHA chunk; introduces the second jurisdiction-specific deadline source (after RIDDOR) that the WI-08 aggregator now folds in. Largest WI-07 contribution: a real `wi07-e2e.sh` regression suite that future PDF + NSW work can build on.
+
+| Commit | Scope |
+|---|---|
+| (this) | Migration 027 `osha_severe_notifications` (+ idx). `server/services/osha_severe.js` with pure `evaluateSevereInjury` + writers (syncSevereNotifications / listSevereNotificationsForIncident / getSevereNotification / logPhoneNotification). POST `/incidents` hook + PATCH `/incidents/:id` hook (both gated on `sites.country='US'`) auto-create rows for fatality (8h, 1904.39(a)(1)) / hospitalization / amputation / loss_of_eye (24h, 1904.39(a)(2)). 1904.39(b)(6) 30-day fatality window enforced. 1904.39(b)(11) carve-outs honored (amputation requires explicit reporter flag — substring on injury_type is intentionally not enough). `osha_date_of_death` added to PATCH allowlist. `services/deadlines.js` aggregator extended with `loadOshaSevereForIncidents` bulk loader + per-incident merge; list + detail + `/deadlines` endpoints surface the rows. New routes `GET /reports/osha-severe/:incidentId` + `POST /reports/osha-severe/:notificationId/phone-notified` (elevated-only, idempotent, writes activity_log). 2 new audit verbs. FE: `getOshaSevere` + `logOshaSeverePhoneNotified` in `api/reports.js`; `IncidentDetail` loads severe rows alongside incident/AP data, renders "Log phone call" buttons per unsubmitted row + status badges for submitted ones (rendered alongside the OSHA recordable row, NOT nested inside it — 1904.39 reporting duty is independent of 1904.7 recordability). New `LogOshaSevereModal` captures area_office + reference + notes. 46-assertion `server/scripts/wi07-e2e.sh` covering hospitalization auto-create, amputation/loss_of_eye explicit flags, B3 negative case (no substring match), multi-category via PATCH, idempotent PATCH, US-only gate (UK + AU sites get zero rows), phone-notified write + idempotency + worker 403, cross-tenant 404 on GET + write, list-endpoint integration, activity_log entries for both POST + PATCH paths, WI-C hash chain still verifies. roadmap.md + implementation-plan.md updates. |
+
+**Thoroughness notes (in response to "test thoroughly"):**
+- Wrote a dedicated 46-assertion `wi07-e2e.sh` covering every spec branch + edge case + cross-jurisdiction gate.
+- Pure-function smoke (`evaluateSevereInjury`) confirmed via synthetic node script covering: fatality 1-day, fatality outside 30-day window, hospitalization, amputation flag, loss-of-eye flag, multi-category, no-category, primaryInjury-only path.
+- Full FE click-flow simulated end-to-end via curl (matching the exact sequence the React component runs: load → display → modal submit → reload). Revealed a real FE bug where the WI-07 UI was nested inside `osha_recordable === 1`, hiding the 1904.39 phone-notif buttons when recordability hadn't been verified yet. Fixed.
+- Vite production build clean. All existing suites green: wi08 19/19, wi04 49/49, wib 42/42, node:test 48/48, wia 77/78 (F1 unchanged).
+
+**Carry-forward TODOs documented in code:**
+- 1904.39(b)(7) "employer learns later" clock — currently uses `incident_datetime` (or `osha_date_of_death` for fatality). Needs reporter signal to switch.
+- 1904.39(b)(10) observation-only carve-out — trusted to reporter's `hospitalized` flag. No DB signal to distinguish "care/treatment" vs "observation/diagnostic".
+
+**Servers running.** Branch `backend` at this turn's commit.
 
 ### 2026-05-12 (late night, ctd.) — WI-03 OSHA 301 PDF shipped (BE renderer + FE Download button on IncidentDetail)
 
