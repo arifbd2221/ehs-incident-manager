@@ -16,6 +16,7 @@
 
 import { useState, useEffect } from 'react';
 import Icon from '../shared/Icon';
+import ComboBox from '../shared/ComboBox';
 import { useAuth } from '../../context/AuthContext';
 import { certifyOsha300A, getOsha300A } from '../../api/reports';
 
@@ -107,12 +108,13 @@ export default function CertifyOsha300AModal({ siteId, year, siteName, affirmati
             </div>
             <div className="field">
               <label className="label">Executive title <span className="req">*</span></label>
-              <select className="select" value={titleKey} onChange={e => setTitleKey(e.target.value)}>
-                {titleOptions.length === 0 && <option value="">Loading…</option>}
-                {titleOptions.map(opt => (
-                  <option key={opt.key} value={opt.key}>{opt.label}</option>
-                ))}
-              </select>
+              <ComboBox
+                className="select"
+                value={titleKey}
+                onChange={setTitleKey}
+                placeholder={titleOptions.length === 0 ? 'Loading…' : 'Select…'}
+                options={titleOptions.map(opt => ({ value: opt.key, label: opt.label }))}
+              />
               <span className="helper">Per 29 CFR 1904.32(b)(4) — only these four titles may certify.</span>
             </div>
           </div>

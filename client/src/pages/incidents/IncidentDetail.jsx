@@ -30,6 +30,8 @@ import SeverityOverrideModal from './modals/SeverityOverrideModal';
 import WitnessModal from './modals/WitnessModal';
 import AffectedPersonModal from './modals/AffectedPersonModal';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
+import DatePicker from '../../components/shared/DatePicker';
+import ComboBox from '../../components/shared/ComboBox';
 import '../../styles/incidents.css';
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -1707,11 +1709,7 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
             <>
               <div className="field">
                 <label className="label">Status <span className="req">*</span></label>
-                <select className="select" value={statusVal} onChange={e => setStatusVal(e.target.value)}>
-                  {Object.entries(SITE_PRESERVATION_LABELS).map(([k, label]) => (
-                    <option key={k} value={k}>{label}</option>
-                  ))}
-                </select>
+                <ComboBox options={Object.entries(SITE_PRESERVATION_LABELS).map(([k, label]) => ({ value: k, label }))} value={statusVal} onChange={setStatusVal} />
                 <span className="helper">Per WHS Act s.39 — site must not be disturbed until an inspector arrives, except as permitted by s.39(3).</span>
               </div>
               <div className="field">
@@ -1720,7 +1718,7 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
               </div>
               <div className="field">
                 <label className="label">Inspector arrived at (optional)</label>
-                <input className="input" type="datetime-local" value={inspectorArrivedAt} onChange={e => setInspectorArrivedAt(e.target.value)}/>
+                <DatePicker value={inspectorArrivedAt} onChange={setInspectorArrivedAt} includeTime />
               </div>
             </>
           )}

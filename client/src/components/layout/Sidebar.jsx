@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../shared/Icon';
 import { useApp } from '../../context/AppContext';
@@ -60,6 +60,16 @@ export default function Sidebar() {
   const { user } = useAuth();
   const isElevated = ELEVATED_ROLES.has(user?.role);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef(null);
+
+  const toggleSettings = () => {
+    setSettingsOpen(o => {
+      if (!o) {
+        setTimeout(() => settingsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 260);
+      }
+      return !o;
+    });
+  };
 
   // Hide elevatedOnly nav items for worker-role users. Dividers are
   // strings, not objects, so they fall through the filter unchanged.
@@ -92,12 +102,11 @@ export default function Sidebar() {
             <div className="lbl">{it.label}</div>
           </div>
         ))}
-        <div style={{ flex: 1 }} />
-        <div className="nav-settings-group">
+        <div className="nav-settings-group" ref={settingsRef}>
           <div
             className={`nav-item ${settingsActive && !settingsOpen ? 'active' : ''} ${settingsOpen ? 'settings-expanded' : ''}`}
             style={{ '--nav-color': '#78909C' }}
-            onClick={() => setSettingsOpen(o => !o)}
+            onClick={toggleSettings}
             aria-expanded={settingsOpen}
           >
             <Icon name="tune" size={22} />

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Icon from '../../../components/shared/Icon';
+import ComboBox from '../../../components/shared/ComboBox';
 import { sevName } from '../../../components/shared/Badges';
 
 const SEVS = [1, 2, 3, 4, 5];
@@ -26,15 +27,11 @@ export default function SeverityOverrideModal({ incident, onCancel, onConfirm })
           </div>
           <div className="form-group">
             <label className="form-label">New severity</label>
-            <select
-              className="form-select"
-              value={severity}
-              onChange={e => setSeverity(Number(e.target.value))}
-            >
-              {SEVS.map(s => (
-                <option key={s} value={s}>{sevName(s)}{s === incident.severity ? ' — current' : ''}</option>
-              ))}
-            </select>
+            <ComboBox
+              options={SEVS.map(s => ({ value: String(s), label: `${sevName(s)}${s === incident.severity ? ' — current' : ''}` }))}
+              value={String(severity)}
+              onChange={v => setSeverity(Number(v))}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">Reason</label>

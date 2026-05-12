@@ -140,8 +140,10 @@ body {
 
 /* Settings accordion */
 .nav-settings-group {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
   border-top: 1px solid var(--sds-border);
-  margin-top: 4px;
   padding-top: 4px;
 }
 .nav-settings-chevron {

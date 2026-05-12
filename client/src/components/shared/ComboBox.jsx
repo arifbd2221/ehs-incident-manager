@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useMemo, Fragment } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import '../../styles/combobox.css';
 
@@ -36,7 +37,8 @@ export default function ComboBox({
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target) &&
+          listRef.current && !listRef.current.contains(e.target)) {
         setOpen(false);
         setQuery('');
       }
@@ -74,6 +76,25 @@ export default function ComboBox({
   };
 
   const handleClear = (e) => { e.stopPropagation(); onChange(''); setQuery(''); };
+
+  const [dropPos, setDropPos] = useState(null);
+
+  const updateDropPos = useCallback(() => {
+    if (!wrapRef.current) return;
+    const r = wrapRef.current.getBoundingClientRect();
+    setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updateDropPos();
+    window.addEventListener('scroll', updateDropPos, true);
+    window.addEventListener('resize', updateDropPos);
+    return () => {
+      window.removeEventListener('scroll', updateDropPos, true);
+      window.removeEventListener('resize', updateDropPos);
+    };
+  }, [open, updateDropPos]);
 
   const openDrop = () => {
     if (disabled) return;
@@ -144,10 +165,16 @@ export default function ComboBox({
           <svg className="cb-chev" width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </span>
       </div>
-      {open && (
-        <div className="cb-drop" ref={listRef}>
+      {open && dropPos && createPortal(
+        <div className="cb-drop" ref={listRef} style={{
+          position: 'fixed',
+          top: dropPos.top,
+          left: dropPos.left,
+          width: dropPos.width,
+        }}>
           {renderOpts()}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
