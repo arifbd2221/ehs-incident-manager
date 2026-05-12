@@ -76,6 +76,7 @@
 .rpt-type-card.rt-osha300::before { background: linear-gradient(90deg, #2563eb, #3b82f6); }
 .rpt-type-card.rt-osha300a::before { background: linear-gradient(90deg, #0ea5e9, #06b6d4); }
 .rpt-type-card.rt-riddor::before { background: linear-gradient(90deg, #dc2626, #ef4444); }
+.rpt-type-card.rt-safework::before { background: linear-gradient(90deg, #0d9488, #14b8a6); }
 .rpt-type-card.rt-metrics::before { background: linear-gradient(90deg, #8b5cf6, #a855f7); }
 
 .rpt-type-badge {
@@ -92,6 +93,7 @@
 .rt-osha300 .rpt-type-badge { background: rgba(37, 99, 235, 0.08); color: #2563eb; }
 .rt-osha300a .rpt-type-badge { background: rgba(14, 165, 233, 0.08); color: #0ea5e9; }
 .rt-riddor .rpt-type-badge { background: rgba(220, 38, 38, 0.08); color: #dc2626; }
+.rt-safework .rpt-type-badge { background: rgba(13, 148, 136, 0.08); color: #0d9488; }
 .rt-metrics .rpt-type-badge { background: rgba(139, 92, 246, 0.08); color: #8b5cf6; }
 
 .rpt-type-title {

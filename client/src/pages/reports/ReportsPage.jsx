@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getOsha300, getOsha300A, getOsha301, getRiddor, getMetrics, getAuditLog, getAuditActions, createOsha300Entry } from '../../api/reports';
+import { listSafeworkNsw, getSafeworkNswLookups } from '../../api/safework_nsw';
 import { getSites, getUsers } from '../../api/users';
 import { getIncidents } from '../../api/incidents';
 import { useAuth } from '../../context/AuthContext';
@@ -25,6 +26,7 @@ const REPORT_TYPES = [
   { id: 'osha300a', cls: 'rt-osha300a', badge: 'OSHA · US',        title: 'OSHA 300A Summary',  desc: 'Annual summary, posted Feb 1 – Apr 30.',                            requiresFramework: 'osha_300a' },
   { id: 'osha301',  cls: 'rt-osha301',  badge: 'OSHA · US',        title: 'OSHA 301 Form',      desc: 'Individual incident report (per 29 CFR 1904.29).',                  requiresFramework: 'osha_301' },
   { id: 'riddor',   cls: 'rt-riddor',   badge: 'HSE · UK',         title: 'RIDDOR F2508',       desc: 'Event-triggered to HSE. Sheffield site only.',                      requiresFramework: 'riddor_f2508' },
+  { id: 'safework_nsw', cls: 'rt-safework', badge: 'SafeWork · NSW · AU', title: 'SafeWork NSW Notifications', desc: 'Notifiable incidents under WHS Act 2011 (NSW) ss.35–39.',     requiresFramework: 'safework_nsw' },
   { id: 'metrics',  cls: 'rt-metrics',  badge: 'Internal',         title: 'Safety Metrics',     desc: 'TRIR, DART, severity rate.' },
   { id: 'audit',    cls: 'rt-audit',    badge: 'Internal · Audit', title: 'Audit Log',          desc: 'Filterable trail of every change. Export for inspector requests.', requiresAudit: true },
 ];
@@ -109,6 +111,7 @@ export default function ReportsPage() {
       {tab === 'osha300a' && <Osha300AReport siteId={siteId}/>}
       {tab === 'osha301' && <Osha301Report siteId={siteId}/>}
       {tab === 'riddor' && <RiddorReport siteId={siteId}/>}
+      {tab === 'safework_nsw' && <SafeworkNswReport siteId={siteId}/>}
       {tab === 'metrics' && <MetricsReport siteId={siteId}/>}
       {tab === 'audit' && <AuditLogReport/>}
     </div>
@@ -1202,6 +1205,160 @@ function RiddorReport({ siteId }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// WI-06: SafeWork NSW notifiable-incident report (WHS Act 2011 (NSW)
+// ss.35–39). Mirrors the RiddorReport shape — read-only table of
+// notifications across the org (optionally filtered by selected site).
+// Each row shows the NSW number, source incident, event date, top-level
+// s.35 category labels, and the s.38 phone/written submission status.
+function SafeworkNswReport({ siteId }) {
+  const [data, setData] = useState(null);
+  const [lookups, setLookups] = useState({ serious_injury_types: [], dangerous_incident_types: [] });
+
+  useEffect(() => {
+    setData(null);
+    const params = siteId ? { site_id: siteId } : {};
+    listSafeworkNsw(params).then(setData).catch(() => setData({ notifications: [] }));
+  }, [siteId]);
+
+  useEffect(() => {
+    getSafeworkNswLookups().then(setLookups).catch(() => {});
+  }, []);
+
+  if (!data) return <ReportLoading/>;
+
+  const s36Map = new Map((lookups.serious_injury_types || []).map(r => [r.key, r.label]));
+  const s37Map = new Map((lookups.dangerous_incident_types || []).map(r => [r.key, r.label]));
+
+  const rows = data.notifications || [];
+
+  // Derive top-line counts from the visible rows so the panel header
+  // mirrors the RIDDOR stats block.
+  const stats = rows.reduce((acc, r) => {
+    if (r.is_fatality) acc.fatalities += 1;
+    if (r.is_serious_injury) acc.serious += 1;
+    if (r.is_dangerous_incident) acc.dangerous += 1;
+    if (r.excluded_mines_petroleum) acc.excluded += 1;
+    return acc;
+  }, { fatalities: 0, serious: 0, dangerous: 0, excluded: 0 });
+
+  // Compact label for the s.35 category column: list the top-level
+  // sections that apply with their paragraph numbers.
+  const categoryLabel = (r) => {
+    const parts = [];
+    if (r.is_fatality) parts.push('s.35(a) Death');
+    if (r.is_serious_injury) parts.push('s.35(b) Serious');
+    if (r.is_dangerous_incident) parts.push('s.35(c) Dangerous');
+    if (r.excluded_mines_petroleum) parts.push('M&P excluded');
+    return parts.length > 0 ? parts.join(' · ') : '—';
+  };
+
+  // Sub-categories — show the first verbatim Act label for context, with
+  // a count tail when more than one applies (full list is on the
+  // incident detail page).
+  const subLabel = (r) => {
+    const keys = [
+      ...(r.serious_injury_sub_categories || []).map(k => s36Map.get(k) || k),
+      ...(r.dangerous_incident_sub_categories || []).map(k => s37Map.get(k) || k),
+    ];
+    if (keys.length === 0) return '—';
+    if (keys.length === 1) return keys[0];
+    return `${keys[0]} (+${keys.length - 1})`;
+  };
+
+  // s.38 status pill: phone first, then written-clock state.
+  const statusFor = (r) => {
+    if (r.written_submitted_at)        return { txt: 'Written submitted', cls: 'rs-submitted' };
+    if (r.regulator_requested_written_at) return { txt: 'Written pending', cls: 'rs-pending' };
+    if (r.phone_notified_at)           return { txt: 'Phone notified',  cls: 'rs-submitted' };
+    return { txt: 'Without delay',     cls: 'rs-pending' };
+  };
+
+  return (
+    <div className="rpt-panel">
+      <div className="rpt-panel-header">
+        <div>
+          <div className="rpt-panel-title">SafeWork NSW · Notifiable Incidents</div>
+          <div className="rpt-panel-sub">WHS Act 2011 (NSW) ss.35–39 · {rows.length} record{rows.length === 1 ? '' : 's'}</div>
+        </div>
+      </div>
+      <div className="rpt-panel-body">
+        <div className="rpt-riddor-banner">
+          <div className="rpt-riddor-icon"><Icon name="info" size={16}/></div>
+          <div className="rpt-riddor-text">
+            <b>SafeWork NSW notification timelines:</b> Notify the regulator <i>immediately</i>
+            {' '}by the fastest possible means (s.38(1)/(3)) — telephone 13 10 50 or online portal at
+            {' '}notifyform.safework.nsw.gov.au. If the regulator requests a written notice (s.38(4)(b)),
+            {' '}submit it within 48 hours. This panel is the organisation's internal record; downloads
+            {' '}from the incident page produce a record-copy PDF, not the regulator's submission receipt.
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table className="rpt-table">
+            <thead>
+              <tr>
+                <th>NSW ref</th>
+                <th>Source</th>
+                <th>Event date</th>
+                <th>Site</th>
+                <th>s.35 category</th>
+                <th>Sub-category (verbatim)</th>
+                <th>s.38 status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => {
+                const s = statusFor(r);
+                return (
+                  <tr key={r.id}>
+                    <td className="cell-ref">{r.nsw_number}</td>
+                    <td className="cell-ref">{r.incident_number || '—'}</td>
+                    <td>{formatDateShort(r.event_date)}</td>
+                    <td>{r.site_name || '—'}</td>
+                    <td>
+                      <span className="rpt-cat-pill" title="WHS Act 2011 (NSW) Part 3">
+                        <span className="cat-dot"/>{categoryLabel(r)}
+                      </span>
+                    </td>
+                    <td title={subLabel(r)}>{subLabel(r)}</td>
+                    <td>
+                      <span className={`rpt-status ${s.cls}`}>
+                        <span className="rs-dot"/>{s.txt}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && (
+                <tr><td colSpan={7} className="cell-empty">No SafeWork NSW notifications for the selected site/year.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="rpt-riddor-stats">
+          <div className="rpt-riddor-stat">
+            <div className="rpt-riddor-stat-label">Fatalities (s.35(a))</div>
+            <div className="rpt-riddor-stat-val">{stats.fatalities}</div>
+          </div>
+          <div className="rpt-riddor-stat">
+            <div className="rpt-riddor-stat-label">Serious injuries (s.35(b))</div>
+            <div className="rpt-riddor-stat-val">{stats.serious}</div>
+          </div>
+          <div className="rpt-riddor-stat">
+            <div className="rpt-riddor-stat-label">Dangerous incidents (s.35(c))</div>
+            <div className="rpt-riddor-stat-val">{stats.dangerous}</div>
+          </div>
+          <div className="rpt-riddor-stat">
+            <div className="rpt-riddor-stat-label">Mines &amp; Petroleum carve-out</div>
+            <div className="rpt-riddor-stat-val">{stats.excluded}</div>
+          </div>
+        </div>
       </div>
     </div>
   );
