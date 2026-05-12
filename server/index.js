@@ -27,6 +27,7 @@ import folderRoutes from './routes/folders.js';
 import templateRoutes from './routes/templates.js';
 import answerSetRoutes from './routes/answer_sets.js';
 import inspectionRoutes from './routes/inspections_routes.js';
+import riskRoutes from './routes/risks.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -80,6 +81,7 @@ app.use('/api/folders', authMiddleware, folderRoutes);
 app.use('/api/templates', authMiddleware, templateRoutes);
 app.use('/api/answer-sets', authMiddleware, answerSetRoutes);
 app.use('/api/inspections', authMiddleware, inspectionRoutes);
+app.use('/api/risks', authMiddleware, riskRoutes);
 
 app.use('/uploads', express.static(join(__dirname, 'uploads')));
 

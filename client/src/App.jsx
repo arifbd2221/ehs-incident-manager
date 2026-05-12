@@ -30,6 +30,8 @@ import InspectionsList from './pages/inspections/InspectionsList';
 import InspectionEditor from './pages/inspections/InspectionEditor';
 import InspectionReport from './pages/inspections/InspectionReport';
 import LearnPage from './pages/learn/LearnPage';
+import RisksPage from './pages/risks/RisksPage';
+import RiskDetail from './pages/risks/RiskDetail';
 import ReportWizard from './pages/wizard/ReportWizard';
 import GlobalVoiceFab from './components/voice/GlobalVoiceFab';
 
@@ -74,6 +76,8 @@ export default function App() {
         <Route path="/investigations/:id" element={<InvestigationDetail />} />
         <Route path="/capas" element={<CAPAPage />} />
         <Route path="/capas/:id" element={<CAPADetail />} />
+        <Route path="/risks" element={<RisksPage />} />
+        <Route path="/risks/:id" element={<RiskDetail />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/admin/sites" element={<Sites />} />
         <Route path="/admin/sites/:id" element={<SiteDetail />} />

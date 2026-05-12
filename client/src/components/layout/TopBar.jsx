@@ -45,6 +45,11 @@ const PAGE_TIPS = {
     { icon: 'eye', text: 'Click any inspection to view or continue filling it out' },
     { icon: 'reports', text: 'Completed inspections generate scored reports with flagged items' },
   ],
+  '/risks': [
+    { icon: 'fire', text: 'Register hazards and assess them using the 5×5 risk matrix' },
+    { icon: 'pulse', text: 'Switch to Matrix view to see risk distribution as a heatmap' },
+    { icon: 'shield', text: 'Add controls and track residual risk reduction over time' },
+  ],
   '/reports': [
     { icon: 'reports', text: 'Generate compliance reports for OSHA and RIDDOR submissions' },
     { icon: 'download', text: 'Export reports as PDF for regulatory filing' },
@@ -326,6 +331,7 @@ export default function TopBar() {
     if (p.startsWith('/inspections')) return 'Inspections';
     if (p.startsWith('/documents')) return 'Documents';
     if (p.startsWith('/maintenance')) return 'Maintenance';
+    if (p.startsWith('/risks')) return 'Risks';
     if (p.startsWith('/assets')) return 'Assets';
     if (p.startsWith('/sites')) return 'Sites';
     if (p.startsWith('/profile')) return 'Profile';

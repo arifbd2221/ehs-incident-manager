@@ -20,15 +20,23 @@ function AnimatedLogo() {
 }
 
 const NAV = [
+  // Incident lifecycle
   { id: 'dashboard', path: '/', icon: 'dashboard', label: 'Dashboard', color: '#626DF9' },
   { id: 'incidents', path: '/incidents', icon: 'incidents', label: 'Incidents', color: '#E53935' },
   { id: 'investigations', path: '/investigations', icon: 'investigation', label: 'Investigations', color: '#F57C00' },
   { id: 'capas', path: '/capas', icon: 'capa', label: 'CAPA', color: '#2E7D32' },
-  { id: 'assets', path: '/assets', icon: 'gear', label: 'Assets', color: '#546E7A' },
-  { id: 'maintenance', path: '/maintenance', icon: 'clock', label: 'Maintenance', color: '#FB8C00' },
-  { id: 'documents', path: '/documents', icon: 'file', label: 'Documents', color: '#1E88E5' },
-  { id: 'templates', path: '/templates', icon: 'clipboard', label: 'Templates', color: '#8b5cf6' },
+  'divider',
+  // Proactive safety
+  { id: 'risks', path: '/risks', icon: 'fire', label: 'Risks', color: '#E91E63' },
   { id: 'inspections', path: '/inspections', icon: 'shield', label: 'Inspections', color: '#00897B' },
+  { id: 'templates', path: '/templates', icon: 'clipboard', label: 'Templates', color: '#8b5cf6' },
+  'divider',
+  // Asset management
+  { id: 'assets', path: '/assets', icon: 'widgets', label: 'Assets', color: '#546E7A' },
+  { id: 'maintenance', path: '/maintenance', icon: 'clock', label: 'Maintenance', color: '#FB8C00' },
+  'divider',
+  // Records & reporting
+  { id: 'documents', path: '/documents', icon: 'file', label: 'Documents', color: '#1E88E5' },
   { id: 'reports', path: '/reports', icon: 'reports', label: 'Reports', color: '#5C6BC0' },
 ];
 
@@ -61,7 +69,9 @@ export default function Sidebar() {
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
         <AnimatedLogo />
-        {NAV.map(it => (
+        {NAV.map((it, i) => it === 'divider' ? (
+          <div key={`div-${i}`} className="nav-divider" />
+        ) : (
           <div key={it.id} className={`nav-item ${isActive(it.path) ? 'active' : ''}`} style={{ '--nav-color': it.color }} onClick={() => go(it.path)}>
             <Icon name={it.icon} size={22} />
             <div className="lbl">{it.label}</div>

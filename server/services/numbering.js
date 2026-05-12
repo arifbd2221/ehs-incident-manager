@@ -52,3 +52,12 @@ export function nextDocumentNumber() {
   const next = (row?.maxn || 0) + 1;
   return `DOC-${year}-${String(next).padStart(5, '0')}`;
 }
+
+export function nextRiskNumber() {
+  const year = new Date().getFullYear();
+  const row = db.prepare(
+    "SELECT MAX(CAST(SUBSTR(risk_number, -5) AS INTEGER)) as maxn FROM risks WHERE risk_number LIKE ?"
+  ).get(`RSK-${year}-%`);
+  const next = (row?.maxn || 0) + 1;
+  return `RSK-${year}-${String(next).padStart(5, '0')}`;
+}
