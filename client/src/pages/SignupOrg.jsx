@@ -217,7 +217,7 @@ export default function SignupOrg() {
               <img src="/assets/sds-mark.svg" alt="SDS Manager" />
             </div>
             <h1 className="auth-brand-title">SDS Manager</h1>
-            <p className="auth-brand-sub">EHS Incident Management Platform</p>
+            <p className="auth-brand-sub">Safelync · EHS Incident Management Platform</p>
           </div>
           <div className="auth-brand-orbs">
             <div className="auth-orb auth-orb-1" />
@@ -246,7 +246,7 @@ export default function SignupOrg() {
             <img src="/assets/sds-mark.svg" alt="SDS Manager" />
           </div>
           <h1 className="auth-brand-title">SDS Manager</h1>
-          <p className="auth-brand-sub">EHS Incident Management Platform</p>
+          <p className="auth-brand-sub">Safelync · EHS Incident Management Platform</p>
 
           {/* Contextual illustration that changes per step */}
           <div className="signup-brand-illus">
