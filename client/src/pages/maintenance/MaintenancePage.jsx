@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Icon from '../../components/shared/Icon';
+import ComboBox from '../../components/shared/ComboBox';
 import { listSchedules, getSchedule, deleteSchedule } from '../../api/maintenance';
 import { getSites } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
@@ -191,18 +192,16 @@ export default function MaintenancePage() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {sites.length > 1 && (
-            <>
-              <Icon name="location" size={14} />
-              <select
-                className="input"
-                style={{ minWidth: 180 }}
-                value={siteFilter}
-                onChange={e => setSiteFilter(e.target.value)}
-              >
-                <option value="">All sites</option>
-                {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </>
+            <div style={{ minWidth: 180 }}>
+              <ComboBox
+                className="cb-sm"
+                options={[{ value: '', label: 'All sites' }, ...sites.map(s => ({ value: String(s.id), label: s.name }))]}
+                value={String(siteFilter)}
+                onChange={v => setSiteFilter(v)}
+                placeholder="All sites"
+                clearable={!!siteFilter}
+              />
+            </div>
           )}
           {canEdit && (
             <button className="btn btn-primary btn-sm" onClick={() => setNewOpen(true)}>
