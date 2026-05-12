@@ -187,9 +187,12 @@ C1=$(post_incident "$PRIYA" "$(cat <<EOF
  "type_data":{"injury_type":"Crush","hospitalized":true,"injured_person":{"name":"C1 Worker"}}}
 EOF
 )")
-# priya's org doesn't have safework_nsw framework, so endpoint is 403 first.
-C1_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $PRIYA" "$BASE/api/reports/safework-nsw/$C1")
-run "C1: US incident on non-NSW org → 403 (framework gate)"  "403" "$C1_STATUS"
+# Framework gate: acme is OSHA-only (no safework_nsw) so the gate
+# fires before the per-incident lookup, regardless of which incident
+# id is in the URL. Using priya here would no longer prove the gate
+# because SDS Manager Inc. is now operationally NSW-enabled.
+C1_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $ACME" "$BASE/api/reports/safework-nsw/$C1")
+run "C1: non-NSW org (acme, OSHA-only) → 403 (framework gate)" "403" "$C1_STATUS"
 
 # Sanity at the DB level: no NSW row should exist for the US incident.
 C1_DB_COUNT=$(sqlite3 "$DB" "SELECT COUNT(*) FROM safework_nsw_notifications WHERE incident_id=$C1;")
