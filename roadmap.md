@@ -6,18 +6,18 @@ Live status for what's open, what's done, and how to operate on this codebase. D
 
 ## Current state
 
-- **Branch:** `backend` at this turn's WI-06 commit (SafeWork NSW engine + tables + routes + FE; PDF renderer deferred). Preceded by `89d0a27` (WI-07), `2d765af` (WI-03), `b7e3507` (WI-01), `753ec42` (OSHA sources), `2e708d0` (WI-D). Working tree clean (only `PRD.md` + NSW source PDFs untracked — owner reference docs).
+- **Branch:** `backend` at this turn's WI-02 commit (OSHA 300A PDF + ITA CSV + 1904.41 designation + snapshot lock). Preceded by `1a02ed6` (WI-06), `89d0a27` (WI-07), `2d765af` (WI-03), `b7e3507` (WI-01), `753ec42` (OSHA sources). Working tree clean (only `PRD.md` + the NSW + ITA spec PDFs untracked — owner reference docs).
 - **`origin/main`** at `b3dbb08` (last known). Backend is many commits ahead: WI-A + WI-04 + WI-B + WI-08 + WI-D + OSHA sources. Check `gh pr list` for current PR state.
 - **PR #11** ✅ merged 2026-05-11.
 - **Phase 2:** code complete; F6.2 manual walkthrough open.
 - **Phase 3 done:** N1, N2, N3, L1, L2, A1, O1, O2, OB2, OB3, OP1, OP2, OP3.
 - **Phase 3 open:** AI1, AI2, AI3, OP4, OP5, OB1. (RG1 superseded by PRD-remediation WI-06 SafeWork NSW.)
-- **PRD-remediation done:** Chunks 1–7a + 8 (WI-01) + 9 (WI-03) + 10 (WI-07) + **11 (WI-06 SafeWork NSW engine/tables/routes/FE)**. Next: WI-06 PDF renderer (follow-up) + WI-02 / WI-09 / WI-05 (gated).
-- **Migrations applied:** 001–028 + letter fixups `014a`, `017a`, `023a/b/c`. Next available: **029**. 028 = WI-06 `safework_nsw_notifications` + two seeded lookup tables.
+- **PRD-remediation done:** Chunks 1–7a + 8 (WI-01) + 9 (WI-03) + 10 (WI-07) + 11 (WI-06 engine) + **12 (WI-02 OSHA 300A + ITA CSV + designation)**. Next: WI-09 Generic PDF + WI-06 PDF renderer (follow-up) + WI-05 (gated).
+- **Migrations applied:** 001–029 + letter fixups `014a`, `017a`, `023a/b/c`. Next available: **030**. 029 = WI-02 `osha_300a_certified_summaries` snapshot table + partial UNIQUE on `regulatory_certifications`.
 - (Migration row consolidated above.)
 - **Demo accounts** (all `password123`): `priya@sdsmanager.com` (admin, SDS Manager Inc., org=1), `elena@sdsmanager.com` (ehs_manager, org=1, multi-framework — owns Sheffield UK site), `marcus`, `james`, `mehta`, `wendy`; plus empty test orgs `acme@sdsmanager.com` (admin, Acme Manufacturing org=2, OSHA US — used for cross-tenant tests), `riddor-test@example.com` (RIDDOR UK), `sydney-test@example.com` (SafeWork NSW AU).
 - **Dev servers:** `cd server && node --watch index.js` (BE :3001) + `cd client && npm run dev` (FE :5173).
-- **Test suites:** `server/scripts/wia-regression.sh` (78, 77 pass + 1 known F1 script bug), `server/scripts/wi04-e2e.sh` (49, all pass), `server/scripts/wib-e2e.sh` (42, all pass), `server/scripts/wi08-e2e.sh` (19, all pass), `server/scripts/wi07-e2e.sh` (46, all pass), `server/scripts/wi06-e2e.sh` (57, all pass), `server/scripts/abn-validator.test.js` (12 `node:test`, all pass), `server/scripts/riddor-reg5-reg11.test.js` (23 `node:test`, all pass), `client/src/utils/frameworks.test.js` (27 `node:test`, all pass).
+- **Test suites:** `wia-regression.sh` 77/78, `wi04-e2e.sh` 49/49, `wib-e2e.sh` 42/42, `wi08-e2e.sh` 19/19, `wi07-e2e.sh` 46/46, `wi06-e2e.sh` 57/57, **`wi02-e2e.sh` 45/45**, `abn-validator.test.js` 12/12, **`osha-ita-csv.test.js` 36/36** (ITA template parity gate), `riddor-reg5-reg11.test.js` 23/23, `frameworks.test.js` 27/27.
 
 ---
 
@@ -47,8 +47,9 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 | 9 | WI-03 OSHA 301 PDF | ✅ `2d765af`. `server/services/pdf/osha_301.js` (Form 301 Rev. 04/2004 portrait — three sections + Completed by; fields 1–18 with verbatim OSHA numbering; manual word-wrap utility for fields 14–17). `GET /reports/osha-301/:incidentId?format=pdf` reads primary `affected_persons` row + first `injuries` (WI-A) with legacy fallback. FE: Download-PDF button in IncidentDetail OSHA-recordable section. |
 | 10 | WI-07 OSHA 1904.39 severe-injury flow | ✅ `89d0a27`. Migration 027 + `services/osha_severe.js` + POST/PATCH hooks + deadlines plug-in + FE phone-notif UI + 46-assertion `wi07-e2e.sh`. |
 | 11 | WI-06 SafeWork NSW (engine + tables + routes + FE; PDF deferred) | ✅ this turn (single BE+FE commit). Owner approved verbatim s.35–s.39 extraction before any code. Migration 028 `safework_nsw_notifications` + two seeded lookup tables (10+1 s.36 + 11+1 s.37, each row carries verbatim Act `label` + `section_ref`). `services/safework_nsw.js` classification engine — auto-derive s.36(a) from `hospitalized`, explicit s.36(b)(i)–(viii)+(c) and s.37 sub-categories via `type_data.safework_nsw.*`, Mines & Petroleum carve-out per s.38(8)/s.39(4). `services/abn_validator.js` (ATO mod-89) + 12-test suite. 7 new routes (lookups, list, GET, phone-notified, regulator-requested-written, written-submitted, site-preservation, PCBU). Deadlines aggregator emits `safework_nsw_phone` (without_delay→submitted) and `safework_nsw_written` (only after regulator request; deadline = +48h per s.38(4)(b)). FE: `SafeworkNswCardRows` + `SafeworkNswModal` on IncidentDetail behind `showNsw` framework gate. 57-assertion `wi06-e2e.sh`. 5 new audit verbs. |
-| 12 | WI-06 PDF renderer (follow-up) | After owner confirms layout. Adds `services/pdf/safework_nsw.js` + Download-PDF button on the NSW card. Per standing instruction: government-document styling, no logo impersonation, footer noting submission still happens via phone + online portal. |
-| 12+ | WI-02 OSHA 300A + ITA → WI-09 Generic PDF → WI-05 F2508 (gated) | reorder allowed by gate readiness |
+| 12 | WI-02 OSHA 300A PDF + ITA CSV (29 CFR 1904.32 + 1904.41) | ✅ this turn. Migration 029 `osha_300a_certified_summaries` snapshot + `services/osha_300a.js` (atomic cert+snapshot + verbatim 4-key allowlist + verbatim 1904.32(b)(3) affirmation) + `services/osha_ita_designation.js` (Appendix A 65 entries + Appendix B 95 entries verbatim per 88 FR 47347/47348) + `services/pdf/osha_300a.js` + `services/csv/osha_ita.js` (28 cols, RFC 4180, leading-zero quoting) + `services/csv/osha_ita_validator.js` (per-field + 7 cross-field + 500..<8760 hours/employee bounds + non-contiguous size enum). 3 new routes (PDF, CSV, designation). FE: Download buttons + 1904.41 designation banner + cert dropdown. 36-test `osha-ita-csv.test.js` (byte-for-byte template parity gate) + 45-assertion `wi02-e2e.sh`. 3 new audit verbs. |
+| 13 | WI-06 PDF renderer (follow-up) | After owner confirms layout. Adds `services/pdf/safework_nsw.js` + Download-PDF button on the NSW card. Per standing instruction: government-document styling, no logo impersonation, footer noting submission still happens via phone + online portal. |
+| 13+ | WI-09 Generic PDF, WI-05 F2508 (gated) | reorder allowed by gate readiness |
 
 **Hallucination-risk gates** (memory `feedback_regulatory_truth.md`) — do NOT start without owner-supplied source material in `docs/regulatory-sources/`:
 - WI-01 — ✅ DONE. 29 CFR 1904.29 + Form 300 visual reference both cited in `server/services/pdf/osha_300.js`.
@@ -63,21 +64,20 @@ PRD-driven gap remediation is the active workstream. Owner directive 2026-05-11:
 
 ## Next session priority
 
-WI-01 + WI-03 + WI-07 + WI-06 (engine) shipped. Deadlines aggregator now spans US-OSHA + UK-RIDDOR + AU-NSW. Remaining:
+WI-01 + WI-03 + WI-07 + WI-06 (engine) + WI-02 shipped. Deadlines aggregator covers US-OSHA + UK-RIDDOR + AU-NSW. PDF infrastructure proven across 4 different form layouts. Remaining chunks:
 
-- **WI-06 PDF renderer (follow-up)** — design the PDF from WHS Act requirements per the owner's standing instruction (government-document styling, no logo impersonation, footer noting submission still happens via phone + online portal). The data shape is ready in `safework_nsw_notifications`. Reuse the pdfkit template from `services/pdf/osha_300.js` (margins.bottom: 0 + manual word-wrap). Add `services/pdf/safework_nsw.js` + `?format=pdf` branch on `GET /reports/safework-nsw/:incidentId` + Download-PDF button on the NSW card.
-- **WI-02 OSHA 300A PDF + ITA CSV** — reuses `pdfkit` + the `osha_300_helpers` shape. 1904.32 (paper) + 1904.41 (ITA CSV). The OSHA ITA CSV column-header template is not in the source PDFs — check ITA portal or owner can supply.
-- **WI-09 Generic Incident PDF** — universal fallback per PRD §4.6. No hallucination gate. Smallest remaining chunk.
+- **WI-09 Generic Incident PDF** — universal fallback per PRD §4.6. No hallucination gate; no regulator-mandated layout. Smallest remaining chunk; reuses the WI-01 pdfkit pattern.
+- **WI-06 PDF renderer (follow-up)** — design from WHS Act requirements per the owner's standing instruction. Data shape ready in `safework_nsw_notifications`.
 
 **Still gated** (owner needs to supply source material before starting):
 - **WI-05 RIDDOR F2508 PDF** — HSE F2508 visual reference.
 
-**WI-06 PDF follow-up cold files:**
-- `server/services/pdf/safework_nsw.js` — new renderer (US Letter portrait, mirror the osha_301 page structure). Sections: header (NSW number + event date + PCBU + site), s.35 categories, sub-categories with verbatim labels resolved from the lookup tables, narrative, s.39 site preservation, phone/written submission record, footer noting "Submitted via SafeWork NSW phone line / online portal — this PDF is a record copy, not a substitute."
-- `server/routes/reports.js` — extend `GET /reports/safework-nsw/:incidentId` for `?format=pdf` branch.
-- `client/src/api/safework_nsw.js` — add `downloadSafeworkNswPdf(incidentId)` blob helper.
-- `client/src/pages/incidents/IncidentDetail.jsx` — Download-PDF button on the SafeworkNswCardRows.
-- Source: `docs/regulatory-sources/safework-nsw/whs-act-2011-nsw.pdf` (the Act doesn't prescribe a layout — design per the standing instruction).
+**WI-09 cold files for the next session:**
+- `server/services/pdf/generic_incident.js` — new renderer. US-Letter portrait. Reads from the incident detail + (post-WI-A) affected_persons + injuries. Reuse the pdfkit pattern from `services/pdf/osha_301.js` (manual word-wrap for narrative fields).
+- `server/routes/reports.js` — new `GET /reports/generic/:incidentId?format=pdf` route. Framework-gated on the `generic` framework, OR fall back to "always available" since it's the universal floor — owner decision.
+- `client/src/api/reports.js` — add `getGenericIncidentPdf(incidentId)` blob helper.
+- `client/src/pages/incidents/IncidentDetail.jsx` — Download-PDF button alongside the 301 button, but visible for non-recordable incidents too.
+- No new tables. No regulatory text to cite verbatim; the renderer designs its own field set from the existing incident shape.
 
 **Smoke-test matrix** for any chunk: empty-org demo accounts `acme@sdsmanager.com` (OSHA-only US), `riddor-test@example.com` (RIDDOR-only UK), `sydney-test@example.com` (SafeWork-NSW-only AU), `priya@sdsmanager.com` (multi-framework SDS Manager Inc.).
 
@@ -194,6 +194,31 @@ Foundation (migrations + multer + Anthropic SDK), Site/Asset/Document/EntityLink
 ---
 
 ## Recent session log
+
+### 2026-05-12 (late night, ctd.) — WI-02 OSHA 300A PDF + ITA CSV + 1904.41 designation shipped; 45-assertion e2e + 36-test unit suite
+
+Chunk 12 closed in a single BE+FE commit. Owner-gated verbatim extraction of 1904.32 + 1904.41 + Appendix A/B happened BEFORE any code; owner approved the 4-gap-decision design (snapshot table, certifier_title allowlist, verbatim 1904.32(b)(3) affirmation, hardcoded designation arrays) and supplied the ITA spec PDF + CSV template.
+
+| Commit | Scope |
+|---|---|
+| (this) | Migration 029 `osha_300a_certified_summaries` (snapshot table) + partial UNIQUE index on `regulatory_certifications`. `services/osha_300a.js` (aggregate + atomic cert+snapshot writers + `CERTIFIER_TITLE_OPTIONS` with verbatim 1904.32(b)(4) labels + verbatim `OSHA_300A_AFFIRMATION_TEXT`). `services/osha_ita_designation.js` (Appendix A 65 entries + Appendix B 95 entries with `// Source: 88 FR 47347/47348` citations). `services/pdf/osha_300a.js` portrait renderer with verbatim affirmation under "By signing, you affirm the following statement, made under 29 CFR 1904.32(b)(3):". `services/csv/osha_ita.js` 28-column exporter — column headers VERBATIM from `osha_ita_summary_data_csv_template-revised.csv`, RFC 4180 encoding only (no apostrophe doubling — owner reconciled this was a misread of the spec), `zip` + `ein` quoted unconditionally for leading-zero preservation. `services/csv/osha_ita_validator.js` enforces every per-field rule (length, format, integer-only) + 7 cross-field rules from spec p.8 + 500..<8760 hours/employee bounds + non-contiguous size enum {1, 21, 22, 3} per 2023-10-17 changelog + establishment_type enum with verbatim spec wording. 3 new routes: `?format=pdf`, `?format=csv`, `/ita-designation`. Cert route now requires `certifier_title_key` (4-key allowlist); creates cert + snapshot atomically. 3 new audit verbs. FE: Download-PDF + Download-ITA-CSV buttons on `Osha300AReport` panel; 1904.41 designation banner above the cases grid; `CertifyOsha300AModal` becomes a dropdown of the 4 verbatim Act labels with the affirmation header. 36-test `osha-ita-csv.test.js` unit suite (column-header parity gate, all 7 cross-field rules, all designation branches, Appendix A/B spot-checks). 45-assertion `wi02-e2e.sh` covering cert workflow validation + atomic snapshot creation + PDF download + CSV download + wire-level header parity + ITA validator + framework gate + cross-tenant + activity_log + WI-C hash chain. roadmap.md + implementation-plan.md updates. |
+
+**Hallucination-risk discipline:**
+- Verbatim ss.1904.32 + 1904.41 + Appendix A + Appendix B owner-reviewed BEFORE any code.
+- Caught + resolved 4 discrepancies between user-supplied summary + the spec PDF (EIN column name, apostrophe doubling, establishment_type wording, size codes). Owner reconciled all 4 before code was written.
+- Every Appendix A/B entry traces to verbatim Act text in the source PDF.
+- ITA CSV column headers parsed from the official OSHA template, not from data-model field names. The unit test makes this drift detectable.
+- All 7 spec p.8 cross-field rules implemented + tested.
+
+**Test results** (full sweep): wi02-e2e 45/45, wi06-e2e 57/57, wi07-e2e 46/46, wi08-e2e 19/19, wi04-e2e 49/49, wib-e2e 42/42, node:test 98/98 (12 ABN + 36 ITA-CSV + 23 RIDDOR + 27 frameworks), wia 77/78 (F1 unchanged), Vite build clean.
+
+**Carry-forward TODOs documented in WI-02 spec:**
+- EIN capture at cert time (v1 takes via query string at export).
+- City/state/zip column split on `sites.address` (v1 takes via query string).
+- WI-06 PDF follow-up still owed.
+- 1904.41(b)(6) partial-exemption detection out of scope.
+
+**Servers running.** Branch `backend` at this turn's commit.
 
 ### 2026-05-12 (late night, ctd.) — WI-06 SafeWork NSW engine + tables + routes + FE shipped (PDF deferred); 57-assertion e2e
 

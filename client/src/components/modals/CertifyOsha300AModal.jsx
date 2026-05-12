@@ -1,28 +1,44 @@
 // CertifyOsha300AModal.jsx — OSHA 1904.32 annual summary sign-off.
 //
-// The 300A must be signed by a "company executive" before posting (Feb 1).
-// We capture: typed name (must match account name — OSHA-style "wet
-// signature" stand-in), executive title (free text), and the affirmation
-// statement (read-only, server-defined). The cert flows to
-// regulatory_certifications + activity_log.
+// Updated for WI-02:
+//   • Title becomes a dropdown of the 4 keys per 29 CFR 1904.32(b)(4)
+//     (owner / corporate_officer / highest_ranking_official /
+//     immediate_supervisor_of_highest_ranking). The selected key is
+//     submitted to the BE; the BE looks up the verbatim Act label and
+//     stores both on the certified-snapshot row.
+//   • Affirmation text is the verbatim 1904.32(b)(3) wording, shown
+//     under the header "By signing, you affirm the following statement,
+//     made under 29 CFR 1904.32(b)(3):".
+//   • Sign-then-snapshot: server creates regulatory_certifications +
+//     osha_300a_certified_summaries atomically; modal closes on 201.
 //
-// Phase 2 W6 F6.1.
+// Phase 2 W6 F6.1 + WI-02.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '../shared/Icon';
 import { useAuth } from '../../context/AuthContext';
-import { certifyOsha300A } from '../../api/reports';
+import { certifyOsha300A, getOsha300A } from '../../api/reports';
 
 export default function CertifyOsha300AModal({ siteId, year, siteName, affirmationText, onCancel, onCertified }) {
   const { user } = useAuth();
   const [typedName, setTypedName] = useState('');
-  const [title, setTitle] = useState(user?.job_title || '');
+  const [titleKey, setTitleKey] = useState('highest_ranking_official');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  // certifier_title_options come from the JSON branch of /reports/osha-300a.
+  // The 300A panel already loaded that data; we fetch fresh here in case
+  // the modal is opened directly.
+  const [titleOptions, setTitleOptions] = useState([]);
+
+  useEffect(() => {
+    getOsha300A({ site_id: siteId, year })
+      .then(d => setTitleOptions(d.certifier_title_options || []))
+      .catch(() => {});
+  }, [siteId, year]);
 
   const expected = (user?.name || '').trim();
   const nameMatches = typedName.trim().toLowerCase() === expected.toLowerCase();
-  const canSubmit = nameMatches && title.trim().length > 0 && !submitting;
+  const canSubmit = nameMatches && titleKey && !submitting;
 
   const submit = async () => {
     setSubmitting(true);
@@ -32,7 +48,7 @@ export default function CertifyOsha300AModal({ siteId, year, siteName, affirmati
         site_id: Number(siteId),
         year: Number(year),
         typed_name: typedName.trim(),
-        certifier_title: title.trim(),
+        certifier_title_key: titleKey,
       });
       onCertified(cert);
     } catch (e) {
@@ -54,10 +70,12 @@ export default function CertifyOsha300AModal({ siteId, year, siteName, affirmati
         </div>
         <div className="modal-body">
           <div className="cert-affirmation">
-            <div className="cert-affirmation-label">Affirmation statement</div>
+            <div className="cert-affirmation-label">
+              By signing, you affirm the following statement, made under 29 CFR 1904.32(b)(3):
+            </div>
             <p className="cert-affirmation-text">{affirmationText}</p>
             <div className="cert-affirmation-meta">
-              Per 29 CFR 1904.32 — must be signed by a company executive before posting Feb 1.
+              Once signed, the column totals are frozen into a certified snapshot. The 300 Log itself remains updateable per 29 CFR 1904.33(b)(1), but the posted 300A summary must not be altered (29 CFR 1904.32(b)(5)).
             </div>
           </div>
 
@@ -78,12 +96,13 @@ export default function CertifyOsha300AModal({ siteId, year, siteName, affirmati
             </div>
             <div className="field">
               <label className="label">Executive title <span className="req">*</span></label>
-              <input
-                className="input"
-                placeholder="e.g. EHS Lead, VP of Operations"
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-              />
+              <select className="select" value={titleKey} onChange={e => setTitleKey(e.target.value)}>
+                {titleOptions.length === 0 && <option value="">Loading…</option>}
+                {titleOptions.map(opt => (
+                  <option key={opt.key} value={opt.key}>{opt.label}</option>
+                ))}
+              </select>
+              <span className="helper">Per 29 CFR 1904.32(b)(4) — only these four titles may certify.</span>
             </div>
           </div>
 

@@ -892,16 +892,65 @@ function Osha300AReport({ siteId }) {
   const { user } = useAuth();
   const canCertify = ELEVATED_ROLES.has(user?.role);
   const [data, setData] = useState(null);
+  const [designation, setDesignation] = useState(null);
   const [showCertify, setShowCertify] = useState(false);
   const [toast, setToast] = useState(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingCsv, setDownloadingCsv] = useState(false);
 
   const load = () => {
     if (siteId) {
       setData(null);
       getOsha300A({ site_id: siteId }).then(setData).catch(() => {});
+      // WI-02: ITA designation lookup (1904.41 Appendix A/B + 250+).
+      import('../../api/reports').then(m => {
+        if (m.getOshaItaDesignation) {
+          m.getOshaItaDesignation({ site_id: siteId })
+            .then(setDesignation).catch(() => setDesignation(null));
+        }
+      });
     }
   };
   useEffect(load, [siteId]);
+
+  const downloadCertifiedFile = async (format) => {
+    if (!data?.snapshot?.has_snapshot && format === 'csv') {
+      setToast('Certify the 300A summary before generating the ITA CSV.');
+      setTimeout(() => setToast(null), 3500);
+      return;
+    }
+    const setBusy = format === 'pdf' ? setDownloadingPdf : setDownloadingCsv;
+    setBusy(true);
+    try {
+      const params = new URLSearchParams({ site_id: String(siteId), year: String(data.year), format }).toString();
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`/api/reports/osha-300a?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `Download failed: ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      let filename = `osha-300a-${data.year}.${format}`;
+      const cd = resp.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      if (m) filename = m[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setToast(e.message || 'Download failed');
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!data) return <ReportLoading/>;
 
@@ -914,7 +963,27 @@ function Osha300AReport({ siteId }) {
           <div className="rpt-panel-title">OSHA 300A · Annual Summary</div>
           <div className="rpt-panel-sub">{data.site?.name} · Calendar year {data.year}</div>
         </div>
-        <div className="rpt-300a-cert-area">
+        <div className="rpt-300a-cert-area" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => downloadCertifiedFile('pdf')}
+            disabled={downloadingPdf}
+            title={data.snapshot?.has_snapshot
+              ? 'Download the certified Form 300A as PDF (29 CFR 1904.32(b)(2))'
+              : 'Download DRAFT Form 300A PDF — not for posting until certified'}
+          >
+            <Icon name="download" size={13}/>{downloadingPdf ? 'Generating…' : 'PDF'}
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => downloadCertifiedFile('csv')}
+            disabled={downloadingCsv || !data.snapshot?.has_snapshot}
+            title={data.snapshot?.has_snapshot
+              ? 'Download the ITA-compatible CSV for electronic submission (29 CFR 1904.41)'
+              : 'Certify the 300A summary first — ITA submission requires a signed snapshot'}
+          >
+            <Icon name="export" size={13}/>{downloadingCsv ? 'Generating…' : 'ITA CSV'}
+          </button>
           {data.certification ? (
             <div className="rpt-300a-cert-stamp">
               <div className="rpt-300a-cert-stamp-icon"><Icon name="check" size={14}/></div>
@@ -922,7 +991,7 @@ function Osha300AReport({ siteId }) {
                 <div className="rpt-300a-cert-stamp-title">Signed</div>
                 <div className="rpt-300a-cert-stamp-meta">
                   by <b>{data.certification.certifier_name}</b>
-                  {data.certification.certifier_title ? `, ${data.certification.certifier_title}` : ''}
+                  {data.certification.certifier_title_label ? `, ${data.certification.certifier_title_label}` : (data.certification.certifier_title || '')}
                   {' · '}
                   {formatDate(data.certification.signed_at)}
                 </div>
@@ -937,6 +1006,42 @@ function Osha300AReport({ siteId }) {
           )}
         </div>
       </div>
+      {/* WI-02: 1904.41 designation banner — surfaces whether the
+          establishment must e-submit to OSHA. Reuses card/panel tokens. */}
+      {designation?.designation && (
+        <div
+          className="rpt-panel-banner"
+          style={{
+            padding: '10px 16px',
+            margin: '0 0 12px 0',
+            background: designation.designation.required
+              ? 'var(--sds-brand-primary-tint)'
+              : 'var(--sds-bg-surface-alt)',
+            borderLeft: `3px solid ${designation.designation.required ? 'var(--sds-brand-primary)' : 'var(--sds-border)'}`,
+            borderRadius: 'var(--sds-radius-sm)',
+            fontSize: 12,
+          }}
+        >
+          {designation.designation.required ? (
+            <>
+              <b>Electronic submission required.</b> Per {designation.designation.reg_ref},
+              this establishment ({designation.site.naics_code ? `NAICS ${designation.site.naics_code}, ` : ''}
+              {designation.annual_avg_employees} employees) must electronically submit
+              <b> {designation.designation.submission_type}</b> information to OSHA.
+              {designation.next_submission_deadline ? <> {designation.next_submission_deadline}.</> : null}
+            </>
+          ) : (
+            <>
+              <span style={{ color: 'var(--sds-fg-secondary)' }}>
+                Per 29 CFR 1904.41(b)(1), routine electronic submission is not required
+                for this establishment ({designation.site.naics_code ? `NAICS ${designation.site.naics_code}, ` : ''}
+                {designation.annual_avg_employees} employees). OSHA may still request
+                data ad-hoc under 1904.41(a)(3).
+              </span>
+            </>
+          )}
+        </div>
+      )}
       {showCertify && createPortal(
         <CertifyOsha300AModal
           siteId={siteId}

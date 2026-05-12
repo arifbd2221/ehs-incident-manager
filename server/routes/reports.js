@@ -25,6 +25,17 @@ import {
   setPcbu as setNswPcbu,
 } from '../services/safework_nsw.js';
 import { validateAbn } from '../services/abn_validator.js';
+import {
+  aggregate300A,
+  createCertifiedSnapshot,
+  getCertifiedSnapshot,
+  CERTIFIER_TITLE_OPTIONS,
+  OSHA_300A_AFFIRMATION_TEXT,
+} from '../services/osha_300a.js';
+import { itaDesignation } from '../services/osha_ita_designation.js';
+import { renderOsha300APdf } from '../services/pdf/osha_300a.js';
+import { generateItaCsv, buildItaRow } from '../services/csv/osha_ita.js';
+import { validateItaSubmission } from '../services/csv/osha_ita_validator.js';
 
 const router = Router();
 
@@ -42,8 +53,10 @@ const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
 const AUDIT_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 const canSeeAudit = (user) => AUDIT_ROLES.has(user?.role);
 
-const OSHA_300A_AFFIRMATION =
-  'I certify that I have examined this document and that to the best of my knowledge the entries are true, accurate, and complete.';
+// Legacy alias retained for any callers that still reference the
+// pre-WI-02 constant. New code reads OSHA_300A_AFFIRMATION_TEXT from
+// services/osha_300a.js — the verbatim 29 CFR 1904.32(b)(3) wording.
+const OSHA_300A_AFFIRMATION = OSHA_300A_AFFIRMATION_TEXT;
 
 // Site-scoped metrics for live KPI cards (SiteDetail, embed components).
 // Returns the same `calculateMetrics` shape used by /osha-300a, but standalone
@@ -134,97 +147,237 @@ router.get('/osha-300', (req, res) => {
 });
 
 router.get('/osha-300a', (req, res) => {
-  const { site_id, year } = req.query;
+  const { site_id, year, format } = req.query;
   const currentYear = year || new Date().getFullYear() - 1;
   const orgId = req.user.org_id;
 
   if (!site_id) return res.status(400).json({ error: 'site_id is required' });
 
-  const metrics = calculateMetrics(Number(site_id), Number(currentYear));
+  const site = db.prepare('SELECT * FROM sites WHERE id = ? AND org_id = ?')
+    .get(Number(site_id), orgId);
+  if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  const cases = db.prepare(`
-    SELECT
-      SUM(classification_death) as deaths,
-      SUM(classification_days_away) as days_away,
-      SUM(classification_job_transfer) as job_transfer,
-      SUM(classification_other) as other_recordable,
-      SUM(days_away_count) as total_days_away,
-      SUM(days_restricted_count) as total_days_restricted
-    FROM osha_300_log WHERE site_id = ? AND calendar_year = ?
-  `).get(Number(site_id), Number(currentYear));
+  // WI-02: prefer the certified snapshot when one exists. Live aggregate
+  // is the DRAFT view for in-progress summaries. Per 29 CFR 1904.32(b)(5)
+  // the posted summary must not be altered; the snapshot is the
+  // immutable artifact.
+  const snapshot = getCertifiedSnapshot(orgId, site.id, Number(currentYear));
 
-  const types = db.prepare(`
-    SELECT injury_type, COUNT(*) as count
-    FROM osha_300_log WHERE site_id = ? AND calendar_year = ?
-    GROUP BY injury_type
-  `).all(Number(site_id), Number(currentYear));
-
-  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(Number(site_id));
-
-  // Surface the 300A signed cert for this site/year if one exists. The
-  // UI uses this to show "Signed by X on Y" instead of the Certify button.
-  const certification = db.prepare(`
-    SELECT rc.id, rc.signed_at, rc.affirmation_text, rc.certifier_title,
-           u.name as certifier_name, u.initials as certifier_initials
-    FROM regulatory_certifications rc
-    LEFT JOIN users u ON u.id = rc.certifier_user_id
-    WHERE rc.type = 'osha_300a' AND rc.site_id = ? AND rc.period_year = ?
-    ORDER BY rc.signed_at DESC LIMIT 1
-  `).get(Number(site_id), Number(currentYear));
-
-  // OSHA 300A line 13/14: hours + employee count come from work_hours (live
-  // sum / period-length-weighted avg). When work_hours has no entries for the
-  // year, fall back to the onboarding-time `sites.annual_avg_employees` so a
-  // brand-new tenant doesn't see "0 employees" on a 300A draft. Hours have no
-  // sensible fallback — empty work_hours means zero recorded hours.
+  const live = aggregate300A({ orgId, siteId: site.id, periodYear: Number(currentYear) });
+  const metrics = calculateMetrics(site.id, Number(currentYear));
+  const liveAvgEmployees = metrics.annualAvgEmployees || site.annual_avg_employees || 0;
   const liveHours = metrics.totalHoursWorked || 0;
-  const liveAvgEmployees = metrics.annualAvgEmployees || site?.annual_avg_employees || 0;
 
+  // Helper: pick certified totals when present, else live aggregate.
+  const totalsFor = snapshot ? snapshot : live;
+
+  // --- PDF / CSV download branches ---
+  if (format === 'pdf' || format === 'csv') {
+    const baseFn = (site.establishment_id || site.name || 'site').toString().replace(/[^A-Za-z0-9_.-]/g, '_');
+    const company = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+
+    if (format === 'pdf') {
+      const filename = `osha-300a-${baseFn}-${currentYear}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      writeActivity({
+        org_id: orgId, entity_type: 'system', entity_id: null,
+        action: 'osha_300a_pdf_downloaded',
+        description: `downloaded OSHA 300A PDF for ${site.name} (CY ${currentYear})${snapshot ? ' — certified' : ' — DRAFT'}`,
+        user_id: req.user.id,
+        metadata: {
+          site_id: site.id, period_year: Number(currentYear),
+          certified: !!snapshot,
+          certification_id: snapshot?.certification_id || null,
+        },
+        ...auditCtx(req),
+      });
+      return renderOsha300APdf(res, {
+        year: Number(currentYear),
+        establishmentName: snapshot?.establishment_name || site.name,
+        establishmentAddress: snapshot?.establishment_address || site.address,
+        naicsCode: snapshot?.naics_code || site.naics_code,
+        ein: snapshot?.ein || null,
+        annualAvgEmployees: snapshot?.annual_avg_employees ?? liveAvgEmployees,
+        totalHoursWorked: snapshot?.total_hours_worked ?? liveHours,
+        totals: snapshot ? snapshot : live,
+        certified: !!snapshot,
+        cert: snapshot ? {
+          signed_at: snapshot.signed_at,
+          certifier_name: snapshot.certifier_name,
+          certifier_title_label: snapshot.certifier_title_label,
+        } : null,
+        companyName: company?.name || '',
+      });
+    }
+
+    if (format === 'csv') {
+      // ITA CSV upload format per 29 CFR 1904.41. Requires a certified
+      // snapshot — submitting un-certified totals would violate the
+      // sign-then-submit ordering of 1904.32(b)(3) + 1904.41(a)(1).
+      if (!snapshot) {
+        return res.status(409).json({
+          error: 'OSHA ITA CSV requires a certified 300A snapshot. Certify the summary before generating the submission file.',
+          spec_ref: '29 CFR 1904.32(b)(3), 29 CFR 1904.41(a)(1)',
+        });
+      }
+      // Pull the supplemental fields not on the cert snapshot: company
+      // name + city/state/zip + industry_description + size +
+      // establishment_type + change_reason. v1 takes them from query
+      // string so the FE can pre-fill from a confirmation modal.
+      const extra = {
+        company_name: req.query.company_name || company?.name || '',
+        ein: req.query.ein || '',
+        city: req.query.city || '',
+        state: req.query.state || '',
+        zip: req.query.zip || '',
+        industry_description: req.query.industry_description || '',
+        size: req.query.size ? Number(req.query.size) : null,
+        establishment_type: req.query.establishment_type ? Number(req.query.establishment_type) : null,
+        change_reason: req.query.change_reason || '',
+      };
+      const row = buildItaRow(snapshot, extra);
+      const validation = validateItaSubmission(row);
+      if (!validation.ok) {
+        return res.status(400).json({
+          error: 'ITA submission validation failed — OSHA would reject this file.',
+          ita_validation_errors: validation.errors,
+        });
+      }
+      const csv = generateItaCsv([row]);
+      const filename = `osha-ita-300a-${baseFn}-${currentYear}.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      writeActivity({
+        org_id: orgId, entity_type: 'system', entity_id: null,
+        action: 'osha_ita_csv_downloaded',
+        description: `downloaded OSHA ITA CSV for ${site.name} (CY ${currentYear})`,
+        user_id: req.user.id,
+        metadata: {
+          site_id: site.id, period_year: Number(currentYear),
+          certification_id: snapshot.certification_id,
+        },
+        ...auditCtx(req),
+      });
+      return res.send(csv);
+    }
+  }
+
+  // --- JSON branch (default) ---
+  // Backward-compat shape. New `snapshot` field added so the FE can
+  // detect "live vs certified" without an extra request.
   res.json({
     year: Number(currentYear),
     site: {
-      name: site?.name,
-      establishment_id: site?.establishment_id,
-      naics_code: site?.naics_code,
+      name: site.name,
+      establishment_id: site.establishment_id,
+      naics_code: site.naics_code,
       annual_avg_employees: liveAvgEmployees,
       total_hours_worked: liveHours,
     },
     cases: {
-      deaths: cases?.deaths || 0,
-      days_away: cases?.days_away || 0,
-      job_transfer: cases?.job_transfer || 0,
-      other_recordable: cases?.other_recordable || 0,
-      total_days_away: cases?.total_days_away || 0,
-      total_days_restricted: cases?.total_days_restricted || 0,
+      deaths: totalsFor.total_deaths || 0,
+      days_away: totalsFor.total_days_away_cases || 0,
+      job_transfer: totalsFor.total_job_transfer_cases || 0,
+      other_recordable: totalsFor.total_other_recordable_cases || 0,
+      total_days_away: totalsFor.total_days_away || 0,
+      total_days_restricted: totalsFor.total_days_restricted || 0,
     },
-    types,
+    types: {
+      injuries: totalsFor.total_injuries || 0,
+      skin_disorders: totalsFor.total_skin_disorders || 0,
+      respiratory: totalsFor.total_respiratory || 0,
+      poisonings: totalsFor.total_poisonings || 0,
+      hearing_loss: totalsFor.total_hearing_loss || 0,
+      other_illnesses: totalsFor.total_other_illnesses || 0,
+    },
     metrics,
-    certification: certification || null,
-    affirmation_text: OSHA_300A_AFFIRMATION,
+    certification: snapshot
+      ? {
+          id: snapshot.certification_id,
+          signed_at: snapshot.signed_at,
+          affirmation_text: snapshot.affirmation_text,
+          certifier_title_key: snapshot.certifier_title_key,
+          certifier_title_label: snapshot.certifier_title_label,
+          certifier_name: snapshot.certifier_name,
+          certifier_initials: snapshot.certifier_initials,
+        }
+      : null,
+    snapshot: snapshot ? { has_snapshot: true, snapshot_id: snapshot.id, case_count: JSON.parse(snapshot.case_ids_snapshot || '[]').length } : { has_snapshot: false },
+    affirmation_text: OSHA_300A_AFFIRMATION_TEXT,
+    certifier_title_options: CERTIFIER_TITLE_OPTIONS,
   });
 });
 
-// 300A annual sign-off (per OSHA 1904.32). Elevated roles only.
-// Body: { site_id, year, typed_name, certifier_title }
-//   typed_name must match the user's name (case-insensitive trim) — that's
-//   the OSHA-style "wet signature" stand-in. The activity_log row uses
-//   entity_type='system' since 300A spans an entire site/year and isn't
-//   tied to any single incident.
+// WI-02: ITA designation lookup per 29 CFR 1904.41 (a)(1)(i)/(ii) + (a)(2).
+// GET /reports/osha-300a/ita-designation?site_id=X[&employees=N]
+// Surfaces whether the establishment must e-submit to OSHA.
+router.get('/osha-300a/ita-designation', (req, res) => {
+  const { site_id, employees } = req.query;
+  if (!site_id) return res.status(400).json({ error: 'site_id is required' });
+  const site = db.prepare('SELECT id, name, naics_code, annual_avg_employees FROM sites WHERE id = ? AND org_id = ?')
+    .get(Number(site_id), req.user.org_id);
+  if (!site) return res.status(404).json({ error: 'Site not found' });
+  // employees override (query param) lets the FE preview "what if our
+  // headcount jumps to X"; default is the live work_hours / sites
+  // figure used elsewhere.
+  let employeeCount = employees ? Number(employees) : site.annual_avg_employees;
+  if (!employeeCount) {
+    const m = calculateMetrics(site.id);
+    employeeCount = m.annualAvgEmployees || 0;
+  }
+  const result = itaDesignation(site.naics_code, employeeCount);
+  res.json({
+    site: { id: site.id, name: site.name, naics_code: site.naics_code },
+    annual_avg_employees: employeeCount,
+    designation: result,
+    next_submission_deadline: result.required
+      ? `March 2, ${new Date().getFullYear() + 1} — covering CY ${new Date().getFullYear()} per 29 CFR 1904.41(c)`
+      : null,
+  });
+});
+
+// 300A annual sign-off per 29 CFR 1904.32. Elevated roles only.
+// Body: { site_id, year, typed_name, certifier_title_key }
+//   - typed_name must match the user's account name (case-insensitive
+//     trim) — the OSHA-style "wet signature" stand-in.
+//   - certifier_title_key must be one of the 4 keys per 1904.32(b)(4)
+//     (owner / corporate_officer / highest_ranking_official /
+//     immediate_supervisor_of_highest_ranking). Pre-WI-02 callers can
+//     also pass a `certifier_title` legacy field, which is treated as a
+//     candidate key for backward compatibility.
+// Atomic: creates the regulatory_certifications row AND an
+// osha_300a_certified_summaries snapshot (WI-02 / 1904.32(b)(5)) in a
+// single tx. The snapshot freezes the column totals that were certified
+// against, so future 300 Log edits cannot retroactively alter the
+// posted summary.
 router.post('/osha-300a/certify', (req, res) => {
   if (!isElevated(req.user)) {
     return res.status(403).json({ error: 'Only an elevated role can certify the 300A summary.' });
   }
-  const { site_id, year, typed_name, certifier_title } = req.body || {};
-  if (!site_id || !year || !typed_name || !certifier_title) {
-    return res.status(400).json({ error: 'site_id, year, typed_name, and certifier_title are required.' });
+  const { site_id, year, typed_name } = req.body || {};
+  const certifierTitleKey = req.body?.certifier_title_key || req.body?.certifier_title;
+  if (!site_id || !year || !typed_name || !certifierTitleKey) {
+    return res.status(400).json({
+      error: 'site_id, year, typed_name, and certifier_title_key are required.',
+      allowed_certifier_title_keys: CERTIFIER_TITLE_OPTIONS.map(o => o.key),
+    });
   }
 
-  const site = db.prepare('SELECT id, name FROM sites WHERE id = ? AND org_id = ?').get(site_id, req.user.org_id);
+  // 1904.32(b)(4) allowlist gate. Fail loud rather than store free-text
+  // titles that would defeat the dropdown contract.
+  const allowedKeys = new Set(CERTIFIER_TITLE_OPTIONS.map(o => o.key));
+  if (!allowedKeys.has(certifierTitleKey)) {
+    return res.status(400).json({
+      error: `certifier_title_key must be one of ${[...allowedKeys].join(', ')} per 29 CFR 1904.32(b)(4).`,
+    });
+  }
+
+  const site = db.prepare('SELECT * FROM sites WHERE id = ? AND org_id = ?')
+    .get(Number(site_id), req.user.org_id);
   if (!site) return res.status(404).json({ error: 'Site not found in your organization.' });
 
-  // OSHA-style: the certifier's typed name must match their account name.
-  // Loose match (trim + case-insensitive) so trailing spaces / case don't
-  // trip up an honest signer.
+  // Typed-name match (loose case-insensitive trim).
   const expected = (req.user.name || '').trim().toLowerCase();
   const actual = (typed_name || '').trim().toLowerCase();
   if (!expected || expected !== actual) {
@@ -233,8 +386,10 @@ router.post('/osha-300a/certify', (req, res) => {
     });
   }
 
-  // Idempotency: if already signed for this site/year, return the existing
-  // cert rather than 409. Easier UX — sign-once-per-year is the OSHA rule.
+  // Pre-check: already certified? Return 409 BEFORE running the
+  // aggregation + snapshot work. The partial UNIQUE on
+  // regulatory_certifications + the UNIQUE on osha_300a_certified_summaries
+  // would catch this anyway, but the upfront check gives a cleaner error.
   const existing = db.prepare(`
     SELECT id FROM regulatory_certifications WHERE type='osha_300a' AND site_id=? AND period_year=?
   `).get(Number(site_id), Number(year));
@@ -242,49 +397,62 @@ router.post('/osha-300a/certify', (req, res) => {
     return res.status(409).json({ error: `300A for ${site.name} ${year} is already signed.` });
   }
 
+  // Aggregate the live 300 Log + read employee count / hours from the
+  // metrics service. These values get frozen onto the snapshot.
+  const orgId = req.user.org_id;
+  const totals = aggregate300A({ orgId, siteId: site.id, periodYear: Number(year) });
+  const metrics = calculateMetrics(site.id, Number(year));
+  const annualAvgEmployees = metrics.annualAvgEmployees || site.annual_avg_employees || 0;
+  const totalHoursWorked = metrics.totalHoursWorked || 0;
+
   const ipAddress = req.ip || req.headers['x-forwarded-for'] || null;
   const userAgent = req.headers['user-agent'] || null;
 
-  const result = db.prepare(`
-    INSERT INTO regulatory_certifications (
-      type, site_id, period_year, certifier_user_id, certifier_title,
-      affirmation_text, ip_address, user_agent
-    ) VALUES ('osha_300a', ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    Number(site_id), Number(year), req.user.id,
-    certifier_title.trim(), OSHA_300A_AFFIRMATION,
-    ipAddress, userAgent,
-  );
+  let snapshotIds;
+  try {
+    snapshotIds = createCertifiedSnapshot({
+      orgId,
+      siteId: site.id,
+      periodYear: Number(year),
+      certifierUserId: req.user.id,
+      certifierTitleKey,
+      ipAddress, userAgent,
+      establishmentName: site.name,
+      establishmentAddress: site.address,
+      naicsCode: site.naics_code,
+      ein: req.body?.ein || null,
+      annualAvgEmployees,
+      totalHoursWorked,
+      totals,
+    });
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    throw err;
+  }
 
-  // Regulatory submission — capture ip + user-agent in the audit row so the
-  // inspector chain-of-custody narrative includes the originating session.
-  // The cert row itself already has ip_address + user_agent columns
-  // (migration 001); the activity_log mirror is the inspector-facing surface.
   writeActivity({
-    org_id: req.user.org_id,
+    org_id: orgId,
     entity_type: 'system',
     entity_id: null,
     action: 'osha_300a_signed',
-    description: `signed OSHA 300A for ${site.name} (CY ${year}) as "${certifier_title.trim()}"`,
+    description: `signed OSHA 300A for ${site.name} (CY ${year}) as "${certifierTitleKey}"`,
     user_id: req.user.id,
     metadata: {
-      certification_id: result.lastInsertRowid,
-      site_id: Number(site_id),
+      certification_id: snapshotIds.certification_id,
+      snapshot_id: snapshotIds.snapshot_id,
+      site_id: site.id,
       period_year: Number(year),
+      certifier_title_key: certifierTitleKey,
+      case_count: totals.case_ids_snapshot.length,
     },
     ip: ipAddress,
     user_agent: userAgent,
   });
 
-  const cert = db.prepare(`
-    SELECT rc.id, rc.signed_at, rc.affirmation_text, rc.certifier_title,
-           u.name as certifier_name, u.initials as certifier_initials
-    FROM regulatory_certifications rc
-    LEFT JOIN users u ON u.id = rc.certifier_user_id
-    WHERE rc.id = ?
-  `).get(result.lastInsertRowid);
-
-  res.status(201).json(cert);
+  const snapshot = getCertifiedSnapshot(orgId, site.id, Number(year));
+  res.status(201).json(snapshot);
 });
 
 router.post('/osha-300', (req, res) => {
