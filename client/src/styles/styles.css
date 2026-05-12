@@ -134,8 +134,9 @@ body {
   padding: 0 4px;
 }
 .nav-divider {
-  height: 1px; background: var(--sds-border);
-  margin: 8px 14px;
+  height: 2px; background: rgba(0,0,0,0.08);
+  margin: 10px 16px;
+  border-radius: 1px;
 }
 
 /* Settings accordion */
