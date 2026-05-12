@@ -4,6 +4,7 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../shared/Icon';
+import DatePicker from '../shared/DatePicker';
 import { completeSchedule } from '../../api/maintenance';
 import { uploadAttachments } from '../../api/incidents';
 
@@ -120,13 +121,7 @@ export default function CompleteModal({ schedule, onClose, onCompleted }) {
 
           <div className="field">
             <label className="label">Completed on</label>
-            <input
-              className="input"
-              type="date"
-              value={completedAt}
-              onChange={e => setCompletedAt(e.target.value)}
-              max={todayIso()}
-            />
+            <DatePicker value={completedAt} onChange={setCompletedAt} placeholder="Select date" />
             <span className="helper">Next due will roll forward by {schedule.interval_days} day{schedule.interval_days === 1 ? '' : 's'} from this date.</span>
           </div>
 

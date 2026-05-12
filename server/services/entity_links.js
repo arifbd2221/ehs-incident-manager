@@ -15,7 +15,7 @@ import db from '../db/connection.js';
 // Inspections are linkable polymorphically — they have no direct FK to other
 // entities, so cross-references travel exclusively via entity_links.
 export const LINKABLE_TYPES = new Set([
-  'incident', 'investigation', 'capa', 'asset', 'document', 'inspection',
+  'incident', 'investigation', 'capa', 'asset', 'document', 'inspection', 'risk',
 ]);
 
 /**
@@ -170,6 +170,17 @@ const ASSET_JOINS = `
   LEFT JOIN sites s ON s.id = a.site_id
 `;
 
+const RISK_FIELDS = `
+  r.id, r.risk_number, r.title, r.category, r.status,
+  r.inherent_severity, r.inherent_risk_level,
+  r.residual_severity, r.residual_risk_level,
+  r.created_at,
+  s.name AS site_name
+`;
+const RISK_JOINS = `
+  LEFT JOIN sites s ON s.id = r.site_id
+`;
+
 // Pull rows of `target_alias` table linked to (entity_type, entity_id) via
 // entity_links in either direction. Caller supplies the SELECT fields and
 // JOINs for display. Always org-scoped via the target row's org_id.
@@ -287,6 +298,15 @@ function inspectionsReferencing(entity_type, entity_id, orgId) {
   });
 }
 
+function risksReferencing(entity_type, entity_id, orgId) {
+  if (entity_type === 'risk') return [];
+  return polyJoinTo({
+    entity_type, entity_id,
+    target_type: 'risk', target_table: 'risks', target_alias: 'r',
+    select_fields: RISK_FIELDS, joins: RISK_JOINS, orgId,
+  });
+}
+
 function assetsReferencing(entity_type, entity_id, orgId) {
   if (entity_type === 'asset') return [];
 
@@ -312,7 +332,7 @@ function assetsReferencing(entity_type, entity_id, orgId) {
 
 export function referencesFor(entity_type, entity_id, orgId) {
   if (!LINKABLE_TYPES.has(entity_type)) {
-    return { incidents: [], investigations: [], capas: [], documents: [], inspections: [], assets: [] };
+    return { incidents: [], investigations: [], capas: [], documents: [], inspections: [], assets: [], risks: [] };
   }
   const eid = Number(entity_id);
   return {
@@ -322,6 +342,7 @@ export function referencesFor(entity_type, entity_id, orgId) {
     documents: documentsReferencing(entity_type, eid, orgId),
     inspections: inspectionsReferencing(entity_type, eid, orgId),
     assets: assetsReferencing(entity_type, eid, orgId),
+    risks: risksReferencing(entity_type, eid, orgId),
   };
 }
 

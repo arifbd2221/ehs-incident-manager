@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
+import DatePicker from '../../../components/shared/DatePicker';
 import SmartTextarea from '../../../components/shared/SmartTextarea';
 import { getUsers } from '../../../api/users';
 
@@ -61,7 +62,7 @@ export default function AssignCapaModal({ investigation, onCancel, onConfirm }) 
           </div>
           <div className="form-group">
             <label className="form-label">Due date</label>
-            <input className="form-input" type="date" value={form.due_date} onChange={e => update('due_date', e.target.value)}/>
+            <DatePicker value={form.due_date} onChange={v => update('due_date', v)} placeholder="Select due date" />
           </div>
           <div className="form-group">
             <label className="form-label">Description <span className="optional">(optional)</span></label>

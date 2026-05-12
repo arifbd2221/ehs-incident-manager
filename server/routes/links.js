@@ -26,6 +26,7 @@ const PARENT_TABLES = {
   asset: 'assets',
   document: 'documents',
   inspection: 'inspections',
+  risk: 'risks',
 };
 
 // Verify an entity exists in the user's org. Returns true/false.
@@ -117,7 +118,7 @@ router.get('/references', (req, res) => {
     return res.status(404).json({ error: 'Entity not found in your organization' });
   }
   const refs = referencesFor(type, Number(id), req.user.org_id);
-  const total = refs.incidents.length + refs.investigations.length + refs.capas.length + refs.documents.length + (refs.inspections?.length || 0) + (refs.assets?.length || 0);
+  const total = refs.incidents.length + refs.investigations.length + refs.capas.length + refs.documents.length + (refs.inspections?.length || 0) + (refs.assets?.length || 0) + (refs.risks?.length || 0);
   res.json({ ...refs, total });
 });
 

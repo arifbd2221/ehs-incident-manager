@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import Icon from '../shared/Icon';
+import DatePicker from '../shared/DatePicker';
 import { getSites } from '../../api/auth';
 import { TypePill, TYPES } from '../shared/Badges';
 import { checkCompleteness, getFieldMeta } from './voiceFieldConfig';
@@ -65,7 +66,7 @@ function GapInput({ fieldKey, meta, value, onChange, sites }) {
     );
   }
   if (meta.input === 'datetime') {
-    return <input type="datetime-local" className="input voice-gap-input" value={value} onChange={e => onChange(e.target.value)} />;
+    return <DatePicker value={value} onChange={onChange} showTime placeholder="Select date & time" />;
   }
   return <input type="text" className="input voice-gap-input" value={value} onChange={e => onChange(e.target.value)} placeholder={meta.prompt} />;
 }
@@ -254,7 +255,7 @@ export default function VoiceReviewCard({ extraction, onSubmit, onEditInWizard, 
       {/* Date/time — always visible, defaults to now */}
       <div className="voice-gap-row voice-dt-row">
         <label className="voice-gap-prompt">When did this happen?</label>
-        <input type="datetime-local" className="input voice-gap-input" value={datetime} onChange={e => setDatetime(e.target.value)} />
+        <DatePicker value={datetime} onChange={setDatetime} showTime placeholder="Select date & time" />
       </div>
 
       {/* Follow-up questions from AI */}

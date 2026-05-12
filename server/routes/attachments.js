@@ -10,9 +10,8 @@ const PARENT_TABLES = {
   incident: 'incidents',
   investigation: 'investigations',
   capa: 'capas',
-  // P3-OP1 chunk B — maintenance event evidence. The events table is
-  // immutable; attachments give inspectors photographic proof of work.
   maintenance_event: 'asset_maintenance_events',
+  risk: 'risks',
 };
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);

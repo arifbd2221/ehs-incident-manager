@@ -104,14 +104,21 @@ export default function TemplatesList() {
     <div className="page tp-page">
       {/* Hero */}
       <div className="tp-hero">
-        <div>
+        <div className="tp-hero-shapes" aria-hidden="true">
+          <span className="tp-shape tp-shape-circle" />
+          <span className="tp-shape tp-shape-rect" />
+          <span className="tp-shape tp-shape-dot" />
+          <span className="tp-shape tp-shape-ring" />
+          <span className="tp-shape tp-shape-square" />
+        </div>
+        <div style={{ position: 'relative', zIndex: 1 }}>
           <div className="tp-heading">Templates</div>
           <div className="tp-subtitle">
             Build inspection checklists
             <span className="count-badge">{summary.total} templates</span>
           </div>
         </div>
-        <div className="tp-hero-actions">
+        <div className="tp-hero-actions" style={{ position: 'relative', zIndex: 1 }}>
           {canEdit && (
             <button className="tp-btn-create" onClick={() => setShowCreate(true)}>
               <Icon name="plus" size={16} /> New Template
@@ -164,7 +171,16 @@ export default function TemplatesList() {
           ))
         ) : templates.length === 0 ? (
           <div className="tp-empty">
-            <div className="tp-empty-icon"><Icon name="file" size={28} /></div>
+            <div className="tp-empty-illustration" aria-hidden="true">
+              <span className="tp-ei-shape tp-ei-circle-1" />
+              <span className="tp-ei-shape tp-ei-circle-2" />
+              <span className="tp-ei-shape tp-ei-rect-1" />
+              <span className="tp-ei-shape tp-ei-rect-2" />
+              <span className="tp-ei-shape tp-ei-dot-1" />
+              <span className="tp-ei-shape tp-ei-dot-2" />
+              <span className="tp-ei-shape tp-ei-dot-3" />
+              <div className="tp-empty-icon"><Icon name="file" size={28} /></div>
+            </div>
             <div className="tp-empty-title">No templates yet</div>
             <div className="tp-empty-desc">Create your first inspection template to get started</div>
             {canEdit && (

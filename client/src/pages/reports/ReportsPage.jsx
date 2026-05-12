@@ -7,6 +7,7 @@ import { getIncidents } from '../../api/incidents';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
+import DatePicker from '../../components/shared/DatePicker';
 import CertifyOsha300AModal from '../../components/modals/CertifyOsha300AModal';
 import { formatDateShort, formatDate } from '../../utils/time';
 import { riddorCategoryLabel, riddorCategoryReg } from '../../utils/riddor';
@@ -320,6 +321,7 @@ function AuditLogReport() {
   const [exporting, setExporting] = useState(false);
   const [users, setUsers] = useState([]);
   const [actions, setActions] = useState([]);
+  const [advOpen, setAdvOpen] = useState(false);
 
   // Org user list for the actor picker.
   useEffect(() => {
@@ -424,109 +426,179 @@ function AuditLogReport() {
       </div>
 
       <div className="rpt-panel-body">
-        {/* Filter form — uses shared .field / .input / .select classes */}
-        <form className="al-filters" onSubmit={onApply}>
-          <div className="al-filter-row">
-            <div className="field">
-              <label className="label">
-                Entity types <span className="al-label-hint">multi-select</span>
-              </label>
-              <MultiPicker
-                items={ENTITY_TYPES.map(t => ({ key: t, label: labelForEntityType(t) }))}
-                value={filters.entity_types}
-                onChange={(next) => setF('entity_types', next)}
-                placeholder="All entities"
-                labelOne={(key) => labelForEntityType(key)}
-                labelMany={(n) => `${n} types selected`}
-                isGrouped={false}
-                disabled={!!filters.entity_number}
-              />
-            </div>
-            <div className="field">
-              <label className="label">
-                Entity number <span className="al-label-hint">overrides type</span>
-              </label>
-              <input
-                className="input"
-                placeholder="INC-2026-0150, CAPA-048, AST-2026-00001…"
-                value={filters.entity_number}
-                onChange={e => setF('entity_number', e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label className="label">
-                Actors <span className="al-label-hint">multi-select</span>
-              </label>
-              <MultiPicker
-                items={users.map(u => ({
-                  key: String(u.id),
-                  label: `${u.name}${u.role ? ` · ${u.role}` : ''}`,
-                }))}
-                value={filters.actor_ids}
-                onChange={(next) => setF('actor_ids', next)}
-                placeholder="Anyone"
-                labelOne={(key) => {
-                  const u = users.find(x => String(x.id) === String(key));
-                  return u ? u.name : key;
-                }}
-                labelMany={(n) => `${n} actors selected`}
-                isGrouped={false}
-              />
-            </div>
-            <div className="field">
-              <label className="label">
-                Actions <span className="al-label-hint">multi-select</span>
-              </label>
-              <MultiPicker
-                items={(filters.entity_types.length > 0
-                  ? actions.filter(a => filters.entity_types.includes(a.entity_type))
-                  : actions
-                ).map(a => ({
-                  // Composite key disambiguates same-named actions across
-                  // entity types (incident.created vs capa.created). Without
-                  // this, picking one would visually check both.
-                  key: `${a.entity_type}|${a.action}`,
-                  label: a.action,
-                  count: a.count,
-                  group: labelForEntityType(a.entity_type),
-                }))}
-                value={filters.actions}
-                onChange={(next) => setF('actions', next)}
-                placeholder="Any action"
-                labelOne={(key) => key.includes('|') ? key.split('|')[1] : key}
-                labelMany={(n) => `${n} actions selected`}
-                isGrouped={true}
-              />
-            </div>
-          </div>
-          <div className="al-filter-row">
-            <div className="field">
-              <label className="label">From (inclusive)</label>
-              <input className="input" type="date" value={filters.from} onChange={e => setF('from', e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="label">To (exclusive)</label>
-              <input className="input" type="date" value={filters.to} onChange={e => setF('to', e.target.value)} />
-            </div>
-            <div className="field" style={{ flex: 2 }}>
-              <label className="label">Description contains</label>
-              <input className="input" placeholder="search description text" value={filters.q} onChange={e => setF('q', e.target.value)} />
-            </div>
-            <div className="field al-filter-actions">
-              <button type="submit" className="btn btn-primary" disabled={loading}>
-                <Icon name="filter" size={14}/> Apply filters
-              </button>
-              <button type="button" className="btn btn-secondary" disabled={exporting || data.total === 0} onClick={downloadCsv}>
-                <Icon name="download" size={14}/> {exporting ? 'Exporting…' : 'Export CSV'}
-              </button>
-            </div>
-          </div>
-        </form>
+        {/* ── Zone A: Filter Toolbar ── */}
+        {(() => {
+          const activeCount = [
+            filters.entity_types.length > 0,
+            filters.actor_ids.length > 0,
+            filters.actions.length > 0,
+            !!filters.entity_number,
+            !!filters.from || !!filters.to,
+            !!filters.q,
+          ].filter(Boolean).length;
+
+          const chips = [];
+          if (filters.entity_types.length > 0)
+            chips.push({ label: 'Types', display: filters.entity_types.length === 1 ? labelForEntityType(filters.entity_types[0]) : `${filters.entity_types.length} types`, onClear: () => setF('entity_types', []) });
+          if (filters.actor_ids.length > 0)
+            chips.push({ label: 'Actors', display: filters.actor_ids.length === 1 ? (users.find(u => String(u.id) === String(filters.actor_ids[0]))?.name || filters.actor_ids[0]) : `${filters.actor_ids.length} actors`, onClear: () => setF('actor_ids', []) });
+          if (filters.actions.length > 0)
+            chips.push({ label: 'Actions', display: filters.actions.length === 1 ? (filters.actions[0].includes('|') ? filters.actions[0].split('|')[1] : filters.actions[0]) : `${filters.actions.length} actions`, onClear: () => setF('actions', []) });
+          if (filters.entity_number)
+            chips.push({ label: 'Entity #', display: filters.entity_number, onClear: () => setF('entity_number', '') });
+          if (filters.from || filters.to)
+            chips.push({ label: 'Date', display: `${filters.from || '…'} → ${filters.to || '…'}`, onClear: () => { setF('from', ''); setF('to', ''); } });
+          if (filters.q)
+            chips.push({ label: 'Search', display: `"${filters.q}"`, onClear: () => setF('q', '') });
+
+          const clearAll = () => setFilters({ entity_types: [], entity_number: '', actor_ids: [], actions: [], from: '', to: '', q: '' });
+
+          return (
+            <form onSubmit={onApply}>
+              <div className="al-toolbar">
+                <div className="al-toolbar-left">
+                  <Icon name="filter" size={16} />
+                  <span>Filters</span>
+                  {activeCount > 0 && <span className="al-count-badge">{activeCount}</span>}
+                  <button
+                    type="button"
+                    className={`al-adv-toggle${advOpen ? ' is-open' : ''}`}
+                    onClick={() => setAdvOpen(v => !v)}
+                  >
+                    Advanced
+                    <span className="al-adv-chevron"><Icon name="arrow" size={12} /></span>
+                  </button>
+                </div>
+                <div className="al-toolbar-right">
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={loading}>
+                    <Icon name="filter" size={14}/> Apply
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={exporting || data.total === 0} onClick={downloadCsv}>
+                    <Icon name="download" size={14}/> {exporting ? 'Exporting…' : 'Export CSV'}
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Zone B: Primary Filters ── */}
+              <div className="al-primary-grid">
+                <div className={`al-selector-card${filters.entity_types.length > 0 ? ' has-value' : ''}`}>
+                  <div className="al-selector-label">
+                    <span className="al-selector-icon"><Icon name="incidents" size={12}/></span>
+                    Entity Types
+                    <span className="al-label-hint">multi</span>
+                  </div>
+                  <MultiPicker
+                    items={ENTITY_TYPES.map(t => ({ key: t, label: labelForEntityType(t) }))}
+                    value={filters.entity_types}
+                    onChange={(next) => setF('entity_types', next)}
+                    placeholder="All entities"
+                    labelOne={(key) => labelForEntityType(key)}
+                    labelMany={(n) => `${n} types selected`}
+                    isGrouped={false}
+                    disabled={!!filters.entity_number}
+                  />
+                </div>
+                <div className={`al-selector-card${filters.actor_ids.length > 0 ? ' has-value' : ''}`}>
+                  <div className="al-selector-label">
+                    <span className="al-selector-icon"><Icon name="person" size={12}/></span>
+                    Actors
+                    <span className="al-label-hint">multi</span>
+                  </div>
+                  <MultiPicker
+                    items={users.map(u => ({
+                      key: String(u.id),
+                      label: `${u.name}${u.role ? ` · ${u.role}` : ''}`,
+                    }))}
+                    value={filters.actor_ids}
+                    onChange={(next) => setF('actor_ids', next)}
+                    placeholder="Anyone"
+                    labelOne={(key) => {
+                      const u = users.find(x => String(x.id) === String(key));
+                      return u ? u.name : key;
+                    }}
+                    labelMany={(n) => `${n} actors selected`}
+                    isGrouped={false}
+                  />
+                </div>
+                <div className={`al-selector-card${filters.actions.length > 0 ? ' has-value' : ''}`}>
+                  <div className="al-selector-label">
+                    <span className="al-selector-icon"><Icon name="pulse" size={12}/></span>
+                    Actions
+                    <span className="al-label-hint">multi</span>
+                  </div>
+                  <MultiPicker
+                    items={(filters.entity_types.length > 0
+                      ? actions.filter(a => filters.entity_types.includes(a.entity_type))
+                      : actions
+                    ).map(a => ({
+                      key: `${a.entity_type}|${a.action}`,
+                      label: a.action,
+                      count: a.count,
+                      group: labelForEntityType(a.entity_type),
+                    }))}
+                    value={filters.actions}
+                    onChange={(next) => setF('actions', next)}
+                    placeholder="Any action"
+                    labelOne={(key) => key.includes('|') ? key.split('|')[1] : key}
+                    labelMany={(n) => `${n} actions selected`}
+                    isGrouped={true}
+                  />
+                </div>
+              </div>
+
+              {/* ── Zone C: Active Filter Chips ── */}
+              {chips.length > 0 && (
+                <div className="al-chips">
+                  {chips.map((c, i) => (
+                    <span key={i} className="al-chip" style={{ animationDelay: `${i * 40}ms` }}>
+                      <span className="al-chip-label">{c.label}:</span> {c.display}
+                      <button type="button" className="al-chip-close" onClick={c.onClear}><Icon name="close" size={10}/></button>
+                    </span>
+                  ))}
+                  <button type="button" className="al-chips-clear" onClick={clearAll}>Clear all</button>
+                </div>
+              )}
+
+              {/* ── Zone D: Advanced Filters (collapsible) ── */}
+              <div className={`al-advanced-wrap${advOpen ? ' is-open' : ''}`}>
+                <div className="al-advanced-inner">
+                  <div className="al-advanced-grid">
+                    <div className="field">
+                      <label className="label">Entity number <span className="al-label-hint">overrides type</span></label>
+                      <input
+                        className="input"
+                        placeholder="INC-2026-0150, CAPA-048…"
+                        value={filters.entity_number}
+                        onChange={e => setF('entity_number', e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label className="label">Date range</label>
+                      <div className="al-date-pair">
+                        <div className="field">
+                          <DatePicker value={filters.from} onChange={v => setF('from', v)} placeholder="From" />
+                        </div>
+                        <div className="field">
+                          <DatePicker value={filters.to} onChange={v => setF('to', v)} placeholder="To" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label className="label">Description contains</label>
+                      <input className="input" placeholder="search description text" value={filters.q} onChange={e => setF('q', e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </form>
+          );
+        })()}
 
         {err && <div className="al-err"><Icon name="warning" size={14}/> {err}</div>}
 
-        <div className="al-meta">
-          <span><b>{data.total}</b> row{data.total === 1 ? '' : 's'} match these filters</span>
+        {/* ── Zone E: Results Meta Bar ── */}
+        <div className="al-results-bar">
+          <span className="al-results-count"><b>{data.total}</b> row{data.total === 1 ? '' : 's'} match these filters</span>
           {data.total > 0 && (
             <span className="al-meta-note">
               <Icon name="shield" size={12}/> Every export writes an <code>audit_log_exported</code> row with the filters used.
@@ -747,7 +819,7 @@ function Manual300Modal({ siteId, onClose, onSaved }) {
             <div className="field"><label className="label">Job title</label><input className="input" value={form.job_title} onChange={e => upd('job_title', e.target.value)}/></div>
           </div>
           <div className="field-row">
-            <div className="field"><label className="label">Injury / illness date <span className="req">*</span></label><input className="input" type="date" value={form.injury_date} onChange={e => upd('injury_date', e.target.value)}/></div>
+            <div className="field"><label className="label">Injury / illness date <span className="req">*</span></label><DatePicker value={form.injury_date} onChange={v => upd('injury_date', v)} placeholder="Select date" /></div>
             <div className="field"><label className="label">Where event occurred</label><input className="input" value={form.location} onChange={e => upd('location', e.target.value)}/></div>
           </div>
           <div className="field"><label className="label">Description</label><textarea className="textarea" value={form.description} onChange={e => upd('description', e.target.value)} rows={2}/></div>

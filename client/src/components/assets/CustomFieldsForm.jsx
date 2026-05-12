@@ -7,6 +7,7 @@
 // Phase 2 W7 E7.1.
 
 import Icon from '../shared/Icon';
+import DatePicker from '../shared/DatePicker';
 
 export default function CustomFieldsForm({ fields, values, onChange, error }) {
   if (!fields || fields.length === 0) return null;
@@ -75,13 +76,7 @@ function CustomField({ field, value, onChange }) {
           onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))}
         />
       ) : field.field_type === 'date' ? (
-        <input
-          id={id}
-          className="input"
-          type="date"
-          value={value || ''}
-          onChange={e => onChange(e.target.value)}
-        />
+        <DatePicker value={value || ''} onChange={onChange} placeholder="Select date" />
       ) : (
         <input
           id={id}

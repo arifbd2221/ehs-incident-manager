@@ -27,6 +27,7 @@ const labelFor = {
   capa: 'CAPA',
   document: 'document',
   inspection: 'inspection',
+  risk: 'risk',
 };
 
 const INSPECTION_STATUS_PILL = { in_progress: 'pill-info', completed: 'pill-success', abandoned: 'pill-gray' };
@@ -46,7 +47,7 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
     setLoading(true);
     getReferences(entityType, entityId)
       .then(setRefs)
-      .catch(() => setRefs({ incidents: [], investigations: [], capas: [], documents: [], inspections: [], assets: [], total: 0 }))
+      .catch(() => setRefs({ incidents: [], investigations: [], capas: [], documents: [], inspections: [], assets: [], risks: [], total: 0 }))
       .finally(() => setLoading(false));
   }, [entityType, entityId, tick]);
 
@@ -79,7 +80,8 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
     (refs.capas?.length || 0) +
     (refs.documents?.length || 0) +
     (refs.inspections?.length || 0) +
-    (refs.assets?.length || 0)
+    (refs.assets?.length || 0) +
+    (refs.risks?.length || 0)
   );
 
   const fullContent = (
@@ -244,6 +246,31 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
                 <div className="refby-status">
                   <span className={`pill ${r.active === 0 ? 'pill-gray' : 'pill-success'}`}>{r.active === 0 ? 'inactive' : 'active'}</span>
                 </div>
+                <Unlink linkId={r.link_id}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {refs.risks && refs.risks.length > 0 && (
+        <div className="refby-group">
+          <div className="refby-group-h">
+            <Icon name="fire" size={13} /> Risks <span className="refby-group-count">{refs.risks.length}</span>
+          </div>
+          <div className="refby-rows">
+            {refs.risks.map(r => (
+              <div key={`rsk-${r.id}`} className="refby-row" onClick={() => navigate(`/risks/${r.id}`)}>
+                <div className="refby-num">{r.risk_number}</div>
+                <div className="refby-main">
+                  <div className="refby-title">{r.title}</div>
+                  <div className="refby-meta">
+                    {r.category && <span className="refby-meta-text">{r.category}</span>}
+                    {r.inherent_risk_level && <span className={`pill pill-${r.inherent_risk_level === 'crit' ? 'err' : r.inherent_risk_level === 'high' ? 'warn' : r.inherent_risk_level === 'med' ? 'warn' : 'success'}`}>{r.inherent_risk_level}</span>}
+                    {r.site_name && <span className="refby-meta-text">{r.site_name}</span>}
+                  </div>
+                </div>
+                <div className="refby-status">{r.status}</div>
                 <Unlink linkId={r.link_id}/>
               </div>
             ))}

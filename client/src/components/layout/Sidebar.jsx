@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from '../shared/Icon';
 import { useApp } from '../../context/AppContext';
@@ -22,22 +23,34 @@ function AnimatedLogo() {
 }
 
 const NAV = [
+  // Incident lifecycle
   { id: 'dashboard', path: '/', icon: 'dashboard', label: 'Dashboard', color: '#626DF9' },
   { id: 'incidents', path: '/incidents', icon: 'incidents', label: 'Incidents', color: '#E53935' },
   { id: 'investigations', path: '/investigations', icon: 'investigation', label: 'Investigations', color: '#F57C00' },
   { id: 'capas', path: '/capas', icon: 'capa', label: 'CAPA', color: '#2E7D32' },
-  { id: 'assets', path: '/assets', icon: 'gear', label: 'Assets', color: '#546E7A' },
-  { id: 'maintenance', path: '/maintenance', icon: 'clock', label: 'Maintenance', color: '#FB8C00' },
-  { id: 'documents', path: '/documents', icon: 'file', label: 'Documents', color: '#1E88E5' },
-  { id: 'templates', path: '/templates', icon: 'clipboard', label: 'Templates', color: '#8b5cf6' },
+  'divider',
+  // Proactive safety
+  { id: 'risks', path: '/risks', icon: 'fire', label: 'Risks', color: '#E91E63' },
   { id: 'inspections', path: '/inspections', icon: 'shield', label: 'Inspections', color: '#00897B' },
+  { id: 'templates', path: '/templates', icon: 'clipboard', label: 'Templates', color: '#8b5cf6' },
+  'divider',
+  // Asset management
+  { id: 'assets', path: '/assets', icon: 'widgets', label: 'Assets', color: '#546E7A' },
+  { id: 'maintenance', path: '/maintenance', icon: 'clock', label: 'Maintenance', color: '#FB8C00' },
+  'divider',
+  // Records & reporting
+  { id: 'documents', path: '/documents', icon: 'file', label: 'Documents', color: '#1E88E5' },
   { id: 'reports', path: '/reports', icon: 'reports', label: 'Reports', color: '#5C6BC0' },
   // WI-B: Approvals queue for recordability override requests. Hidden for
   // workers via the elevatedOnly flag; the underlying endpoint already
   // returns 403 to non-elevated roles, so this is just hiding noise.
   { id: 'approvals', path: '/approvals', icon: 'shield', label: 'Approvals', color: '#ED6C02', elevatedOnly: true },
+];
+
+const SETTINGS_CHILDREN = [
   { id: 'sites', path: '/admin/sites', icon: 'factory', label: 'Sites', color: '#78909C' },
   { id: 'members', path: '/admin/members', icon: 'people', label: 'Members', color: '#9575CD' },
+  { id: 'profile', path: '/profile', icon: 'person', label: 'Profile', color: '#78909C' },
 ];
 
 export default function Sidebar() {
@@ -46,12 +59,20 @@ export default function Sidebar() {
   const { sidebarOpen, setSidebarOpen } = useApp();
   const { user } = useAuth();
   const isElevated = ELEVATED_ROLES.has(user?.role);
-  const visibleNav = NAV.filter(item => !item.elevatedOnly || isElevated);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Hide elevatedOnly nav items for worker-role users. Dividers are
+  // strings, not objects, so they fall through the filter unchanged.
+  const visibleNav = NAV.filter(item =>
+    typeof item === 'string' || !item.elevatedOnly || isElevated,
+  );
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
+
+  const settingsActive = SETTINGS_CHILDREN.some(c => isActive(c.path));
 
   const go = (path) => {
     navigate(path);
@@ -63,16 +84,38 @@ export default function Sidebar() {
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
         <AnimatedLogo />
-        {visibleNav.map(it => (
+        {visibleNav.map((it, i) => it === 'divider' ? (
+          <div key={`div-${i}`} className="nav-divider" />
+        ) : (
           <div key={it.id} className={`nav-item ${isActive(it.path) ? 'active' : ''}`} style={{ '--nav-color': it.color }} onClick={() => go(it.path)}>
             <Icon name={it.icon} size={22} />
             <div className="lbl">{it.label}</div>
           </div>
         ))}
         <div style={{ flex: 1 }} />
-        <div className={`nav-item ${isActive('/profile') ? 'active' : ''}`} style={{ '--nav-color': '#78909C' }} onClick={() => go('/profile')}>
-          <Icon name="person" size={22} />
-          <div className="lbl">Profile</div>
+        <div className="nav-settings-group">
+          <div
+            className={`nav-item ${settingsActive && !settingsOpen ? 'active' : ''} ${settingsOpen ? 'settings-expanded' : ''}`}
+            style={{ '--nav-color': '#78909C' }}
+            onClick={() => setSettingsOpen(o => !o)}
+            aria-expanded={settingsOpen}
+          >
+            <Icon name="tune" size={22} />
+            <div className="lbl">Settings</div>
+            <span className={`nav-settings-chevron ${settingsOpen ? 'open' : ''}`}>
+              <Icon name="arrow" size={10} />
+            </span>
+          </div>
+          <div className={`nav-settings-panel ${settingsOpen ? 'open' : ''}`}>
+            <div className="nav-settings-inner">
+              {SETTINGS_CHILDREN.map(it => (
+                <div key={it.id} className={`nav-item nav-sub-item ${isActive(it.path) ? 'active' : ''}`} style={{ '--nav-color': it.color }} onClick={() => go(it.path)}>
+                  <Icon name={it.icon} size={18} />
+                  <div className="lbl">{it.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </aside>
     </>

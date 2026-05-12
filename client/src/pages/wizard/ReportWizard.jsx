@@ -8,10 +8,12 @@ import api from '../../api/client';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
+import DatePicker from '../../components/shared/DatePicker';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { frameworkVisibility, jurisdictionForContext } from '../../utils/frameworks';
+import RiskMatrix, { SEV_GRID, SEV_NUM, SEV_NAMES, SEV_NAME_SHORT } from '../../components/shared/RiskMatrix';
 import InjuryForm from './types/InjuryForm';
 import IllnessForm from './types/IllnessForm';
 import NearMissForm from './types/NearMissForm';
@@ -38,17 +40,6 @@ const TYPE_ICONS = {
   injury: 'fire', illness: 'pulse', nearmiss: 'warning', property: 'factory',
   env: 'leaf', unsafe: 'shield', observation: 'eye', dangerous: 'warning',
 };
-
-const SEV_GRID = [
-  ['med','high','crit','crit','crit'],
-  ['low','med','high','crit','crit'],
-  ['low','med','high','high','crit'],
-  ['low','low','med','high','high'],
-  ['low','low','med','med','high'],
-];
-const SEV_NUM = { low: 5, med: 4, high: 3, crit: 2 };
-const SEV_NAMES = { 5: 'Insignificant', 4: 'Minor', 3: 'Moderate', 2: 'Major', 1: 'Critical' };
-const SEV_NAME_SHORT = { low: 'Minor', med: 'Moderate', high: 'Major', crit: 'Critical' };
 
 const TRACK_DESC = {
   A: 'Full investigation required — lead investigator assigned within 24h',
@@ -81,46 +72,6 @@ function SevGauge({ sev }) {
       <div className="wiz-gauge-center">
         <div className="wiz-gauge-val" style={{ color }}>S{sev}</div>
       </div>
-    </div>
-  );
-}
-
-function RiskMatrix({ likelihood, consequence, onPick }) {
-  const [hover, setHover] = useState(null);
-  const yLabels = ['Almost certain', 'Likely', 'Possible', 'Unlikely', 'Rare'];
-  const xLabels = ['Insignificant', 'Minor', 'Moderate', 'Major', 'Catastrophic'];
-
-  return (
-    <div className="rm-matrix" style={{ flex: 1 }}>
-      <div className="rm-corner">
-        <span className="rm-axis-title rm-axis-y">Likelihood →</span>
-      </div>
-      {xLabels.map((l, xi) => (
-        <div key={l} className={`rm-col-label ${hover && hover[1] === xi ? 'rm-hl' : ''}`}>{l}</div>
-      ))}
-      {yLabels.map((yl, yi) => (
-        <span key={yl} style={{ display: 'contents' }}>
-          <div className={`rm-row-label ${hover && hover[0] === yi ? 'rm-hl' : ''}`}>{yl}</div>
-          {xLabels.map((_, xi) => {
-            const k = SEV_GRID[yi][xi];
-            const sel = likelihood === yi && consequence === xi;
-            const isHoverRow = hover && hover[0] === yi;
-            const isHoverCol = hover && hover[1] === xi;
-            return (
-              <div key={xi}
-                className={`rm-cell rm-cell-${k} ${sel ? 'rm-sel' : ''} ${isHoverRow || isHoverCol ? 'rm-crosshair' : ''}`}
-                onClick={() => onPick(yi, xi)}
-                onMouseEnter={() => setHover([yi, xi])}
-                onMouseLeave={() => setHover(null)}
-                style={{ animationDelay: `${(yi * 5 + xi) * 25}ms` }}
-              >
-                {SEV_NAME_SHORT[k]}
-              </div>
-            );
-          })}
-        </span>
-      ))}
-      <div className="rm-x-title">← Consequence</div>
     </div>
   );
 }
@@ -342,7 +293,25 @@ export default function ReportWizard({ onClose, onSubmit }) {
     [user, siteId, sites],
   );
 
-  const canContinue = step === 0 ? title.trim().length > 0 : true;
+  // Per-step validation gates — keep the user from advancing past Step 0
+  // without a site + datetime, and past Step 1 without the type-specific
+  // required fields + a risk-matrix selection.
+  const step0Valid = title.trim().length > 0 && !!siteId && !!datetime;
+  const step1Valid = (() => {
+    const d = typeData;
+    const typeReqs = {
+      injury: () => !!d.injured_name?.trim(),
+      illness: () => !!d.affected_name?.trim() && !!d.illness_category,
+      nearmiss: () => !!d.primary_hazard,
+      property: () => !!d.equipment_name?.trim(),
+      env: () => !!d.substance_name?.trim(),
+      unsafe: () => !!d.primary_hazard,
+      observation: () => true,
+      dangerous: () => true,
+    };
+    return (typeReqs[type] || (() => true))() && likelihood > 0 && consequence > 0;
+  })();
+  const canContinue = step === 0 ? step0Valid : step === 1 ? step1Valid : true;
 
   const addFiles = (newFiles) => {
     const list = Array.from(newFiles);
@@ -634,7 +603,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                   <div className="field-row-3">
                     <div className="field">
                       <label className="label">Date &amp; time <span className="req">*</span></label>
-                      <input className="input" type="datetime-local" value={datetime} onChange={e => setDatetime(e.target.value)} />
+                      <DatePicker value={datetime} onChange={setDatetime} showTime placeholder="Select date & time" />
                     </div>
                     <div className="field">
                       <label className="label">

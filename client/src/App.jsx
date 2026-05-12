@@ -30,6 +30,9 @@ import TemplateEditor from './pages/templates/TemplateEditor';
 import InspectionsList from './pages/inspections/InspectionsList';
 import InspectionEditor from './pages/inspections/InspectionEditor';
 import InspectionReport from './pages/inspections/InspectionReport';
+import LearnPage from './pages/learn/LearnPage';
+import RisksPage from './pages/risks/RisksPage';
+import RiskDetail from './pages/risks/RiskDetail';
 import ReportWizard from './pages/wizard/ReportWizard';
 import GlobalVoiceFab from './components/voice/GlobalVoiceFab';
 
@@ -74,6 +77,8 @@ export default function App() {
         <Route path="/investigations/:id" element={<InvestigationDetail />} />
         <Route path="/capas" element={<CAPAPage />} />
         <Route path="/capas/:id" element={<CAPADetail />} />
+        <Route path="/risks" element={<RisksPage />} />
+        <Route path="/risks/:id" element={<RiskDetail />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/approvals" element={<ApprovalsPage />} />
         <Route path="/admin/sites" element={<Sites />} />
@@ -88,6 +93,7 @@ export default function App() {
         <Route path="/inspections" element={<InspectionsList />} />
         <Route path="/inspections/:id" element={<InspectionEditor />} />
         <Route path="/inspections/:id/report" element={<InspectionReport />} />
+        <Route path="/learn" element={<LearnPage />} />
         <Route path="/profile" element={<Settings />} />
       </Route>
     </Routes>

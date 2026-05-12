@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../shared/Icon';
 import ComboBox from '../shared/ComboBox';
+import DatePicker from '../shared/DatePicker';
 import { createSchedule, updateSchedule } from '../../api/maintenance';
 import { listAssets } from '../../api/assets';
 import { getUsers } from '../../api/users';
@@ -224,12 +225,7 @@ export default function ScheduleModal({ assetId, assetName, schedule, onClose, o
             {!isEdit && (
               <div className="field">
                 <label className="label">First due <span className="req">*</span></label>
-                <input
-                  className="input"
-                  type="date"
-                  value={form.start_date}
-                  onChange={e => set('start_date', e.target.value)}
-                />
+                <DatePicker value={form.start_date} onChange={v => set('start_date', v)} placeholder="Select start date" />
                 <span className="helper">After completion, next due rolls forward by the interval.</span>
               </div>
             )}

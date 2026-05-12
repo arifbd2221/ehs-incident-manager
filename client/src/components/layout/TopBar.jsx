@@ -45,6 +45,11 @@ const PAGE_TIPS = {
     { icon: 'eye', text: 'Click any inspection to view or continue filling it out' },
     { icon: 'reports', text: 'Completed inspections generate scored reports with flagged items' },
   ],
+  '/risks': [
+    { icon: 'fire', text: 'Register hazards and assess them using the 5×5 risk matrix' },
+    { icon: 'pulse', text: 'Switch to Matrix view to see risk distribution as a heatmap' },
+    { icon: 'shield', text: 'Add controls and track residual risk reduction over time' },
+  ],
   '/reports': [
     { icon: 'reports', text: 'Generate compliance reports for OSHA and RIDDOR submissions' },
     { icon: 'download', text: 'Export reports as PDF for regulatory filing' },
@@ -63,6 +68,11 @@ const PAGE_TIPS = {
     { icon: 'people', text: 'See everyone in your organization, including inactive members' },
     { icon: 'plus', text: 'Admins can add new members with an initial password (handed off out-of-band)' },
     { icon: 'shield', text: 'Role and active-status changes are written to the activity log for audit' },
+  ],
+  '/learn': [
+    { icon: 'help', text: 'Each story walks through a real incident scenario from report to closure' },
+    { icon: 'shield', text: 'Practice risk classification with interactive exercises inside each story' },
+    { icon: 'check', text: 'Your progress is saved automatically — pick up where you left off' },
   ],
 };
 
@@ -321,6 +331,7 @@ export default function TopBar() {
     if (p.startsWith('/inspections')) return 'Inspections';
     if (p.startsWith('/documents')) return 'Documents';
     if (p.startsWith('/maintenance')) return 'Maintenance';
+    if (p.startsWith('/risks')) return 'Risks';
     if (p.startsWith('/assets')) return 'Assets';
     if (p.startsWith('/sites')) return 'Sites';
     if (p.startsWith('/profile')) return 'Profile';
@@ -430,6 +441,15 @@ export default function TopBar() {
                     <div className="help-tip-text">{tip.text}</div>
                   </div>
                 ))}
+              </div>
+
+              <div className="help-learn-card" onClick={() => { navigate('/learn'); setHelpOpen(false); }}>
+                <div className="help-learn-icon"><Icon name="help" size={20} /></div>
+                <div className="help-learn-body">
+                  <div className="help-learn-title">Learn EHS</div>
+                  <div className="help-learn-desc">Interactive stories and training modules</div>
+                </div>
+                <Icon name="arrow" size={14} />
               </div>
 
               <div className="help-section">

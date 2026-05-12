@@ -377,11 +377,11 @@ export default function Dashboard() {
             </div>
             <div className="kpi-val"><KpiValue value={kpis.openIncidents || 0} /></div>
             <div className="kpi-foot">
-              <span style={{ fontWeight: 600, color: '#dc2626' }}>{tc.A || 0}</span> Track A
-              <span style={{ color: 'var(--sds-border)' }}>&middot;</span>
-              <span style={{ fontWeight: 600, color: '#d97706' }}>{tc.B || 0}</span> Track B
-              <span style={{ color: 'var(--sds-border)' }}>&middot;</span>
-              <span style={{ fontWeight: 600, color: '#059669' }}>{tc.C || 0}</span> Track C
+              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: '#dc2626' }}>{tc.A || 0}</span> A</span>
+              <span className="kpi-track-sep">&middot;</span>
+              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: '#d97706' }}>{tc.B || 0}</span> B</span>
+              <span className="kpi-track-sep">&middot;</span>
+              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: '#059669' }}>{tc.C || 0}</span> C</span>
             </div>
           </div>
         );

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
+import DatePicker from '../../../components/shared/DatePicker';
 import SmartTextarea from '../../../components/shared/SmartTextarea';
 import { getUsers } from '../../../api/users';
 
@@ -39,7 +40,7 @@ export default function AssignModal({ incident, onCancel, onConfirm }) {
           </div>
           <div className="form-group">
             <label className="form-label">Triage by</label>
-            <input className="form-input" type="date" value={due} onChange={e => setDue(e.target.value)}/>
+            <DatePicker value={due} onChange={setDue} placeholder="Select triage date" />
           </div>
           <div className="form-group">
             <label className="form-label">Notes <span className="optional">(optional)</span></label>
