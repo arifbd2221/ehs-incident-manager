@@ -229,6 +229,13 @@ export default function InspectionEditor() {
   }
 
   const isEditable = inspection.status === 'in_progress';
+  const statusColor = inspection.status === 'in_progress'
+    ? 'var(--sds-brand-primary)'
+    : inspection.status === 'completed' ? 'var(--sds-success)' : '#999';
+  const flaggedCount = visibleItems.filter(i => i.is_flagged === 1).length;
+
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  const initials = (name) => (name || '??').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
   const renderQuestion = (item, qNum) => {
     const ti = tiMap.get(item.item_key);
@@ -325,9 +332,10 @@ export default function InspectionEditor() {
     const secProgress = getSectionProgress(sectionItems);
     const secComplete = secProgress === 100;
     return (
-      <div key={key} className="ie-section" style={sIdx > 0 ? { animationDelay: `${sIdx * 60}ms` } : undefined}>
+      <div key={key} className="ie-section">
         <div className="ie-section-head">
-          <Icon name={icon} size={16} /> {sectionLabel}
+          <div className="ie-hicon ie-hi-section"><Icon name={icon} size={16} /></div>
+          {sectionLabel}
           <span className="ie-section-count">{sectionItems.length}</span>
           <div className="ie-section-progress">
             <div className={`ie-section-progress-fill ${secComplete ? 'complete' : ''}`} style={{ width: `${secProgress}%` }} />
@@ -342,75 +350,142 @@ export default function InspectionEditor() {
 
   let questionNum = 0;
 
+  const allSections = [
+    ...(ungrouped.length > 0 ? [{ key: '_ungrouped', label: 'General', items: ungrouped }] : []),
+    ...sections.map(sec => ({ key: sec.item_key, label: sec.label || 'Untitled Section', items: getQuestions(sec.item_key) })).filter(s => s.items.length > 0),
+  ];
+
   return (
     <div className="page ie-page">
-      {/* Progress Bar */}
-      <div className="ie-progress-wrap">
-        <div className="ie-progress-info">
-          <span className="ie-progress-label">{answeredCount} of {totalQuestions} answered</span>
-          <span className={`ie-progress-pct ${isComplete ? 'complete' : ''}`}>{progressPct}%</span>
-        </div>
-        <div className="ie-progress-bar">
-          <div className={`ie-progress-fill ${isComplete ? 'complete' : ''}`} style={{ width: `${progressPct}%` }} />
-        </div>
+      {/* Breadcrumb */}
+      <div className="ie-breadcrumb">
+        <button onClick={() => navigate('/inspections')}>
+          <Icon name="arrowL" size={13} /> Inspections
+        </button>
+        <span className="ie-bc-sep">/</span>
+        <span className="ie-bc-current">{inspection.inspection_number}</span>
       </div>
 
-      {/* Header */}
-      <div className="ie-header">
-        <div className="ie-header-left">
-          <button className="ie-back" onClick={() => navigate('/inspections')}>
-            <Icon name="arrowL" size={18} />
-          </button>
-          <div>
-            <div className="ie-title">{inspection.title}</div>
-            <div className="ie-number">
-              {inspection.inspection_number} &middot; {inspection.template_name}
+      {/* Hero Card */}
+      <div className="ie-hero" style={{ '--ie-accent': statusColor }}>
+        <div className="ie-hero-strip" />
+        <div className="ie-hero-shapes" aria-hidden="true">
+          <span className="ie-shape ie-shape-circle" />
+          <span className="ie-shape ie-shape-ring" />
+          <span className="ie-shape ie-shape-check" />
+          <span className="ie-shape ie-shape-dot" />
+          <span className="ie-shape ie-shape-rect" />
+        </div>
+        <div className="ie-hero-body">
+          <div className="ie-hero-top">
+            <div className="ie-hero-meta">
+              <span className="ie-hero-number">{inspection.inspection_number}</span>
+              <span className="ie-hero-sep">&middot;</span>
+              <span className="ie-hero-date">Started {fmtDate(inspection.created_at)}</span>
+            </div>
+            <span className={`ip-status ip-status-${inspection.status}`}>
+              <span className="dot" /> {inspection.status === 'in_progress' ? 'In Progress' : inspection.status}
+            </span>
+          </div>
+          <h1 className="ie-hero-title">{inspection.title}</h1>
+          <div className="ie-hero-badges">
+            <span className="ie-badge ie-badge-link" onClick={() => navigate(`/templates/${inspection.template_id}/edit`)}>
+              <Icon name="file" size={13} /> {inspection.template_name}
               {inspection.template_version_number && <span className="ie-version-tag">v{inspection.template_version_number}</span>}
+            </span>
+            {inspection.location && (
+              <span className="ie-badge"><Icon name="location" size={13} /> {inspection.location}</span>
+            )}
+          </div>
+          <div className="ie-progress-wrap">
+            <div className="ie-progress-info">
+              <span className="ie-progress-label">{answeredCount} of {totalQuestions} answered</span>
+              <div className="ie-progress-chips">
+                {flaggedCount > 0 && (
+                  <span className="ie-chip ie-chip-flag"><Icon name="warning" size={11} /> {flaggedCount} flagged</span>
+                )}
+                <span className={`ie-progress-pct ${isComplete ? 'complete' : ''}`}>{progressPct}%</span>
+              </div>
+            </div>
+            <div className="ie-progress-bar">
+              <div className={`ie-progress-fill ${isComplete ? 'complete' : ''}`} style={{ width: `${progressPct}%` }} />
             </div>
           </div>
         </div>
-        <div className="ie-header-actions">
-          <span className={`ip-status ip-status-${inspection.status}`}>
-            <span className="dot" /> {inspection.status === 'in_progress' ? 'In Progress' : inspection.status}
-          </span>
+        <div className="ie-hero-people">
+          <div className="ie-hero-person">
+            <div className="ie-hero-person-av">{initials(inspection.started_by_name)}</div>
+            <div>
+              <div className="ie-hero-person-label">Inspector</div>
+              <div className="ie-hero-person-name">{inspection.started_by_name || '—'}</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Sections */}
-      <div className="ie-sections">
-        {ungrouped.length > 0 && renderSection('_ungrouped', 'General', ungrouped, 'file', 0)}
+      {/* Two-Column Layout */}
+      <div className="ie-grid">
+        <div className="ie-main">
+          <div className="ie-sections">
+            {ungrouped.length > 0 && renderSection('_ungrouped', 'General', ungrouped, 'file', 0)}
+            {sections.map((sec, sIdx) => {
+              const questions = getQuestions(sec.item_key);
+              if (questions.length === 0) return null;
+              return renderSection(sec.item_key, sec.label || 'Untitled Section', questions, 'shield', sIdx + (ungrouped.length > 0 ? 1 : 0));
+            })}
+          </div>
 
-        {sections.map((sec, sIdx) => {
-          const questions = getQuestions(sec.item_key);
-          if (questions.length === 0) return null;
-          return renderSection(sec.item_key, sec.label || 'Untitled Section', questions, 'shield', sIdx + (ungrouped.length > 0 ? 1 : 0));
-        })}
-      </div>
-
-      {/* Footer */}
-      {isEditable && (
-        <div className="ie-footer">
-          <button className="ie-btn-abandon" onClick={() => setShowAbandon(true)}>
-            <Icon name="close" size={14} /> Abandon
-          </button>
-          <button className="ie-btn-complete" onClick={() => setShowComplete(true)}>
-            <Icon name="check" size={16} /> Complete Inspection
-          </button>
-        </div>
-      )}
-
-      {!isEditable && (
-        <div className="ie-footer">
-          <button className="btn btn-secondary" onClick={() => navigate('/inspections')}>
-            <Icon name="arrowL" size={14} /> Back to List
-          </button>
-          {inspection.status === 'completed' && (
-            <button className="ie-btn-complete" onClick={() => navigate(`/inspections/${id}/report`)}>
-              <Icon name="reports" size={16} /> View Report
-            </button>
+          {/* Footer */}
+          {isEditable && (
+            <div className="ie-footer">
+              <button className="ie-btn-abandon" onClick={() => setShowAbandon(true)}>
+                <Icon name="close" size={14} /> Abandon
+              </button>
+              <button className="ie-btn-complete" onClick={() => setShowComplete(true)}>
+                <Icon name="check" size={16} /> Complete Inspection
+              </button>
+            </div>
+          )}
+          {!isEditable && (
+            <div className="ie-footer">
+              <button className="btn btn-secondary" onClick={() => navigate('/inspections')}>
+                <Icon name="arrowL" size={14} /> Back to List
+              </button>
+              {inspection.status === 'completed' && (
+                <button className="ie-btn-complete" onClick={() => navigate(`/inspections/${id}/report`)}>
+                  <Icon name="reports" size={16} /> View Report
+                </button>
+              )}
+            </div>
           )}
         </div>
-      )}
+
+        <div className="ie-side">
+          {/* Progress Card */}
+          {allSections.length > 0 && (
+            <div className="ie-card">
+              <div className="ie-card-h">
+                <div className="ie-hicon ie-hi-progress"><Icon name="reports" size={16} /></div>
+                Section Progress
+              </div>
+              <div className="ie-card-body">
+                {allSections.map(sec => {
+                  const pct = getSectionProgress(sec.items);
+                  return (
+                    <div key={sec.key} className="ie-side-section">
+                      <span className="ie-side-section-label">{sec.label}</span>
+                      <div className="ie-side-section-bar">
+                        <div className={`ie-side-section-fill ${pct === 100 ? 'complete' : ''}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className={`ie-side-section-pct ${pct === 100 ? 'complete' : ''}`}>{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Complete Modal */}
       {showComplete && createPortal(

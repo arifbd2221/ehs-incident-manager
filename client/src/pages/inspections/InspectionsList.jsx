@@ -114,7 +114,14 @@ export default function InspectionsList() {
     <div className="page ip-page">
       {/* Hero */}
       <div className="ip-hero">
-        <div>
+        <div className="ip-hero-shapes" aria-hidden="true">
+          <span className="ip-shape ip-shape-circle" />
+          <span className="ip-shape ip-shape-rect" />
+          <span className="ip-shape ip-shape-dot" />
+          <span className="ip-shape ip-shape-ring" />
+          <span className="ip-shape ip-shape-square" />
+        </div>
+        <div style={{ position: 'relative', zIndex: 1 }}>
           <div className="ip-heading">Inspections</div>
           <div className="ip-subtitle">
             Conduct safety inspections
