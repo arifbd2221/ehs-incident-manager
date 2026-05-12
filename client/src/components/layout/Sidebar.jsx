@@ -77,7 +77,6 @@ export default function Sidebar() {
             <div className="lbl">{it.label}</div>
           </div>
         ))}
-        <div style={{ flex: 1 }} />
         <div className="nav-settings-group">
           <div
             className={`nav-item ${settingsActive && !settingsOpen ? 'active' : ''} ${settingsOpen ? 'settings-expanded' : ''}`}
