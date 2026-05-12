@@ -9,7 +9,6 @@ const TABS = [
   { id: 'security', label: 'Security', icon: 'shield' },
 ];
 
-// Mirror of FRAMEWORKS in SignupOrg.jsx — kept as a flat map here for readout.
 const FRAMEWORK_LABELS = {
   osha_300: 'OSHA 300 Log',
   osha_300a: 'OSHA 300A Annual Summary',
@@ -23,6 +22,54 @@ function frameworkLabels(codes) {
   if (!Array.isArray(codes) || codes.length === 0) return '';
   return codes.map(c => FRAMEWORK_LABELS[c] || c).join(', ');
 }
+
+const IdBadgeIllust = () => (
+  <svg className="prof-illust" width="64" height="64" viewBox="0 0 52 52" fill="none">
+    <rect x="10" y="7" width="32" height="38" rx="4" stroke="currentColor" strokeWidth="1.5"/>
+    <circle cx="26" cy="20" r="6" stroke="currentColor" strokeWidth="1.5"/>
+    <line x1="18" y1="32" x2="34" y2="32" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <line x1="21" y1="37" x2="31" y2="37" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <rect x="22" y="3" width="8" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+  </svg>
+);
+
+const BuildingIllust = () => (
+  <svg className="prof-illust prof-illust-alt" width="64" height="64" viewBox="0 0 52 52" fill="none">
+    <rect x="14" y="14" width="24" height="28" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+    <rect x="18" y="18" width="5" height="4" rx="1" fill="currentColor" opacity="0.3"/>
+    <rect x="29" y="18" width="5" height="4" rx="1" fill="currentColor" opacity="0.3"/>
+    <rect x="18" y="26" width="5" height="4" rx="1" fill="currentColor" opacity="0.3"/>
+    <rect x="29" y="26" width="5" height="4" rx="1" fill="currentColor" opacity="0.3"/>
+    <rect x="22" y="36" width="8" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M26 10l-10 4h20l-10-4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+  </svg>
+);
+
+const LockIllust = () => (
+  <svg className="prof-illust" width="64" height="64" viewBox="0 0 52 52" fill="none">
+    <rect x="15" y="24" width="22" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M20 24v-6a6 6 0 0112 0v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <circle cx="26" cy="32" r="2.5" fill="currentColor" opacity="0.35"/>
+    <line x1="26" y1="34.5" x2="26" y2="37" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
+const ShieldIllust = () => (
+  <svg className="prof-illust prof-illust-alt" width="64" height="64" viewBox="0 0 52 52" fill="none">
+    <path d="M26 6L10 14v12c0 11 7 20 16 24 9-4 16-13 16-24V14L26 6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+    <path d="M19 26l5 5 9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+const InfoRow = ({ icon, color, label, children }) => (
+  <div className="prof-row">
+    <div className="prof-row-icon" style={{ '--ri-color': color }}>
+      <Icon name={icon} size={14} />
+    </div>
+    <span className="prof-lbl">{label}</span>
+    <span className="prof-val">{children}</span>
+  </div>
+);
 
 export default function Profile() {
   const { user, updateUser, logout } = useAuth();
@@ -94,7 +141,11 @@ export default function Profile() {
     <div className="page prof-page">
       {/* Hero header */}
       <div className="prof-hero">
-        <div className="prof-hero-bg" />
+        <div className="prof-hero-bg">
+          <div className="prof-hero-shape prof-hs-1" />
+          <div className="prof-hero-shape prof-hs-2" />
+          <div className="prof-hero-shape prof-hs-3" />
+        </div>
         <div className="prof-hero-content">
           <div className="prof-avatar-ring">
             <div className="prof-avatar">{user.initials || '??'}</div>
@@ -105,11 +156,11 @@ export default function Profile() {
               <span className="prof-role-badge">{user.role?.replace('_', ' ')}</span>
               {user.department && <span>· {user.department}</span>}
             </p>
-            <p className="prof-email"><Icon name="person" size={12} />{user.email}</p>
+            <p className="prof-email"><Icon name="mail" size={12} />{user.email}</p>
           </div>
           <div style={{ flex: 1 }} />
           <button className="btn btn-secondary btn-sm prof-logout" onClick={logout}>
-            <Icon name="export" size={16} />Sign out
+            <Icon name="logout" size={16} />Sign out
           </button>
         </div>
       </div>
@@ -117,21 +168,21 @@ export default function Profile() {
       {/* Quick stats */}
       <div className="prof-stats">
         <div className="prof-stat">
-          <div className="prof-stat-icon" style={{ '--ps-color': 'var(--sds-brand-primary)' }}><Icon name="clock" size={16} /></div>
+          <div className="prof-stat-icon" style={{ '--ps-color': 'var(--sds-brand-primary)' }}><Icon name="clock" size={18} /></div>
           <div>
             <div className="prof-stat-val">{joined}</div>
             <div className="prof-stat-lbl">Member since</div>
           </div>
         </div>
         <div className="prof-stat">
-          <div className="prof-stat-icon" style={{ '--ps-color': 'var(--sds-success)' }}><Icon name="check" size={16} /></div>
+          <div className="prof-stat-icon" style={{ '--ps-color': 'var(--sds-success)' }}><Icon name="check" size={18} /></div>
           <div>
             <div className="prof-stat-val"><span className="prof-active-dot" />Active</div>
             <div className="prof-stat-lbl">Account status</div>
           </div>
         </div>
         <div className="prof-stat">
-          <div className="prof-stat-icon" style={{ '--ps-color': '#F57C00' }}><Icon name="factory" size={16} /></div>
+          <div className="prof-stat-icon" style={{ '--ps-color': '#F57C00' }}><Icon name="factory" size={18} /></div>
           <div>
             <div className="prof-stat-val">{siteName || '—'}</div>
             <div className="prof-stat-lbl">Assigned site</div>
@@ -159,9 +210,13 @@ export default function Profile() {
       {tab === 'profile' && (
         <div className="prof-tab-content" key="profile">
           <section className="prof-section">
+            <IdBadgeIllust />
             <div className="prof-sec-h">
-              <Icon name="person" size={18} color="var(--sds-brand-primary)" />
-              <span>Personal information</span>
+              <div className="prof-sec-icon" style={{ '--si-color': '#626DF9' }}><Icon name="person" size={18} /></div>
+              <div className="prof-sec-title">
+                <span>Personal information</span>
+                <span className="prof-sec-sub">Your profile details and contact info</span>
+              </div>
               {!editing && (
                 <button className="btn btn-tertiary btn-sm" onClick={() => setEditing(true)}>
                   <Icon name="edit" size={14} />Edit
@@ -182,7 +237,7 @@ export default function Profile() {
                   <div className="prof-field">
                     <label>Job title</label>
                     <div className="auth-input-wrap">
-                      <Icon name="gear" size={16} />
+                      <Icon name="briefcase" size={16} />
                       <input className="auth-input" value={form.job_title} onChange={e => set('job_title', e.target.value)} />
                     </div>
                   </div>
@@ -207,28 +262,32 @@ export default function Profile() {
               </div>
             ) : (
               <div className="prof-info">
-                <div className="prof-row"><span className="prof-lbl">Name</span><span className="prof-val">{user.name}</span></div>
-                <div className="prof-row"><span className="prof-lbl">Email</span><span className="prof-val">{user.email}</span></div>
-                <div className="prof-row"><span className="prof-lbl">Job title</span><span className="prof-val">{user.job_title || '—'}</span></div>
-                <div className="prof-row"><span className="prof-lbl">Department</span><span className="prof-val">{user.department || '—'}</span></div>
-                <div className="prof-row"><span className="prof-lbl">Site</span><span className="prof-val">{siteName || '—'}</span></div>
-                <div className="prof-row"><span className="prof-lbl">Role</span><span className="prof-val prof-role">{user.role?.replace('_', ' ')}</span></div>
+                <InfoRow icon="person" color="#626DF9" label="Name">{user.name}</InfoRow>
+                <InfoRow icon="mail" color="#0DB4F0" label="Email">{user.email}</InfoRow>
+                <InfoRow icon="briefcase" color="#F57C00" label="Job title">{user.job_title || '—'}</InfoRow>
+                <InfoRow icon="factory" color="#E91E63" label="Department">{user.department || '—'}</InfoRow>
+                <InfoRow icon="location" color="#2E7D32" label="Site">{siteName || '—'}</InfoRow>
+                <InfoRow icon="shield" color="#7C3AED" label="Role"><span className="prof-role">{user.role?.replace('_', ' ')}</span></InfoRow>
               </div>
             )}
           </section>
 
           <section className="prof-section" style={{ animationDelay: '100ms' }}>
+            <BuildingIllust />
             <div className="prof-sec-h">
-              <Icon name="factory" size={18} color="var(--sds-brand-primary)" />
-              <span>Organization</span>
+              <div className="prof-sec-icon" style={{ '--si-color': '#E91E63' }}><Icon name="factory" size={18} /></div>
+              <div className="prof-sec-title">
+                <span>Organization</span>
+                <span className="prof-sec-sub">Company and compliance details</span>
+              </div>
             </div>
             <div className="prof-info">
-              <div className="prof-row"><span className="prof-lbl">Name</span><span className="prof-val">{user.org_name || '—'}</span></div>
-              <div className="prof-row"><span className="prof-lbl">Country</span><span className="prof-val">{user.country || '—'}</span></div>
-              <div className="prof-row"><span className="prof-lbl">Industry</span><span className="prof-val">{user.industry_sector || '—'}</span></div>
-              <div className="prof-row"><span className="prof-lbl">Frameworks</span><span className="prof-val">{frameworkLabels(user.compliance_frameworks) || '—'}</span></div>
-              <div className="prof-row"><span className="prof-lbl">Company size</span><span className="prof-val">{user.company_size || '—'}</span></div>
-              {user.naics_code && <div className="prof-row"><span className="prof-lbl">NAICS</span><span className="prof-val">{user.naics_code}</span></div>}
+              <InfoRow icon="factory" color="#626DF9" label="Name">{user.org_name || '—'}</InfoRow>
+              <InfoRow icon="globe" color="#0DB4F0" label="Country">{user.country || '—'}</InfoRow>
+              <InfoRow icon="gear" color="#F57C00" label="Industry">{user.industry_sector || '—'}</InfoRow>
+              <InfoRow icon="clipboard" color="#E91E63" label="Frameworks">{frameworkLabels(user.compliance_frameworks) || '—'}</InfoRow>
+              <InfoRow icon="people" color="#2E7D32" label="Company size">{user.company_size || '—'}</InfoRow>
+              {user.naics_code && <InfoRow icon="info" color="#7C3AED" label="NAICS">{user.naics_code}</InfoRow>}
             </div>
             {user.role === 'admin' && <OrgLogoWidget user={user} />}
           </section>
@@ -239,11 +298,14 @@ export default function Profile() {
       {tab === 'security' && (
         <div className="prof-tab-content" key="security">
           <section className="prof-section">
+            <LockIllust />
             <div className="prof-sec-h">
-              <Icon name="shield" size={18} color="var(--sds-brand-primary)" />
-              <span>Change password</span>
+              <div className="prof-sec-icon" style={{ '--si-color': '#F57C00' }}><Icon name="shield" size={18} /></div>
+              <div className="prof-sec-title">
+                <span>Change password</span>
+                <span className="prof-sec-sub">Keep your account secure with a strong password</span>
+              </div>
             </div>
-            <p className="prof-sec-desc">Update your password to keep your account secure. Use at least 8 characters with a mix of letters, numbers, and symbols.</p>
 
             {pwMsg.text && <div className={`prof-msg sm ${pwMsg.type}`}><Icon name={pwMsg.type === 'ok' ? 'check' : 'warning'} size={14} />{pwMsg.text}</div>}
 
@@ -254,7 +316,7 @@ export default function Profile() {
                   <Icon name="shield" size={16} />
                   <input className="auth-input" type={showCurrent ? 'text' : 'password'} value={pw.current} onChange={e => setPw(p => ({ ...p, current: e.target.value }))} />
                   <button type="button" className="auth-pw-toggle" onClick={() => setShowCurrent(v => !v)}>
-                    <Icon name="eye" size={16} />
+                    <Icon name={showCurrent ? 'eyeOff' : 'eye'} size={16} />
                   </button>
                 </div>
               </div>
@@ -264,7 +326,7 @@ export default function Profile() {
                   <Icon name="shield" size={16} />
                   <input className="auth-input" type={showNew ? 'text' : 'password'} value={pw.next} onChange={e => setPw(p => ({ ...p, next: e.target.value }))} placeholder="Min. 8 characters" />
                   <button type="button" className="auth-pw-toggle" onClick={() => setShowNew(v => !v)}>
-                    <Icon name="eye" size={16} />
+                    <Icon name={showNew ? 'eyeOff' : 'eye'} size={16} />
                   </button>
                 </div>
               </div>
@@ -284,14 +346,18 @@ export default function Profile() {
           </section>
 
           <section className="prof-section" style={{ animationDelay: '100ms' }}>
+            <ShieldIllust />
             <div className="prof-sec-h">
-              <Icon name="info" size={18} color="var(--sds-brand-primary)" />
-              <span>Account details</span>
+              <div className="prof-sec-icon" style={{ '--si-color': '#2E7D32' }}><Icon name="info" size={18} /></div>
+              <div className="prof-sec-title">
+                <span>Account details</span>
+                <span className="prof-sec-sub">Your account information and access level</span>
+              </div>
             </div>
             <div className="prof-info">
-              <div className="prof-row"><span className="prof-lbl">Account created</span><span className="prof-val">{joined}</span></div>
-              <div className="prof-row"><span className="prof-lbl">Account status</span><span className="prof-val"><span className="prof-active-dot" />Active</span></div>
-              <div className="prof-row"><span className="prof-lbl">Role</span><span className="prof-val prof-role">{user.role?.replace('_', ' ')}</span></div>
+              <InfoRow icon="clock" color="#626DF9" label="Account created">{joined}</InfoRow>
+              <InfoRow icon="check" color="#2E7D32" label="Account status"><span className="prof-active-dot" />Active</InfoRow>
+              <InfoRow icon="shield" color="#7C3AED" label="Role"><span className="prof-role">{user.role?.replace('_', ' ')}</span></InfoRow>
             </div>
           </section>
         </div>
