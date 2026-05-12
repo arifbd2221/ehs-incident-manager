@@ -226,16 +226,16 @@ router.get('/osha-300a', (req, res) => {
           spec_ref: '29 CFR 1904.32(b)(3), 29 CFR 1904.41(a)(1)',
         });
       }
-      // Pull the supplemental fields not on the cert snapshot: company
-      // name + city/state/zip + industry_description + size +
-      // establishment_type + change_reason. v1 takes them from query
-      // string so the FE can pre-fill from a confirmation modal.
+      // EIN + city/state/zip are now persisted on the cert snapshot
+      // itself (WI-02 carry-forward, migration 032). Falling back to
+      // query string only for legacy snapshots that were certified
+      // before that migration landed.
       const extra = {
         company_name: req.query.company_name || company?.name || '',
-        ein: req.query.ein || '',
-        city: req.query.city || '',
-        state: req.query.state || '',
-        zip: req.query.zip || '',
+        ein: snapshot.ein || req.query.ein || '',
+        city: snapshot.city || req.query.city || '',
+        state: snapshot.state || req.query.state || '',
+        zip: snapshot.zip || req.query.zip || '',
         industry_description: req.query.industry_description || '',
         size: req.query.size ? Number(req.query.size) : null,
         establishment_type: req.query.establishment_type ? Number(req.query.establishment_type) : null,
@@ -415,6 +415,30 @@ router.post('/osha-300a/certify', (req, res) => {
 
   let snapshotIds;
   try {
+    // WI-02 carry-forward: structured ITA address fields land on the
+    // snapshot at cert time per 1904.41(a). Format validation here
+    // matches the OSHA ITA submission spec exactly — 2-letter state,
+    // 5-digit zip, 9-digit EIN WITHOUT dashes (the ITA CSV column is
+    // 9-char numeric per spec p.4). All fields are optional so legacy
+    // certs can still be created without them. We accept the dashed
+    // EIN format on input but strip the dash before persisting so the
+    // snapshot matches the format the regulator expects.
+    const city = req.body?.city || null;
+    const state = req.body?.state || null;
+    const zip = req.body?.zip || null;
+    let ein = req.body?.ein || null;
+    if (state && !/^[A-Z]{2}$/.test(state)) {
+      return res.status(400).json({ error: 'state must be a 2-letter USPS code (e.g., "TX") per OSHA ITA spec.' });
+    }
+    if (zip && !/^\d{5}(-\d{4})?$/.test(zip)) {
+      return res.status(400).json({ error: 'zip must be 5 digits (or 5+4) per OSHA ITA spec.' });
+    }
+    if (ein) {
+      if (!/^\d{2}-?\d{7}$/.test(ein)) {
+        return res.status(400).json({ error: 'ein must be 9 digits (formatted XX-XXXXXXX or XXXXXXXXX) per 1904.41(a)(4).' });
+      }
+      ein = ein.replace('-', '');
+    }
     snapshotIds = createCertifiedSnapshot({
       orgId,
       siteId: site.id,
@@ -425,7 +449,10 @@ router.post('/osha-300a/certify', (req, res) => {
       establishmentName: site.name,
       establishmentAddress: site.address,
       naicsCode: site.naics_code,
-      ein: req.body?.ein || null,
+      ein,
+      city,
+      state,
+      zip,
       annualAvgEmployees,
       totalHoursWorked,
       totals,

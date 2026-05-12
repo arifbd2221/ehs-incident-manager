@@ -159,6 +159,7 @@ export function createCertifiedSnapshot({
   certifierUserId, certifierTitleKey,
   ipAddress, userAgent,
   establishmentName, establishmentAddress, naicsCode, ein,
+  city, state, zip,        // structured address per 1904.41(a) ITA fields
   annualAvgEmployees, totalHoursWorked,
   totals,                  // shape from aggregate300A()
 }) {
@@ -186,6 +187,7 @@ export function createCertifiedSnapshot({
       INSERT INTO osha_300a_certified_summaries (
         certification_id, org_id, site_id, period_year,
         establishment_name, establishment_address, naics_code, ein,
+        city, state, zip,
         annual_avg_employees, total_hours_worked,
         total_deaths, total_days_away_cases, total_job_transfer_cases,
         total_other_recordable_cases, total_days_away, total_days_restricted,
@@ -193,13 +195,14 @@ export function createCertifiedSnapshot({
         total_poisonings, total_hearing_loss, total_other_illnesses,
         case_ids_snapshot,
         certifier_title_key, certifier_title_label
-      ) VALUES (?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?,
+      ) VALUES (?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?,  ?, ?,
                 ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?,
                 ?, ?, ?)
     `).run(
       certResult.lastInsertRowid, orgId, siteId, periodYear,
       establishmentName, establishmentAddress || null, naicsCode || null, ein || null,
+      city || null, state || null, zip || null,
       annualAvgEmployees, totalHoursWorked,
       totals.total_deaths, totals.total_days_away_cases, totals.total_job_transfer_cases,
       totals.total_other_recordable_cases, totals.total_days_away, totals.total_days_restricted,
