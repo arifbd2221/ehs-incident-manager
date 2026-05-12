@@ -826,9 +826,7 @@ function Manual300Modal({ siteId, onClose, onSaved }) {
           <div className="field-row">
             <div className="field">
               <label className="label">Classification</label>
-              <select className="select" value={form.classification} onChange={e => upd('classification', e.target.value)}>
-                {CLASSIFICATION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <ComboBox options={CLASSIFICATION_OPTIONS} value={form.classification} onChange={val => upd('classification', val)} />
             </div>
             <div className="field"><label className="label">Injury / illness type</label><input className="input" value={form.injury_type} onChange={e => upd('injury_type', e.target.value)} placeholder="e.g. Fracture, Laceration"/></div>
           </div>
@@ -837,10 +835,7 @@ function Manual300Modal({ siteId, onClose, onSaved }) {
             <div className="field"><label className="label">Days on restriction</label><input className="input" type="number" min="0" value={form.days_restricted_count} onChange={e => upd('days_restricted_count', Number(e.target.value))}/></div>
             <div className="field">
               <label className="label">Privacy case</label>
-              <select className="select" value={form.is_privacy_case ? '1' : '0'} onChange={e => upd('is_privacy_case', e.target.value === '1')}>
-                <option value="0">No</option>
-                <option value="1">Yes — suppress name on log</option>
-              </select>
+              <ComboBox options={[{value:'0', label:'No'}, {value:'1', label:'Yes — suppress name on log'}]} value={form.is_privacy_case ? '1' : '0'} onChange={val => upd('is_privacy_case', val === '1')} />
             </div>
           </div>
         </div>

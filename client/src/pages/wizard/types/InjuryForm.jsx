@@ -246,31 +246,33 @@ export default function InjuryForm({ data, onChange, jurisdiction = ['US-OSHA', 
             {see('injured_dob') && (
               <div className="field">
                 <label className="label">Date of birth</label>
-                <input className="input" type="date" value={data.injured_dob || ''}
-                  onChange={e => onChange({ ...data, injured_dob: e.target.value })}/>
+                <DatePicker value={data.injured_dob || ''} onChange={v => onChange({ ...data, injured_dob: v })} />
                 <span className="helper">Required for OSHA 301 + SafeWork NSW</span>
               </div>
             )}
             {see('injured_gender') && (
               <div className="field">
                 <label className="label">Gender</label>
-                <select className="select" value={data.injured_gender || ''}
-                  onChange={e => onChange({ ...data, injured_gender: e.target.value })}>
-                  <option value="">Select…</option>
-                  <option value="female">Female</option>
-                  <option value="male">Male</option>
-                  <option value="non_binary">Non-binary</option>
-                  <option value="prefer_not_to_say">Prefer not to say</option>
-                  <option value="other">Other</option>
-                </select>
+                <ComboBox
+                  options={[
+                    {value:'', label:'Select…'},
+                    {value:'female', label:'Female'},
+                    {value:'male', label:'Male'},
+                    {value:'non_binary', label:'Non-binary'},
+                    {value:'prefer_not_to_say', label:'Prefer not to say'},
+                    {value:'other', label:'Other'},
+                  ]}
+                  value={data.injured_gender || ''}
+                  onChange={v => onChange({ ...data, injured_gender: v })}
+                  placeholder="Select…"
+                />
                 <span className="helper">Required for OSHA 301 + SafeWork NSW</span>
               </div>
             )}
             {see('injured_date_hired') && (
               <div className="field">
                 <label className="label">Date hired</label>
-                <input className="input" type="date" value={data.injured_date_hired || ''}
-                  onChange={e => onChange({ ...data, injured_date_hired: e.target.value })}/>
+                <DatePicker value={data.injured_date_hired || ''} onChange={v => onChange({ ...data, injured_date_hired: v })} />
                 <span className="helper">Required for OSHA 301</span>
               </div>
             )}
@@ -278,7 +280,7 @@ export default function InjuryForm({ data, onChange, jurisdiction = ['US-OSHA', 
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, marginBottom: 24 }}>
         <div>
           <div className="label mb-8">Body part affected</div>
           <BodyMap3D selected={bodyParts} onToggle={toggleBody}/>
@@ -314,17 +316,21 @@ export default function InjuryForm({ data, onChange, jurisdiction = ['US-OSHA', 
           <div className="field"><label className="label">Facility address</label><input className="input" value={data.facility_address || ''} onChange={e => onChange({ ...data, facility_address: e.target.value })} placeholder="123 Main St, City, ST 12345"/></div>
           <div className="field">
             <label className="label">Emergency room treatment</label>
-            <select className="select" value={data.er_treated ? '1' : '0'} onChange={e => onChange({ ...data, er_treated: e.target.value === '1' })}>
-              <option value="0">No</option>
-              <option value="1">Yes</option>
-            </select>
+            <ComboBox
+              options={[{value:'0', label:'No'}, {value:'1', label:'Yes'}]}
+              value={data.er_treated ? '1' : '0'}
+              onChange={v => onChange({ ...data, er_treated: v === '1' })}
+              placeholder="Select…"
+            />
           </div>
           <div className="field">
             <label className="label">Hospitalized overnight</label>
-            <select className="select" value={data.hospitalized ? '1' : '0'} onChange={e => onChange({ ...data, hospitalized: e.target.value === '1' })}>
-              <option value="0">No</option>
-              <option value="1">Yes</option>
-            </select>
+            <ComboBox
+              options={[{value:'0', label:'No'}, {value:'1', label:'Yes'}]}
+              value={data.hospitalized ? '1' : '0'}
+              onChange={v => onChange({ ...data, hospitalized: v === '1' })}
+              placeholder="Select…"
+            />
           </div>
         </div>
         {data.hospitalized && (
@@ -443,42 +449,43 @@ export default function InjuryForm({ data, onChange, jurisdiction = ['US-OSHA', 
 
         <div className="field">
           <label className="label">Accident occurred on hospital premises?</label>
-          <select
-            className="select"
+          <ComboBox
+            options={[{value:'0', label:'No'}, {value:'1', label:'Yes'}]}
             value={data.on_hospital_premises ? '1' : '0'}
-            onChange={e => onChange({ ...data, on_hospital_premises: e.target.value === '1' })}
-            style={{ maxWidth: 200 }}
-          >
-            <option value="0">No</option>
-            <option value="1">Yes</option>
-          </select>
+            onChange={v => onChange({ ...data, on_hospital_premises: v === '1' })}
+            placeholder="Select…"
+          />
           <span className="helper">RIDDOR Reg 5(b): for non-workers, only specified injuries on hospital premises are reportable.</span>
         </div>
 
         <div className="field-row">
           <div className="field">
             <label className="label">Reg 14(1) — medical-procedure exception</label>
-            <select
-              className="select"
+            <ComboBox
+              options={[
+                {value:'0', label:'Does not apply'},
+                {value:'1', label:'Injury arose from medical examination / treatment'},
+              ]}
               value={data.reg14_medical_procedure_exception ? '1' : '0'}
-              onChange={e => onChange({ ...data, reg14_medical_procedure_exception: e.target.value === '1' })}
-            >
-              <option value="0">Does not apply</option>
-              <option value="1">Injury arose from medical examination / treatment</option>
-            </select>
+              onChange={v => onChange({ ...data, reg14_medical_procedure_exception: v === '1' })}
+              placeholder="Select…"
+            />
             <span className="helper">Excludes Reg 4/5/6(1) per Reg 14(1).</span>
           </div>
           <div className="field">
             <label className="label">Reg 14(3) — road-vehicle exception</label>
-            <select
-              className="select"
+            <ComboBox
+              options={[
+                {value:'no', label:'No road-vehicle movement involved'},
+                {value:'excluded', label:'Road vehicle — no Reg 14(3) carve-out applies (exclude Reg 4/5/6)'},
+                {value:'carveout', label:'Road vehicle — but a Reg 14(3)(a)–(d) carve-out applies (still reportable)'},
+              ]}
               value={(() => {
                 if (data.reg14_3_road_vehicle_excluded === true) return 'excluded';
                 if (data.reg14_3_road_vehicle === true) return 'carveout';
                 return 'no';
               })()}
-              onChange={e => {
-                const v = e.target.value;
+              onChange={v => {
                 if (v === 'no') {
                   onChange({ ...data, reg14_3_road_vehicle: false, reg14_3_road_vehicle_excluded: false });
                 } else if (v === 'excluded') {
@@ -487,35 +494,31 @@ export default function InjuryForm({ data, onChange, jurisdiction = ['US-OSHA', 
                   onChange({ ...data, reg14_3_road_vehicle: true, reg14_3_road_vehicle_excluded: false });
                 }
               }}
-            >
-              <option value="no">No road-vehicle movement involved</option>
-              <option value="excluded">Road vehicle — no Reg 14(3) carve-out applies (exclude Reg 4/5/6)</option>
-              <option value="carveout">Road vehicle — but a Reg 14(3)(a)–(d) carve-out applies (still reportable)</option>
-            </select>
+              placeholder="Select…"
+            />
             <span className="helper">Carve-outs: train accident, exposure to substance conveyed, loading/unloading, or work on/alongside a road.</span>
           </div>
         </div>
 
         <div className="field">
           <label className="label">Gas-related incident (Reg 11)</label>
-          <select
-            className="select"
+          <ComboBox
+            options={[
+              {value:'none', label:'Not a Reg 11 gas incident'},
+              {value:'flammable_gas_conveyor', label:'Reg 11(1) — fixed-pipe flammable-gas conveyor'},
+              {value:'lpg_supplier', label:'Reg 11(1) — LPG filler / importer / supplier'},
+              {value:'approved_person', label:'Reg 11(2) — approved person (Gas Safe registered)'},
+            ]}
             value={data.gas_reporter_role || 'none'}
-            onChange={e => {
-              const v = e.target.value;
+            onChange={v => {
               if (v === 'none') {
                 onChange({ ...data, gas_reporter_role: undefined, gas_dangerous_fitting: false, gas_fitting_under_test: false, gas_previously_reported: false });
               } else {
                 onChange({ ...data, gas_reporter_role: v });
               }
             }}
-            style={{ maxWidth: 360 }}
-          >
-            <option value="none">Not a Reg 11 gas incident</option>
-            <option value="flammable_gas_conveyor">Reg 11(1) — fixed-pipe flammable-gas conveyor</option>
-            <option value="lpg_supplier">Reg 11(1) — LPG filler / importer / supplier</option>
-            <option value="approved_person">Reg 11(2) — approved person (Gas Safe registered)</option>
-          </select>
+            placeholder="Select…"
+          />
           <span className="helper">Set only when the reporting org has the Reg 11 role; outcome (death / LOC / hospitalisation) is read from the treatment fields above.</span>
         </div>
 
@@ -523,33 +526,34 @@ export default function InjuryForm({ data, onChange, jurisdiction = ['US-OSHA', 
           <div className="field-row">
             <div className="field">
               <label className="label">Dangerous gas fitting?</label>
-              <select
-                className="select"
+              <ComboBox
+                options={[
+                  {value:'0', label:'No'},
+                  {value:'1', label:'Yes — design / installation / servicing likely to cause death, LOC or hospitalisation'},
+                ]}
                 value={data.gas_dangerous_fitting ? '1' : '0'}
-                onChange={e => onChange({ ...data, gas_dangerous_fitting: e.target.value === '1' })}
-              >
-                <option value="0">No</option>
-                <option value="1">Yes — design / installation / servicing likely to cause death, LOC or hospitalisation</option>
-              </select>
+                onChange={v => onChange({ ...data, gas_dangerous_fitting: v === '1' })}
+                placeholder="Select…"
+              />
             </div>
             <div className="field">
               <label className="label">Reg 11(3) carve-outs</label>
-              <select
-                className="select"
+              <ComboBox
+                options={[
+                  {value:'none', label:'Neither carve-out applies'},
+                  {value:'under_test', label:'Fitting under test at a place set aside for that purpose — Reg 11(3)(b)'},
+                  {value:'previously_reported', label:'Same information previously reported — Reg 11(3)(c)'},
+                ]}
                 value={data.gas_fitting_under_test ? 'under_test' : data.gas_previously_reported ? 'previously_reported' : 'none'}
-                onChange={e => {
-                  const v = e.target.value;
+                onChange={v => {
                   onChange({
                     ...data,
                     gas_fitting_under_test: v === 'under_test',
                     gas_previously_reported: v === 'previously_reported',
                   });
                 }}
-              >
-                <option value="none">Neither carve-out applies</option>
-                <option value="under_test">Fitting under test at a place set aside for that purpose — Reg 11(3)(b)</option>
-                <option value="previously_reported">Same information previously reported — Reg 11(3)(c)</option>
-              </select>
+                placeholder="Select…"
+              />
             </div>
           </div>
         )}

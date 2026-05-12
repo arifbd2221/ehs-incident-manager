@@ -84,10 +84,7 @@ export default function NewRiskModal({ onCancel, onCreated }) {
           <div className="field-row">
             <div className="field">
               <label className="label">Category <span className="req">*</span></label>
-              <select className="select" value={category} onChange={e => setCategory(e.target.value)}>
-                <option value="">Select category...</option>
-                {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
+              <ComboBox options={CATEGORIES} value={category} onChange={setCategory} placeholder="Select category..." />
             </div>
             <div className="field">
               <label className="label">Site <span className="req">*</span></label>

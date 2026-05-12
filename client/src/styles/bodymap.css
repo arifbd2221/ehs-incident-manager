@@ -79,7 +79,6 @@
 /* Figure wrapper — animates on rotate */
 .bm3d-figure {
   width: 100%;
-  max-height: 340px;
 }
 .bm3d-figure svg {
   width: 100%;

@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getTemplate, updateTemplate, publishTemplate, updateTemplateItems, uploadTemplateCover, removeTemplateCover } from '../../api/templates';
 import { getAnswerSets, createAnswerSet } from '../../api/answer_sets';
 import Icon from '../../components/shared/Icon';
+import ComboBox from '../../components/shared/ComboBox';
 import '../../styles/templates.css';
 
 let keyCounter = 0;
@@ -937,21 +938,12 @@ function QuestionCard({
           <div className="te-card-config-row">
             <div className="te-card-config-field">
               <label>Question Type</label>
-              <select value={item.type} onChange={e => handleTypeChange(e.target.value)}>
-                {ITEM_TYPES.map(t => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
-                ))}
-              </select>
+              <ComboBox options={ITEM_TYPES.map(t => ({value: t.id, label: t.label}))} value={item.type} onChange={val => handleTypeChange(val)} />
             </div>
             {typeInfo.hasAnswerSet && (
               <div className="te-card-config-field">
                 <label>Answer Set</label>
-                <select value={meta.answer_set_id || ''} onChange={e => handleAnswerSetChange(e.target.value)}>
-                  <option value="">No answer set (text only)</option>
-                  {answerSets.map(as => (
-                    <option key={as.id} value={as.id}>{as.name}</option>
-                  ))}
-                </select>
+                <ComboBox options={[{value: '', label: 'No answer set (text only)'}, ...answerSets.map(as => ({value: String(as.id), label: as.name}))]} value={String(meta.answer_set_id || '')} onChange={val => handleAnswerSetChange(val)} />
               </div>
             )}
           </div>
@@ -973,10 +965,7 @@ function QuestionCard({
               <Icon name="branch" size={14} />
               <span>Conditional logic</span>
               {meta.conditions?.length > 1 && (
-                <select value={meta.condition_logic || 'all'} onChange={e => handleConditionLogicChange(e.target.value)}>
-                  <option value="all">ALL conditions met</option>
-                  <option value="any">ANY condition met</option>
-                </select>
+                <ComboBox options={[{value: 'all', label: 'ALL conditions met'}, {value: 'any', label: 'ANY condition met'}]} value={meta.condition_logic || 'all'} onChange={val => handleConditionLogicChange(val)} />
               )}
             </div>
 
@@ -984,21 +973,9 @@ function QuestionCard({
               const sourceAs = getSourceAnswerSet(cond.source_key);
               return (
                 <div key={idx} className="te-condition-row">
-                  <select value={cond.source_key || ''} onChange={e => updateCondition(idx, 'source_key', e.target.value)}>
-                    <option value="">Select question...</option>
-                    {priorQuestions.map(pq => (
-                      <option key={pq.item_key} value={pq.item_key}>
-                        Q{questionNumbers[pq.item_key]}: {pq.label || 'Untitled'}
-                      </option>
-                    ))}
-                  </select>
+                  <ComboBox options={priorQuestions.map(pq => ({value: pq.item_key, label: `Q${questionNumbers[pq.item_key]}: ${pq.label || 'Untitled'}`}))} value={cond.source_key || ''} onChange={val => updateCondition(idx, 'source_key', val)} placeholder="Select question..." />
                   <span className="te-condition-eq">is</span>
-                  <select value={cond.option_id || ''} onChange={e => updateCondition(idx, 'option_id', Number(e.target.value))} disabled={!cond.source_key}>
-                    <option value="">Select answer...</option>
-                    {sourceAs?.options?.map(opt => (
-                      <option key={opt.id} value={opt.id}>{opt.label}</option>
-                    ))}
-                  </select>
+                  <ComboBox options={(sourceAs?.options || []).map(opt => ({value: String(opt.id), label: opt.label}))} value={String(cond.option_id || '')} onChange={val => updateCondition(idx, 'option_id', Number(val))} placeholder="Select answer..." disabled={!cond.source_key} />
                   <button className="icon-btn" onClick={() => removeCondition(idx)} title="Remove condition">
                     <Icon name="close" size={14} />
                   </button>

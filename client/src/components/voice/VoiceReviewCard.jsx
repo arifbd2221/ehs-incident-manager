@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import Icon from '../shared/Icon';
+import ComboBox from '../shared/ComboBox';
 import DatePicker from '../shared/DatePicker';
 import { getSites } from '../../api/auth';
 import { TypePill, TYPES } from '../shared/Badges';
@@ -37,10 +38,13 @@ function CompleteMeter({ pct, filled, total }) {
 function GapInput({ fieldKey, meta, value, onChange, sites }) {
   if (meta.input === 'site') {
     return (
-      <select className="select voice-gap-input" value={value} onChange={e => onChange(e.target.value)}>
-        <option value="">Select site...</option>
-        {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-      </select>
+      <ComboBox
+        className="select voice-gap-input"
+        value={value}
+        onChange={onChange}
+        placeholder="Select site..."
+        options={sites.map(s => ({ value: String(s.id), label: s.name }))}
+      />
     );
   }
   if (meta.input === 'type') {
@@ -59,10 +63,13 @@ function GapInput({ fieldKey, meta, value, onChange, sites }) {
   }
   if (meta.input === 'select') {
     return (
-      <select className="select voice-gap-input" value={value} onChange={e => onChange(e.target.value)}>
-        <option value="">Choose...</option>
-        {(meta.options || []).map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
+      <ComboBox
+        className="select voice-gap-input"
+        value={value}
+        onChange={onChange}
+        placeholder="Choose..."
+        options={(meta.options || []).map(o => ({ value: o, label: o }))}
+      />
     );
   }
   if (meta.input === 'datetime') {

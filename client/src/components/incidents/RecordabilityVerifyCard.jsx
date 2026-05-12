@@ -11,6 +11,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../shared/Icon';
+import ComboBox from '../shared/ComboBox';
 import { verifyRecordability } from '../../api/incidents';
 import {
   listOverrideRequestsForIncident,
@@ -306,12 +307,13 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
             {workRelated === 'no' && (
               <div className="rv-gate">
                 <div className="rv-gate-label">Exception that applies</div>
-                <select className="rv-select" value={exceptionId} onChange={e => setExceptionId(e.target.value)}>
-                  <option value="">— select —</option>
-                  {WORK_RELATEDNESS_EXCEPTIONS.map(x => (
-                    <option key={x.id} value={x.id}>{x.label}</option>
-                  ))}
-                </select>
+                <ComboBox
+                  className="rv-select"
+                  value={exceptionId}
+                  onChange={setExceptionId}
+                  placeholder="— select —"
+                  options={WORK_RELATEDNESS_EXCEPTIONS.map(x => ({ value: x.id, label: x.label }))}
+                />
               </div>
             )}
 
@@ -336,24 +338,26 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
             {newCase === 'yes' && (
               <div className="rv-gate">
                 <div className="rv-gate-label"><span className="rv-gate-num">4</span>Recording criterion met</div>
-                <select className="rv-select" value={criterionId} onChange={e => setCriterionId(e.target.value)}>
-                  <option value="">— none / first aid only —</option>
-                  {GENERAL_RECORDING_CRITERIA.map(c => (
-                    <option key={c.id} value={c.id}>{c.label}</option>
-                  ))}
-                </select>
+                <ComboBox
+                  className="rv-select"
+                  value={criterionId}
+                  onChange={setCriterionId}
+                  placeholder="— none / first aid only —"
+                  options={GENERAL_RECORDING_CRITERIA.map(c => ({ value: c.id, label: c.label }))}
+                />
               </div>
             )}
 
             {newCase === 'yes' && criterionId && (
               <div className="rv-gate">
                 <div className="rv-gate-label"><span className="rv-gate-num">5</span>Treatment <span className="rv-optional">(optional)</span></div>
-                <select className="rv-select" value={treatmentChoice} onChange={e => setTreatmentChoice(e.target.value)}>
-                  <option value="">— select if first aid —</option>
-                  {FIRST_AID_TREATMENTS.map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
+                <ComboBox
+                  className="rv-select"
+                  value={treatmentChoice}
+                  onChange={setTreatmentChoice}
+                  placeholder="— select if first aid —"
+                  options={FIRST_AID_TREATMENTS.map(t => ({ value: t, label: t }))}
+                />
                 <div className="rv-checkbox-row">
                   <label>
                     <input type="checkbox" checked={privacyCase} onChange={e => setPrivacyCase(e.target.checked)}/>

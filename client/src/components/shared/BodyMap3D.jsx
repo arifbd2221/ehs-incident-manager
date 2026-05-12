@@ -223,7 +223,7 @@ export default function BodyMap3D({ selected = [], onToggle }) {
         onPointerLeave={() => { dragRef.current.dragging = false; setTooltip(null); }}
       >
         <div className={`bm3d-figure ${transitioning ? `bm3d-exit-${transDir}` : 'bm3d-enter'}`}>
-          <svg viewBox="36 -8 128 270" xmlns="http://www.w3.org/2000/svg">
+          <svg viewBox="20 -8 160 270" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <filter id="bm3d-glow">
                 <feGaussianBlur stdDeviation="3" result="blur" />

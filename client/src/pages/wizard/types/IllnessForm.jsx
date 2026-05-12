@@ -43,17 +43,21 @@ export default function IllnessForm({ data, onChange }) {
           <div className="field"><label className="label">Facility address</label><input className="input" value={data.facility_address || ''} onChange={e => onChange({ ...data, facility_address: e.target.value })} placeholder="123 Main St, City, ST 12345"/></div>
           <div className="field">
             <label className="label">Emergency room treatment</label>
-            <select className="select" value={data.er_treated ? '1' : '0'} onChange={e => onChange({ ...data, er_treated: e.target.value === '1' })}>
-              <option value="0">No</option>
-              <option value="1">Yes</option>
-            </select>
+            <ComboBox
+              options={[{value:'0', label:'No'}, {value:'1', label:'Yes'}]}
+              value={data.er_treated ? '1' : '0'}
+              onChange={v => onChange({ ...data, er_treated: v === '1' })}
+              placeholder="Select…"
+            />
           </div>
           <div className="field">
             <label className="label">Hospitalized overnight</label>
-            <select className="select" value={data.hospitalized ? '1' : '0'} onChange={e => onChange({ ...data, hospitalized: e.target.value === '1' })}>
-              <option value="0">No</option>
-              <option value="1">Yes</option>
-            </select>
+            <ComboBox
+              options={[{value:'0', label:'No'}, {value:'1', label:'Yes'}]}
+              value={data.hospitalized ? '1' : '0'}
+              onChange={v => onChange({ ...data, hospitalized: v === '1' })}
+              placeholder="Select…"
+            />
           </div>
         </div>
         {data.hospitalized && (
