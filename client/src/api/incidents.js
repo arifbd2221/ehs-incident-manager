@@ -44,3 +44,21 @@ export const addIncidentNote = (id, text) =>
 export const addWitness = (id, data) => api.post(`/incidents/${id}/witnesses`, data).then(r => r.data);
 export const updateWitness = (id, wid, data) => api.patch(`/incidents/${id}/witnesses/${wid}`, data).then(r => r.data);
 export const deleteWitness = (id, wid) => api.delete(`/incidents/${id}/witnesses/${wid}`).then(r => r.data);
+
+// WI-A multi-person CRUD. Each helper returns the canonical row shape
+// (with nested injuries[] on the parent person endpoints) so callers
+// can render directly without a follow-up GET.
+export const getAffectedPersons = (incidentId) =>
+  api.get(`/incidents/${incidentId}/affected-persons`).then(r => r.data.affected_persons);
+export const createAffectedPerson = (incidentId, data) =>
+  api.post(`/incidents/${incidentId}/affected-persons`, data).then(r => r.data);
+export const updateAffectedPerson = (incidentId, apId, patch) =>
+  api.patch(`/incidents/${incidentId}/affected-persons/${apId}`, patch).then(r => r.data);
+export const deleteAffectedPerson = (incidentId, apId) =>
+  api.delete(`/incidents/${incidentId}/affected-persons/${apId}`).then(r => r.data);
+export const createInjury = (incidentId, apId, data) =>
+  api.post(`/incidents/${incidentId}/affected-persons/${apId}/injuries`, data).then(r => r.data);
+export const updateInjury = (incidentId, apId, injuryId, patch) =>
+  api.patch(`/incidents/${incidentId}/affected-persons/${apId}/injuries/${injuryId}`, patch).then(r => r.data);
+export const deleteInjury = (incidentId, apId, injuryId) =>
+  api.delete(`/incidents/${incidentId}/affected-persons/${apId}/injuries/${injuryId}`).then(r => r.data);

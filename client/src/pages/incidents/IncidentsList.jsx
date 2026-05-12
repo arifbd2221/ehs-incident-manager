@@ -4,6 +4,7 @@ import { getIncidents } from '../../api/incidents';
 import { useApp } from '../../context/AppContext';
 import Icon from '../../components/shared/Icon';
 import { TYPES, typeOf } from '../../components/shared/Badges';
+import DeadlineBadge from '../../components/incidents/DeadlineBadge';
 import { formatDate, timeAgo } from '../../utils/time';
 import '../../styles/incidents.css';
 
@@ -266,9 +267,17 @@ export default function IncidentsList() {
                       <span style={{ color: 'var(--sds-border)' }}>·</span>
                       <span>{timeAgo(r.created_at)}</span>
                     </div>
-                    <span className={`inc-card-status ${statusKey(r.status)}`}>
-                      <span className="st-dot"/>{r.status}
-                    </span>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {/* WI-08: most-urgent regulatory deadline per row.
+                          Compact mode keeps the pill from blowing out the
+                          card; full detail lives on the incident page. */}
+                      {r.most_urgent_deadline && (
+                        <DeadlineBadge deadline={r.most_urgent_deadline} compact/>
+                      )}
+                      <span className={`inc-card-status ${statusKey(r.status)}`}>
+                        <span className="st-dot"/>{r.status}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

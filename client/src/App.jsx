@@ -16,6 +16,7 @@ import InvestigationDetail from './pages/investigations/InvestigationDetail';
 import CAPAPage from './pages/capas/CAPAPage';
 import CAPADetail from './pages/capas/CAPADetail';
 import ReportsPage from './pages/reports/ReportsPage';
+import ApprovalsPage from './pages/approvals/ApprovalsPage';
 import Settings from './pages/Settings';
 import Sites from './pages/admin/Sites';
 import SiteDetail from './pages/admin/SiteDetail';
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="/risks" element={<RisksPage />} />
         <Route path="/risks/:id" element={<RiskDetail />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/approvals" element={<ApprovalsPage />} />
         <Route path="/admin/sites" element={<Sites />} />
         <Route path="/admin/sites/:id" element={<SiteDetail />} />
         <Route path="/admin/members" element={<Members />} />

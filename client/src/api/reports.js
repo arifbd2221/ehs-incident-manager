@@ -3,9 +3,21 @@ import api from './client';
 export const getOsha300 = (params) => api.get('/reports/osha-300', { params }).then(r => r.data);
 export const getOsha300A = (params) => api.get('/reports/osha-300a', { params }).then(r => r.data);
 export const certifyOsha300A = (data) => api.post('/reports/osha-300a/certify', data).then(r => r.data);
+// WI-02: ITA designation per 29 CFR 1904.41.
+export const getOshaItaDesignation = (params) =>
+  api.get('/reports/osha-300a/ita-designation', { params }).then(r => r.data);
 export const getOsha301 = (incidentId) => api.get(`/reports/osha-301/${incidentId}`).then(r => r.data);
 export const createOsha300Entry = (data) => api.post('/reports/osha-300', data).then(r => r.data);
 export const getRiddor = (params) => api.get('/reports/riddor', { params }).then(r => r.data);
+
+// WI-07 OSHA 1904.39 severe-injury notifications (per-incident).
+// Rows are auto-created on incident POST when evaluateSevereInjury detects
+// a reportable category (fatality / hospitalization / amputation / loss_of_eye).
+// `logOshaSeverePhoneNotified` is idempotent on the server.
+export const getOshaSevere = (incidentId) =>
+  api.get(`/reports/osha-severe/${incidentId}`).then(r => r.data.notifications || []);
+export const logOshaSeverePhoneNotified = (notificationId, data) =>
+  api.post(`/reports/osha-severe/${notificationId}/phone-notified`, data).then(r => r.data);
 export const getMetrics = (params) => api.get('/reports/metrics', { params }).then(r => r.data);
 
 // P3-A1: filterable audit-log read + CSV export.

@@ -12,7 +12,7 @@ import DatePicker from '../../components/shared/DatePicker';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
-import { frameworkVisibility } from '../../utils/frameworks';
+import { frameworkVisibility, jurisdictionForContext } from '../../utils/frameworks';
 import RiskMatrix, { SEV_GRID, SEV_NUM, SEV_NAMES, SEV_NAME_SHORT } from '../../components/shared/RiskMatrix';
 import InjuryForm from './types/InjuryForm';
 import IllnessForm from './types/IllnessForm';
@@ -284,6 +284,18 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const siteName = sites.find(s => String(s.id) === siteId)?.name || '—';
   const typeName = typeOf(type)?.name || type;
 
+  // WI-D: which regulatory regimes apply to this incident-in-progress.
+  // Re-computed on every render (cheap: just a few set ops). The
+  // jurisdiction array feeds InjuryForm + AffectedPersonModal so they
+  // hide field rows that don't apply to the org × site combo.
+  const jurisdiction = useMemo(
+    () => jurisdictionForContext({ user, siteId, sites }),
+    [user, siteId, sites],
+  );
+
+  // Per-step validation gates — keep the user from advancing past Step 0
+  // without a site + datetime, and past Step 1 without the type-specific
+  // required fields + a risk-matrix selection.
   const step0Valid = title.trim().length > 0 && !!siteId && !!datetime;
   const step1Valid = (() => {
     const d = typeData;
@@ -322,6 +334,70 @@ export default function ReportWizard({ onClose, onSubmit }) {
       // top-level POST body (added in T3.2). Hoist it.
       const bodyParts = Array.isArray(typeData?.body_parts) ? typeData.body_parts : [];
 
+      // WI-A: normalize the wizard's type_data into the shapes the BE expects.
+      //  (1) InjuryForm writes the primary person's identity flat
+      //      (injured_name / injured_job_title / injured_department). The BE
+      //      (osha_300_log auto-insert, RIDDOR, recordability verification)
+      //      reads injured_person.{name,job_title,department}. Lift the
+      //      flat keys into the nested sub-record so existing single-person
+      //      submissions don't end up as "Unknown" on OSHA 300.
+      //  (2) InjuryForm queues extra people in type_data.additional_persons.
+      //      Pull them out, drop the key from the type_data payload, and
+      //      send the new affected_persons[] array shape the BE already
+      //      handles (server/routes/incidents.js POST handler — useArrayShape
+      //      branch + bulkInsertFromArray).
+      const { additional_persons, ...typeDataNoExtras } = typeData || {};
+      const submittedTypeData = {
+        ...typeDataNoExtras,
+        injured_person: {
+          ...(typeDataNoExtras?.injured_person || {}),
+          name: typeDataNoExtras?.injured_name ?? typeDataNoExtras?.injured_person?.name ?? null,
+          job_title: typeDataNoExtras?.injured_job_title ?? typeDataNoExtras?.injured_person?.job_title ?? null,
+          department: typeDataNoExtras?.injured_department ?? typeDataNoExtras?.injured_person?.department ?? null,
+          // Regulatory identity fields (OSHA 301, RIDDOR F2508, SafeWork NSW).
+          dob: typeDataNoExtras?.injured_dob ?? typeDataNoExtras?.injured_person?.dob ?? null,
+          gender: typeDataNoExtras?.injured_gender ?? typeDataNoExtras?.injured_person?.gender ?? null,
+          date_hired: typeDataNoExtras?.injured_date_hired ?? typeDataNoExtras?.injured_person?.date_hired ?? null,
+          // Contact (OSHA 301 address; RIDDOR + NSW address+phone).
+          address: typeDataNoExtras?.injured_address ?? typeDataNoExtras?.injured_person?.address ?? null,
+          phone: typeDataNoExtras?.injured_phone ?? typeDataNoExtras?.injured_person?.phone ?? null,
+        },
+      };
+      const extras = Array.isArray(additional_persons) ? additional_persons : [];
+      const hasExtras = extras.length > 0;
+      let affectedPersonsPayload = null;
+      if (hasExtras) {
+        const primaryEntry = {
+          name: submittedTypeData.injured_person.name,
+          job_title: submittedTypeData.injured_person.job_title,
+          dob: submittedTypeData.injured_person.dob,
+          gender: submittedTypeData.injured_person.gender,
+          date_hired: submittedTypeData.injured_person.date_hired,
+          address: submittedTypeData.injured_person.address,
+          phone: submittedTypeData.injured_person.phone,
+          employment_status: 'employee',
+          is_primary: true,
+          injuries: [{
+            body_part: bodyParts.length ? bodyParts.join(', ') : null,
+            injury_type: typeDataNoExtras?.injury_type ?? null,
+            mechanism: typeDataNoExtras?.mechanism ?? null,
+            object_substance: typeDataNoExtras?.object_substance ?? null,
+            treatment: typeDataNoExtras?.treatment ?? null,
+            physician_name: typeDataNoExtras?.physician_name ?? null,
+            physician_phone: typeDataNoExtras?.physician_phone ?? null,
+            physician_facility: typeDataNoExtras?.facility_name ?? null,
+            er_treated: !!typeDataNoExtras?.er_treated,
+            hospitalized: !!typeDataNoExtras?.hospitalized,
+            hospitalization_date: typeDataNoExtras?.hospitalization_date ?? null,
+          }],
+        };
+        // Don't double-mark primaries — InjuryForm's modal can flag an
+        // extra as is_primary; force it to false here because the inline
+        // form is the canonical primary at intake.
+        const dedupedExtras = extras.map(p => ({ ...p, is_primary: false }));
+        affectedPersonsPayload = [primaryEntry, ...dedupedExtras];
+      }
+
       // Anonymous reporting (per locked decision #10) is disabled for
       // injury/illness — backend rejects, but the toggle is also disabled
       // in the UI for those types. Defensive double-check here.
@@ -348,9 +424,10 @@ export default function ReportWizard({ onClose, onSubmit }) {
         title: title.trim(), type, description,
         incident_datetime: datetime, site_id: Number(siteId),
         asset_id: assetId ? Number(assetId) : null,
-        area, likelihood, consequence, type_data: typeData,
+        area, likelihood, consequence, type_data: submittedTypeData,
         body_parts_affected: bodyParts,
         is_anonymous: allowAnon && isAnonymous ? true : false,
+        ...(affectedPersonsPayload ? { affected_persons: affectedPersonsPayload } : {}),
         ...(voiceExtractionId
           ? {
               voice_extraction_id: voiceExtractionId,
@@ -721,7 +798,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     </div>
                     {typeName} — type-specific details
                   </div>
-                  {TypeSection && <TypeSection data={typeData} onChange={setTypeData} />}
+                  {TypeSection && <TypeSection data={typeData} onChange={setTypeData} jurisdiction={jurisdiction} />}
                 </div>
 
                 <div className="wiz-risk-section">

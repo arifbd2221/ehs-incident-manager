@@ -8,10 +8,21 @@
 // Mirror of the constants in server/services/recordability.js. Both lists are
 // short and stable; duplication here avoids a roundtrip just to render labels.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from '../shared/Icon';
 import { verifyRecordability } from '../../api/incidents';
-import { formatDate } from '../../utils/time';
+import {
+  listOverrideRequestsForIncident,
+  approveOverrideRequest,
+  rejectOverrideRequest,
+  withdrawOverrideRequest,
+} from '../../api/override_requests';
+import { useAuth } from '../../context/AuthContext';
+import { formatDate, timeAgo } from '../../utils/time';
+import OverrideRequestModal from '../../pages/incidents/modals/OverrideRequestModal';
+
+const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 const WORK_RELATEDNESS_EXCEPTIONS = [
   { id: 'visitor', label: 'Member of the public, not a covered employee' },
@@ -60,6 +71,8 @@ const TYPE_LABELS = {
 };
 
 export default function RecordabilityVerifyCard({ incident, onVerified }) {
+  const { user } = useAuth();
+  const isElevated = ELEVATED_ROLES.has(user?.role);
   const alreadyVerified = !!incident.osha_recordable_verified_at;
 
   const [open, setOpen] = useState(!alreadyVerified);
@@ -73,6 +86,72 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [decision, setDecision] = useState(null);
+
+  // WI-B: override requests pending on osha_recordable. Refreshed
+  // whenever the incident reloads (onVerified bumps the parent's
+  // refresh key) or when the modal closes after a successful submit.
+  const [overrideRequests, setOverrideRequests] = useState([]);
+  const [overrideModalOpen, setOverrideModalOpen] = useState(false);
+  const [overrideError, setOverrideError] = useState(null);
+  const [overrideBusyId, setOverrideBusyId] = useState(null);
+
+  useEffect(() => {
+    if (!incident?.id) return;
+    listOverrideRequestsForIncident(incident.id)
+      .then(d => setOverrideRequests(d.requests || []))
+      .catch(() => setOverrideRequests([]));
+  }, [incident?.id, incident?.osha_recordable, incident?.osha_recordable_verified_at]);
+
+  const pendingOshaRequest = overrideRequests.find(
+    r => r.status === 'pending' && r.field === 'osha_recordable',
+  );
+
+  const refreshOverrides = async () => {
+    try {
+      const d = await listOverrideRequestsForIncident(incident.id);
+      setOverrideRequests(d.requests || []);
+    } catch { /* swallow — list will retry on next render */ }
+  };
+
+  const handleApprove = async (rid) => {
+    setOverrideBusyId(rid);
+    setOverrideError(null);
+    try {
+      await approveOverrideRequest(rid);
+      await refreshOverrides();
+      if (onVerified) onVerified();
+    } catch (e) {
+      setOverrideError(e?.response?.data?.error || 'Failed to approve request.');
+    } finally {
+      setOverrideBusyId(null);
+    }
+  };
+
+  const handleReject = async (rid) => {
+    setOverrideBusyId(rid);
+    setOverrideError(null);
+    try {
+      await rejectOverrideRequest(rid);
+      await refreshOverrides();
+    } catch (e) {
+      setOverrideError(e?.response?.data?.error || 'Failed to reject request.');
+    } finally {
+      setOverrideBusyId(null);
+    }
+  };
+
+  const handleWithdraw = async (rid) => {
+    setOverrideBusyId(rid);
+    setOverrideError(null);
+    try {
+      await withdrawOverrideRequest(rid);
+      await refreshOverrides();
+    } catch (e) {
+      setOverrideError(e?.response?.data?.error || 'Failed to withdraw request.');
+    } finally {
+      setOverrideBusyId(null);
+    }
+  };
 
   const canSubmit = (() => {
     if (coveredWorker === '') return false;
@@ -141,9 +220,30 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
               Verified by <b>{incident.verified_by_name || 'EHS'}</b> on <b>{formatDate(incident.osha_recordable_verified_at)}</b>.
               The decision flows to OSHA 300 Log automatically.
             </div>
-            <button className="rv-reverify" onClick={() => { reset(); setOpen(true); }}>
-              <Icon name="edit" size={13}/>Re-verify
-            </button>
+
+            {pendingOshaRequest && (
+              <OverrideRequestBanner
+                request={pendingOshaRequest}
+                currentUserId={user?.id}
+                isElevated={isElevated}
+                busy={overrideBusyId === pendingOshaRequest.id}
+                onApprove={() => handleApprove(pendingOshaRequest.id)}
+                onReject={() => handleReject(pendingOshaRequest.id)}
+                onWithdraw={() => handleWithdraw(pendingOshaRequest.id)}
+              />
+            )}
+            {overrideError && <div className="rv-error">{overrideError}</div>}
+
+            <div className="rv-actions" style={{ marginTop: 8 }}>
+              <button className="rv-reverify" onClick={() => { reset(); setOpen(true); }}>
+                <Icon name="edit" size={13}/>Re-verify
+              </button>
+              {!pendingOshaRequest && (
+                <button className="rv-reverify" onClick={() => setOverrideModalOpen(true)}>
+                  <Icon name="shield" size={13}/>Request override
+                </button>
+              )}
+            </div>
           </div>
         ) : decision ? (
           <div className="rv-decision-out">
@@ -279,6 +379,67 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
             </div>
           </div>
         ) : null}
+      </div>
+
+      {overrideModalOpen && createPortal(
+        <OverrideRequestModal
+          incident={incident}
+          field="osha_recordable"
+          onCancel={() => setOverrideModalOpen(false)}
+          onSubmitted={async () => {
+            setOverrideModalOpen(false);
+            await refreshOverrides();
+          }}
+        />,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+// Inline banner shown when a pending override request exists for this
+// incident's osha_recordable. Approve/Reject for elevated approvers
+// (anyone but the requester); Withdraw for the requester.
+function OverrideRequestBanner({ request, currentUserId, isElevated, busy, onApprove, onReject, onWithdraw }) {
+  const isRequester = currentUserId === request.requested_by;
+  const canDecide = isElevated && !isRequester;
+  const proposedLabel = request.proposed_value === 1 ? 'Recordable' : 'Not recordable';
+
+  return (
+    <div className="rv-summary" style={{
+      borderLeft: '3px solid var(--sds-warning)',
+      paddingLeft: 12,
+      marginTop: 12,
+    }}>
+      <div className="rv-result-label" style={{ fontSize: 13 }}>
+        <Icon name="warning" size={13} color="var(--sds-warning)"/> Override pending review
+      </div>
+      <div className="rv-meta">
+        <b>{request.requested_by_name || 'Requester'}</b> proposed: <b>{proposedLabel}</b>
+        {' · '}{timeAgo(request.requested_at)}
+      </div>
+      <div className="rv-meta" style={{ whiteSpace: 'pre-wrap' }}>
+        {request.reason}
+      </div>
+      <div className="rv-actions" style={{ marginTop: 8, gap: 8 }}>
+        {canDecide && (
+          <>
+            <button className="rv-submit" disabled={busy} onClick={onApprove}>
+              <Icon name="check" size={13}/>{busy ? 'Approving…' : 'Approve'}
+            </button>
+            <button className="rv-reverify" disabled={busy} onClick={onReject}>
+              <Icon name="close" size={13}/>{busy ? 'Rejecting…' : 'Reject'}
+            </button>
+          </>
+        )}
+        {isRequester && (
+          <button className="rv-reverify" disabled={busy} onClick={onWithdraw}>
+            <Icon name="close" size={13}/>{busy ? 'Withdrawing…' : 'Withdraw'}
+          </button>
+        )}
+        {!canDecide && !isRequester && (
+          <span className="helper">Awaiting decision by an EHS Officer, EHS Manager, or Admin.</span>
+        )}
       </div>
     </div>
   );
