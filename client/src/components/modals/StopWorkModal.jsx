@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { submitStopWork } from '../../api/stop_work';
 import { listSites } from '../../api/sites';
 import { listAssets } from '../../api/assets';
+import { useApp } from '../../context/AppContext';
 import Icon from '../shared/Icon';
 import ComboBox from '../shared/ComboBox';
 import SmartTextarea from '../shared/SmartTextarea';
@@ -19,6 +20,7 @@ import SmartTextarea from '../shared/SmartTextarea';
 
 export default function StopWorkModal({ open, onClose, onSubmitted }) {
   const navigate = useNavigate();
+  const { activeSiteId } = useApp();
   const [sites, setSites] = useState([]);
   const [assets, setAssets] = useState([]);
   const [siteId, setSiteId] = useState('');
@@ -33,9 +35,14 @@ export default function StopWorkModal({ open, onClose, onSubmitted }) {
     if (!open) return;
     listSites().then(s => {
       setSites(s);
-      if (s.length > 0 && !siteId) setSiteId(String(s[0].id));
+      if (s.length > 0 && !siteId) {
+        const defaultId = activeSiteId && s.some(x => x.id === activeSiteId)
+          ? String(activeSiteId)
+          : String(s[0].id);
+        setSiteId(defaultId);
+      }
     }).catch(() => {});
-  }, [open]);
+  }, [open, activeSiteId]);
 
   useEffect(() => {
     if (!siteId) { setAssets([]); setAssetId(''); return; }

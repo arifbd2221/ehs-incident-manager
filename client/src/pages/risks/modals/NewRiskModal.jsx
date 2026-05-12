@@ -6,6 +6,7 @@ import DatePicker from '../../../components/shared/DatePicker';
 import { createRisk } from '../../../api/risks';
 import { getSites } from '../../../api/auth';
 import { getUsers } from '../../../api/users';
+import { useApp } from '../../../context/AppContext';
 
 const CATEGORIES = [
   { value: 'safety', label: 'Safety' },
@@ -20,10 +21,11 @@ const CATEGORIES = [
 ];
 
 export default function NewRiskModal({ onCancel, onCreated }) {
+  const { activeSiteId } = useApp();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
-  const [siteId, setSiteId] = useState('');
+  const [siteId, setSiteId] = useState(activeSiteId ? String(activeSiteId) : '');
   const [source, setSource] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
   const [ownerId, setOwnerId] = useState('');
@@ -34,7 +36,13 @@ export default function NewRiskModal({ onCancel, onCreated }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    getSites().then(r => setSites(r.sites || r)).catch(() => {});
+    getSites().then(r => {
+      const list = r.sites || r;
+      setSites(list);
+      if (!siteId && activeSiteId && list.some(s => s.id === activeSiteId)) {
+        setSiteId(String(activeSiteId));
+      }
+    }).catch(() => {});
     getUsers().then(r => setUsers(r.users || r)).catch(() => {});
   }, []);
 

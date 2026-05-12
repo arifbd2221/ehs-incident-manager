@@ -115,7 +115,7 @@ const fileTypeInfo = (file) => {
 
 export default function ReportWizard({ onClose, onSubmit }) {
   const { user } = useAuth();
-  const { voiceSheetData, setVoiceSheetData } = useApp();
+  const { voiceSheetData, setVoiceSheetData, activeSiteId } = useApp();
   const { showOsha, showRiddor } = frameworkVisibility(user);
   const [step, setStep] = useState(0);
   const [type, setType] = useState('injury');
@@ -224,8 +224,16 @@ export default function ReportWizard({ onClose, onSubmit }) {
   }, [assets, aiOriginalValues.asset]);
 
   useEffect(() => {
-    getSites().then(data => { setSites(data); if (data.length > 0) setSiteId(String(data[0].id)); });
-  }, []);
+    getSites().then(data => {
+      setSites(data);
+      if (data.length > 0) {
+        const defaultId = activeSiteId && data.some(s => s.id === activeSiteId)
+          ? String(activeSiteId)
+          : String(data[0].id);
+        setSiteId(defaultId);
+      }
+    });
+  }, [activeSiteId]);
 
   // Reload assets when the site changes; reset asset selection
   useEffect(() => {
