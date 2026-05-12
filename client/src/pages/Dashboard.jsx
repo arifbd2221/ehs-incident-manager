@@ -263,9 +263,26 @@ export default function Dashboard() {
   };
 
   const elevated = ['supervisor', 'ehs_officer', 'ehs_manager', 'admin'].includes(user?.role);
+  const [ackingId, setAckingId] = useState(null);
+  const [bannerExiting, setBannerExiting] = useState(false);
   const handleAcknowledge = async (id) => {
-    try { await acknowledgeStopWork(id); loadStopWorks(); }
-    catch (e) { alert(e.response?.data?.error || 'Acknowledge failed'); }
+    setAckingId(id);
+    try {
+      await acknowledgeStopWork(id);
+      const isLast = activeStopWorks.length === 1;
+      if (isLast) {
+        await new Promise(r => setTimeout(r, 700));
+        setBannerExiting(true);
+        await new Promise(r => setTimeout(r, 450));
+        setBannerExiting(false);
+      } else {
+        await new Promise(r => setTimeout(r, 800));
+      }
+      loadStopWorks();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Acknowledge failed');
+    }
+    setAckingId(null);
   };
 
   if (loading) {
@@ -611,7 +628,7 @@ export default function Dashboard() {
   return (
     <div className="page">
       {activeStopWorks.length > 0 && (
-        <div className="dash-stopwork-banner">
+        <div className={`dash-stopwork-banner${bannerExiting ? ' sw-banner-exit' : ''}`}>
           <div className="dash-stopwork-icon"><Icon name="warning" size={22} color="#fff" /></div>
           <div className="dash-stopwork-body">
             <div className="dash-stopwork-title">
@@ -619,18 +636,34 @@ export default function Dashboard() {
             </div>
             <div className="dash-stopwork-list">
               {activeStopWorks.map((sw) => (
-                <div key={sw.id} className="dash-stopwork-row" onClick={() => navigate(`/incidents/${sw.id}`)}>
-                  <span className="dash-stopwork-num">{sw.incident_number}</span>
-                  <span> — </span>
-                  <span>{sw.area} · {sw.site_name || ''}</span>
-                  {elevated && (
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ marginLeft: 'auto', background: '#fff', color: 'var(--sds-error)', borderColor: '#fff' }}
-                      onClick={(e) => { e.stopPropagation(); handleAcknowledge(sw.id); }}
-                    >
-                      Acknowledge
-                    </button>
+                <div
+                  key={sw.id}
+                  className={`dash-stopwork-row${ackingId === sw.id ? ' sw-row-ack' : ''}`}
+                  onClick={() => navigate(`/incidents/${sw.id}`)}
+                >
+                  {ackingId === sw.id ? (
+                    <div className="sw-ack-content">
+                      <span className="sw-ack-circle">
+                        <Icon name="check" size={13} color="#fff" />
+                      </span>
+                      <span className="sw-ack-text">Acknowledged</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="dash-stopwork-num">{sw.incident_number}</span>
+                      <span> — </span>
+                      <span>{sw.area} · {sw.site_name || ''}</span>
+                      {elevated && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          style={{ marginLeft: 'auto', background: '#fff', color: 'var(--sds-error)', borderColor: '#fff' }}
+                          onClick={(e) => { e.stopPropagation(); handleAcknowledge(sw.id); }}
+                          disabled={ackingId !== null}
+                        >
+                          Acknowledge
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               ))}

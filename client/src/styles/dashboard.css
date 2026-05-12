@@ -682,6 +682,89 @@
   font-size: 11px;
 }
 
+/* ── Stop-work acknowledge animation ── */
+
+/* Phase 1: green success sweep fills the row from left */
+.sw-row-ack {
+  position: relative;
+  pointer-events: none;
+  overflow: hidden;
+  animation: swRowSlideOut 400ms cubic-bezier(0.4, 0, 0.2, 1) 400ms forwards;
+}
+.sw-row-ack::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(46,125,50,0.55) 0%, rgba(46,125,50,0.35) 100%);
+  border-radius: inherit;
+  transform-origin: left center;
+  animation: swSweep 350ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  z-index: 0;
+}
+@keyframes swSweep {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Phase 2: after 400ms hold, row slides right + collapses */
+@keyframes swRowSlideOut {
+  0%   { transform: translateX(0); opacity: 1; max-height: 44px; }
+  50%  { transform: translateX(40px); opacity: 0.4; max-height: 44px; }
+  100% { transform: translateX(80px); opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin: 0; }
+}
+
+/* Acknowledged content layout */
+.sw-ack-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Green circle behind check icon — pops with spring curve */
+.sw-ack-circle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: swCirclePop 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 12px rgba(255,255,255,0.25);
+}
+@keyframes swCirclePop {
+  0%   { transform: scale(0) rotate(-45deg); opacity: 0; }
+  50%  { transform: scale(1.25) rotate(0deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* "Acknowledged" label slides in from left */
+.sw-ack-text {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateX(-8px);
+  animation: swTextSlide 280ms cubic-bezier(0.34, 1.56, 0.64, 1) 120ms forwards;
+}
+@keyframes swTextSlide {
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Banner collapse when last stop-work is acknowledged */
+.sw-banner-exit {
+  overflow: hidden;
+  animation: swBannerCollapse 420ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes swBannerCollapse {
+  0%   { opacity: 1; transform: scale(1); max-height: 250px; padding: 14px 16px; margin-bottom: 16px; }
+  40%  { opacity: 0.6; transform: scale(0.98); }
+  100% { opacity: 0; transform: scale(0.95) translateY(-8px); max-height: 0; padding: 0 16px; margin-bottom: 0; }
+}
+
 /* ================================================================
  * CUSTOMIZE DRAWER
  * ================================================================ */
