@@ -360,10 +360,9 @@
     </div>
     <div>
       <ul>
-        <li><strong>Jurisdiction-aware fields</strong> — RIDDOR fields appear only for UK orgs; SafeWork NSW fields only for AU. No clutter.</li>
-        <li><strong>Multi-person incidents</strong> — one event, many affected persons, each with their own injury record + witnesses</li>
-        <li><strong>Anonymous reporting</strong> + <strong>stop-work flag</strong> for high-severity hazards</li>
-        <li><strong>Attachments</strong> on the way in <em>and</em> after the fact</li>
+        <li><strong>Jurisdiction-aware fields</strong> — RIDDOR fields appear only for UK orgs; SafeWork NSW only for AU. No clutter.</li>
+        <li><strong>Multi-person incidents</strong> — one event, many affected persons, each with their own injury record + witnesses.</li>
+        <li><strong>Anonymous reporting</strong> + a <strong>stop-work flag</strong> that broadcasts an alert across the org.</li>
       </ul>
     </div>
   </div>
@@ -392,7 +391,7 @@
     </div>
   </div>
   <div class="callout mt-lg">
-    Classification fires <strong>at capture time</strong>, not at workflow end. Recordability and reportability flags are emitted instantly — so the deadline clock starts ticking on the right minute.
+    Recordability and reportability flags fire <strong>at capture time</strong> — the regulator clock starts on the right minute.
   </div>
   <div class="footer-strip"><span class="b">Safelync</span> &nbsp;/&nbsp; routing</div>
 </section>
@@ -418,8 +417,7 @@
       <ul class="small">
         <li>Same kanban model, different lanes</li>
         <li>Overdue / due-soon colour coding</li>
-        <li><strong>Owner ≠ verifier</strong> — enforced at the database trigger level. No one verifies their own corrective action.</li>
-        <li>Enforced at the schema layer — not just hidden in the UI.</li>
+        <li><strong>Owner ≠ verifier</strong> — enforced at the schema layer, not just hidden in the UI. No one verifies their own corrective action.</li>
       </ul>
     </div>
   </div>
@@ -563,23 +561,21 @@
 <!-- 13. SUPPORTING SURFACE -->
 <section>
   <span class="slide-label">What we built &mdash; 8 of 8</span>
-  <h2>The supporting surface — don't underestimate these.</h2>
+  <h2>The supporting surface.</h2>
   <div class="cols mt-lg">
     <div>
       <ul class="small">
-        <li><strong>Dashboard</strong> — TRIR, DART, LTIR, severity rate, open incidents, overdue CAPAs, PM compliance — with animated count-ups and stop-work alert banner</li>
-        <li><strong>Risk Register</strong> — 5×5 matrix, inherent vs. residual tracking, controls library</li>
-        <li><strong>Assets &amp; Maintenance</strong> — preventive / calibration / inspection schedules with overdue tracking</li>
-        <li><strong>Documents</strong> — folder hierarchy, version history, polymorphic linking back to incidents</li>
+        <li><strong>Dashboard</strong> — TRIR / DART / LTIR / severity rate, overdue CAPAs, PM compliance, animated KPIs.</li>
+        <li><strong>Risk Register</strong> — 5×5 matrix, inherent vs. residual tracking, controls library.</li>
+        <li><strong>Assets &amp; Maintenance</strong> — preventive / calibration / inspection schedules with overdue tracking.</li>
+        <li><strong>Inspections + templates</strong> — publish / draft / archive lifecycle.</li>
       </ul>
     </div>
     <div>
       <ul class="small">
-        <li><strong>Sites &amp; roles</strong> — multi-site with NAICS, HSE establishment ID, parent hierarchy; six roles with route-level enforcement</li>
-        <li><strong>Inspections + templates</strong> — publish / draft / archive lifecycle</li>
-        <li><strong>Global search</strong>, notifications panel, learning module</li>
-        <li><strong>CSV imports</strong> for users, sites, assets, work hours</li>
-        <li><strong>Empty-state onboarding</strong> — three test tenants (US / UK / AU) prove the cold-start UX</li>
+        <li><strong>Documents</strong> — folder hierarchy, version history, polymorphic linking back to incidents.</li>
+        <li><strong>Sites &amp; roles</strong> — multi-site hierarchy; six roles enforced at the route layer.</li>
+        <li><strong>Imports + onboarding</strong> — CSV imports for users / sites / assets / work hours; three empty test tenants prove the cold-start UX.</li>
       </ul>
     </div>
   </div>
@@ -607,7 +603,7 @@
       </tr>
       <tr>
         <td><strong>SafetyCulture-style ops apps</strong></td>
-        <td>Great UX — we match it (body map, kanban, voice intake, real-time KPIs) <em>plus</em> the regulatory engine they don't have.</td>
+        <td>We match the UX — and add the regulatory engine they don't have.</td>
       </tr>
     </tbody>
   </table>
