@@ -30,7 +30,6 @@ const NAV = [
   { id: 'templates', path: '/templates', icon: 'clipboard', label: 'Templates', color: '#8b5cf6' },
   { id: 'inspections', path: '/inspections', icon: 'shield', label: 'Inspections', color: '#00897B' },
   { id: 'reports', path: '/reports', icon: 'reports', label: 'Reports', color: '#5C6BC0' },
-  { id: 'learn', path: '/learn', icon: 'help', label: 'Learn', color: '#8b5cf6' },
 ];
 
 const SETTINGS_CHILDREN = [

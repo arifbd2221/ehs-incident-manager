@@ -437,6 +437,15 @@ export default function TopBar() {
                 ))}
               </div>
 
+              <div className="help-learn-card" onClick={() => { navigate('/learn'); setHelpOpen(false); }}>
+                <div className="help-learn-icon"><Icon name="help" size={20} /></div>
+                <div className="help-learn-body">
+                  <div className="help-learn-title">Learn EHS</div>
+                  <div className="help-learn-desc">Interactive stories and training modules</div>
+                </div>
+                <Icon name="arrow" size={14} />
+              </div>
+
               <div className="help-section">
                 <div className="help-sec-label">Keyboard shortcuts</div>
                 <div className="help-shortcuts">

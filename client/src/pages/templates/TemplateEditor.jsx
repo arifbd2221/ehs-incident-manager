@@ -387,48 +387,45 @@ export default function TemplateEditor() {
 
   return (
     <div className="page te-page" ref={editorRef}>
-      {/* Header */}
-      <div className="te-header">
-        <div className="te-header-top">
-          <button className="te-back" onClick={() => navigate('/templates')}>
-            <Icon name="arrowL" size={18} />
-          </button>
-          <div className="te-header-actions">
-          {/* Version badge */}
-          {latestVersion > 0 && (
-            <button className="te-version-badge" onClick={() => setShowVersions(true)} title="View version history">
-              v{latestVersion}
-            </button>
-          )}
-          {/* Unpublished changes indicator */}
-          {hasUnpublished && latestVersion > 0 && (
-            <span className="te-unpublished-badge">Unpublished changes</span>
-          )}
-          {latestVersion === 0 && (
-            <span className={`te-status tp-status-draft`}>
-              <span className="dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
-              draft
-            </span>
-          )}
-          <div className={`te-save te-save--${saveStatus}`}>
-            <span className="te-save-dot" />
-            {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'error' ? 'Save failed' : 'Saved'}
-          </div>
-          <button className="btn btn-secondary" onClick={() => setShowAnswerSets(true)}>
-            <Icon name="settings" size={14} /> Answer Sets
-          </button>
-          {isDraft && (
-            <button className="tp-btn-create" onClick={() => setShowPublish(true)} disabled={questionCount === 0}>
-              <Icon name="check" size={16} /> Publish{latestVersion > 0 ? ` v${nextVersion}` : ''}
-            </button>
-          )}
-          </div>
-        </div>
-      </div>
-
       {/* Editor body: sections + floating toolbar */}
       <div className="te-editor-body">
         <div className="te-sections">
+          {/* Header — inside sections so it matches card width */}
+          <div className="te-header">
+            <div className="te-header-top">
+              <button className="te-back" onClick={() => navigate('/templates')}>
+                <Icon name="arrowL" size={18} />
+              </button>
+              <div className="te-header-actions">
+                {latestVersion > 0 && (
+                  <button className="te-version-badge" onClick={() => setShowVersions(true)} title="View version history">
+                    v{latestVersion}
+                  </button>
+                )}
+                {hasUnpublished && latestVersion > 0 && (
+                  <span className="te-unpublished-badge">Unpublished changes</span>
+                )}
+                {latestVersion === 0 && (
+                  <span className={`te-status tp-status-draft`}>
+                    <span className="dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+                    draft
+                  </span>
+                )}
+                <div className={`te-save te-save--${saveStatus}`}>
+                  <span className="te-save-dot" />
+                  {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'error' ? 'Save failed' : 'Saved'}
+                </div>
+                <button className="btn btn-secondary" onClick={() => setShowAnswerSets(true)}>
+                  <Icon name="settings" size={14} /> Answer Sets
+                </button>
+                {isDraft && (
+                  <button className="tp-btn-create" onClick={() => setShowPublish(true)} disabled={questionCount === 0}>
+                    <Icon name="check" size={16} /> Publish{latestVersion > 0 ? ` v${nextVersion}` : ''}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
           <div className="te-hero-card">
             <div className="te-hero-image-area">
               {template.cover_image ? (
