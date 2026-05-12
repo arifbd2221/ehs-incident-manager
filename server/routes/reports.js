@@ -6,6 +6,7 @@ import { AUDIT_ACTIONS_CATALOG } from '../services/audit_actions_catalog.js';
 import { verifyChain } from '../db/activity_log_chain.js';
 import { renderOsha300Pdf } from '../services/pdf/osha_300.js';
 import { renderOsha301Pdf } from '../services/pdf/osha_301.js';
+import { renderGenericIncidentPdf, ALL_SECTIONS as GENERIC_ALL_SECTIONS } from '../services/pdf/generic_incident.js';
 import { listAffectedPersons } from '../services/affected_persons.js';
 import {
   listSevereNotificationsForIncident,
@@ -652,6 +653,137 @@ router.get('/osha-301/:incidentId', (req, res) => {
     hospitalization_date: incident.hospitalization_date || '',
     work_related: incident.osha_work_related || '',
     type_data: td,
+  });
+});
+
+// ===================================================================
+// WI-09 Generic incident PDF (per PRD §4.6)
+//
+// Universal fallback record artifact. Renders for ANY incident
+// regardless of jurisdiction, classification, or completeness. The
+// document is explicitly NOT a regulatory submission — the footer
+// notes that any required regulatory reporting must go through OSHA
+// ITA / HSE RIDDOR / SafeWork NSW Notify.
+//
+// Section visibility configurable via ?sections=overview,affected_persons,
+// investigation,causes,capas,classifications,attachments,audit. Default
+// is all sections enabled. ?audit_limit=N caps the audit-trail slice
+// (default 25).
+// ===================================================================
+router.get('/incidents/:incidentId/generic', (req, res) => {
+  const orgId = req.user.org_id;
+  const incidentId = Number(req.params.incidentId);
+  const format = req.query.format || 'pdf';
+  if (format !== 'pdf') {
+    return res.status(400).json({ error: 'Only ?format=pdf is supported for the generic incident report.' });
+  }
+
+  const incident = db.prepare(`
+    SELECT i.*, s.name AS site_name, s.address AS site_address, s.naics_code AS site_naics
+    FROM incidents i
+    LEFT JOIN sites s ON s.id = i.site_id
+    WHERE i.id = ? AND i.org_id = ?
+  `).get(incidentId, orgId);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+
+  // Section filter — default all on.
+  let sections = GENERIC_ALL_SECTIONS;
+  if (req.query.sections) {
+    const requested = String(req.query.sections).split(',').map(s => s.trim()).filter(Boolean);
+    sections = requested.filter(s => GENERIC_ALL_SECTIONS.includes(s));
+    if (sections.length === 0) sections = GENERIC_ALL_SECTIONS;
+  }
+
+  // Always load the per-section data — cheap, lets the renderer
+  // decide what to render based on the sections array. Each loader
+  // is its own existing service / SQL, so the loaders no-op cleanly
+  // when there's nothing to load.
+  const affectedPersons = listAffectedPersons({ orgId, incidentId });
+
+  const investigation = db.prepare(`
+    SELECT * FROM investigations WHERE incident_id = ? ORDER BY id DESC LIMIT 1
+  `).get(incidentId);
+  const investigationLead = investigation?.lead_investigator
+    ? db.prepare('SELECT id, name FROM users WHERE id = ?').get(investigation.lead_investigator)
+    : null;
+  const fiveWhys = investigation
+    ? db.prepare('SELECT * FROM five_whys WHERE investigation_id = ? ORDER BY level ASC, id ASC').all(investigation.id)
+    : [];
+
+  const capas = db.prepare(`
+    SELECT c.*,
+           o.name AS owner_name,
+           v.name AS verifier_name
+    FROM capas c
+    LEFT JOIN users o ON o.id = c.owner_id
+    LEFT JOIN users v ON v.id = c.verifier_id
+    WHERE c.incident_id = ? AND c.org_id = ?
+    ORDER BY c.id ASC
+  `).all(incidentId, orgId);
+
+  const oshaSevereRows = db.prepare(`
+    SELECT * FROM osha_severe_notifications
+    WHERE org_id = ? AND incident_id = ?
+    ORDER BY id ASC
+  `).all(orgId, incidentId);
+
+  const riddorReport = db.prepare(`
+    SELECT * FROM riddor_reports WHERE incident_id = ? ORDER BY id DESC LIMIT 1
+  `).get(incidentId);
+
+  const nswNotification = db.prepare(`
+    SELECT * FROM safework_nsw_notifications WHERE org_id = ? AND incident_id = ?
+  `).get(orgId, incidentId);
+
+  const attachments = db.prepare(`
+    SELECT * FROM attachments
+    WHERE entity_type = 'incident' AND entity_id = ?
+    ORDER BY id ASC
+  `).all(incidentId);
+
+  const auditLimit = Math.min(100, Math.max(1, Number(req.query.audit_limit) || 25));
+  const auditEntries = db.prepare(`
+    SELECT al.*, u.name AS user_name
+    FROM activity_log al
+    LEFT JOIN users u ON u.id = al.user_id
+    WHERE al.org_id = ? AND al.entity_type = 'incident' AND al.entity_id = ?
+    ORDER BY al.created_at DESC, al.id DESC
+    LIMIT ?
+  `).all(orgId, incidentId, auditLimit);
+
+  const filename = `incident-report-${(incident.incident_number || incidentId).toString().replace(/[^A-Za-z0-9_.-]/g, '_')}.pdf`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  writeActivity({
+    org_id: orgId,
+    entity_type: 'incident',
+    entity_id: incidentId,
+    action: 'generic_incident_pdf_downloaded',
+    description: `downloaded generic incident PDF for ${incident.incident_number}`,
+    user_id: req.user.id,
+    metadata: {
+      incident_id: incidentId,
+      sections: sections,
+      audit_limit: auditLimit,
+    },
+    ...auditCtx(req),
+  });
+
+  return renderGenericIncidentPdf(res, {
+    orgName: org?.name || '',
+    site: { name: incident.site_name, address: incident.site_address, naics_code: incident.site_naics },
+    incident,
+    affectedPersons,
+    investigation, investigationLead, fiveWhys,
+    capas,
+    oshaSevereRows, riddorReport, nswNotification,
+    attachments,
+    auditEntries,
+    sections,
+    generatedAt: new Date().toISOString().slice(0, 10),
   });
 });
 

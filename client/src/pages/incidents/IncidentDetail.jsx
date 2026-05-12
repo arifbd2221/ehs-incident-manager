@@ -194,6 +194,7 @@ export default function IncidentDetail() {
   const [postingNote, setPostingNote] = useState(false);
 
   const [downloading301, setDownloading301] = useState(false);
+  const [downloadingGeneric, setDownloadingGeneric] = useState(false);
   // WI-07: OSHA 1904.39 severe-injury notification rows for this incident.
   const [oshaSevere, setOshaSevere] = useState([]);
   // null = closed; severeRow = open for that row.
@@ -356,6 +357,42 @@ export default function IncidentDetail() {
   // generated per-recordable-case, so the button only shows when
   // osha_recordable === 1. Reuses the auth-fetch + blob-<a> pattern
   // from the WI-01 Download-PDF button on ReportsPage.
+  // WI-09: universal incident PDF (per PRD §4.6). Available for any
+  // incident regardless of jurisdiction, classification, or
+  // completeness. NOT a regulatory submission — the document carries
+  // a footer disclaimer to that effect.
+  const downloadGenericIncidentPdf = async () => {
+    if (!r?.id) return;
+    setDownloadingGeneric(true);
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`/api/reports/incidents/${r.id}/generic?format=pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `Download failed: ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      let filename = `incident-report-${r.incident_number || r.id}.pdf`;
+      const cd = resp.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      if (m) filename = m[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      showToast(e.message || 'Download failed.');
+    } finally {
+      setDownloadingGeneric(false);
+    }
+  };
+
   const downloadOsha301Pdf = async () => {
     if (!r?.id) return;
     setDownloading301(true);
@@ -867,6 +904,19 @@ export default function IncidentDetail() {
                   <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
                     <span className="st-dot"/>{r.status}
                   </span>
+                </div>
+                {/* WI-09: universal incident PDF — always available, any
+                    incident regardless of jurisdiction / status / classification. */}
+                <div className="idet-triage-row">
+                  <span className="idet-triage-label">Incident report</span>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={downloadGenericIncidentPdf}
+                    disabled={downloadingGeneric}
+                    title="Download a universal incident PDF — internal record, not a regulatory submission"
+                  >
+                    <Icon name="download" size={13}/>{downloadingGeneric ? 'Generating…' : 'Download PDF'}
+                  </button>
                 </div>
                 <div className="idet-triage-row">
                   <span className="idet-triage-label">Severity</span>
