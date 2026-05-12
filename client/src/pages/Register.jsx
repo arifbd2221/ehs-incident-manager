@@ -16,8 +16,8 @@ export default function Register() {
           <div className="auth-brand-logo">
             <img src="/assets/sds-mark.svg" alt="SDS Manager" />
           </div>
-          <h1 className="auth-brand-title">Safelync</h1>
-          <p className="auth-brand-sub">by SDS Manager</p>
+          <h1 className="auth-brand-title">SDS Manager</h1>
+          <p className="auth-brand-sub">EHS Incident Management Platform</p>
 
           <div className="auth-features">
             <div className="auth-feature">

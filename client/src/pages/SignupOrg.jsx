@@ -216,8 +216,8 @@ export default function SignupOrg() {
             <div className="auth-brand-logo">
               <img src="/assets/sds-mark.svg" alt="SDS Manager" />
             </div>
-            <h1 className="auth-brand-title">Safelync</h1>
-            <p className="auth-brand-sub">by SDS Manager</p>
+            <h1 className="auth-brand-title">SDS Manager</h1>
+            <p className="auth-brand-sub">EHS Incident Management Platform</p>
           </div>
           <div className="auth-brand-orbs">
             <div className="auth-orb auth-orb-1" />
@@ -245,8 +245,8 @@ export default function SignupOrg() {
           <div className="auth-brand-logo">
             <img src="/assets/sds-mark.svg" alt="SDS Manager" />
           </div>
-          <h1 className="auth-brand-title">Safelync</h1>
-          <p className="auth-brand-sub">by SDS Manager</p>
+          <h1 className="auth-brand-title">SDS Manager</h1>
+          <p className="auth-brand-sub">EHS Incident Management Platform</p>
 
           {/* Contextual illustration that changes per step */}
           <div className="signup-brand-illus">
