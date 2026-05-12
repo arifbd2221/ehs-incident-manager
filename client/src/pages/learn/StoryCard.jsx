@@ -3,9 +3,9 @@ import Icon from '../../components/shared/Icon';
 import MiniExercise from '../../components/learn/MiniExercise';
 import LifecycleTimeline from '../../components/learn/LifecycleTimeline';
 import {
-  ChemLabScene, ConstructionScene, WarehouseScene, OfficeScene,
-  WizardMockup, RiskMatrixVisual, LifecycleFlowVisual, OshaFormVisual,
-  ChemSplashMoment, FallingObjectMoment, ElectricalHazardMoment,
+  ChemLabScene, ConstructionScene, WarehouseScene, OfficeScene, AuManufacturingScene,
+  WizardMockup, RiskMatrixVisual, LifecycleFlowVisual, OshaFormVisual, WhsFormVisual,
+  ChemSplashMoment, FallingObjectMoment, ElectricalHazardMoment, ScaffoldFallMoment,
 } from '../../components/learn/StoryIllustrations';
 
 const TYPE_COLORS = {
@@ -26,12 +26,14 @@ const STORY_SCENES = {
   unsafe_exposed_wiring: ConstructionScene,
   dangerous_scaffold_collapse: ConstructionScene,
   observation_good_catch: OfficeScene,
+  whs_scaffold_fall: AuManufacturingScene,
 };
 
 const STORY_MOMENTS = {
   injury_chemical_splash: ChemSplashMoment,
   nearmiss_falling_pallet: FallingObjectMoment,
   unsafe_exposed_wiring: ElectricalHazardMoment,
+  whs_scaffold_fall: ScaffoldFallMoment,
 };
 
 function getIllustration(card, cardIndex, storyId) {
@@ -40,6 +42,7 @@ function getIllustration(card, cardIndex, storyId) {
   if (card.type === 'exercise') return RiskMatrixVisual;
   if (card.type === 'lifecycle') return LifecycleFlowVisual;
   if (card.type === 'annotation' && card.highlightType) return WizardMockup;
+  if (card.type === 'annotation' && /WHS|SafeWork|s\.3[5-9]|Site Preservation|Notification/i.test(card.title || '')) return WhsFormVisual;
   if (card.type === 'annotation' && /OSHA|RIDDOR|Recordab/i.test(card.title || '')) return OshaFormVisual;
   return null;
 }

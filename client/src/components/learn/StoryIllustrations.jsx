@@ -211,6 +211,168 @@ export function OfficeScene({ className }) {
   );
 }
 
+/* ── Scene: Australian Manufacturing (scaffold + welding bay) ── */
+export function AuManufacturingScene({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 320 130" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <style>{`
+        @keyframes amWeld{0%,100%{opacity:.2;r:2}50%{opacity:1;r:3.5}}
+        @keyframes amFlag{0%,100%{transform:rotate(0deg)}50%{transform:rotate(4deg)}}
+        .am-w1{animation:amWeld 1s ease-in-out infinite}.am-w2{animation:amWeld 1s ease-in-out .3s infinite}
+        .am-flag{animation:amFlag 2.5s ease-in-out infinite;transform-origin:295px 10px}
+        @media(prefers-reduced-motion:reduce){.am-w1,.am-w2,.am-flag{animation:none;opacity:.5}}
+      `}</style>
+      <rect x="0" y="105" width="320" height="25" rx="0" fill="#e2e8f0" />
+      {/* Building shell */}
+      <rect x="0" y="30" width="320" height="75" rx="0" fill="#f1f5f9" />
+      <rect x="0" y="26" width="320" height="8" rx="0" fill="#94a3b8" />
+      {/* Roof truss lines */}
+      <line x1="0" y1="26" x2="160" y2="8" stroke="#94a3b8" strokeWidth="2" />
+      <line x1="320" y1="26" x2="160" y2="8" stroke="#94a3b8" strokeWidth="2" />
+      <line x1="80" y1="18" x2="80" y2="26" stroke="#94a3b8" strokeWidth="1.5" />
+      <line x1="240" y1="18" x2="240" y2="26" stroke="#94a3b8" strokeWidth="1.5" />
+      {/* Scaffolding — left */}
+      <rect x="20" y="34" width="4" height="71" rx="1" fill="#f59e0b" />
+      <rect x="80" y="34" width="4" height="71" rx="1" fill="#f59e0b" />
+      <rect x="20" y="34" width="64" height="3" rx="1" fill="#f59e0b" />
+      <rect x="20" y="56" width="64" height="3" rx="1" fill="#f59e0b" />
+      <rect x="20" y="78" width="64" height="3" rx="1" fill="#f59e0b" />
+      {/* Cross braces */}
+      <line x1="24" y1="37" x2="80" y2="56" stroke="#f59e0b" strokeWidth="1" opacity=".5" />
+      <line x1="80" y1="37" x2="24" y2="56" stroke="#f59e0b" strokeWidth="1" opacity=".5" />
+      {/* Planks on scaffold */}
+      <rect x="18" y="53" width="68" height="4" rx="1" fill="#d97706" opacity=".6" />
+      <rect x="18" y="75" width="68" height="4" rx="1" fill="#d97706" opacity=".6" />
+      {/* Guardrail (one side missing — story point) */}
+      <rect x="20" y="48" width="4" height="8" rx="1" fill="#f59e0b" />
+      {/* No rail on right side — gap shown */}
+      <line x1="80" y1="49" x2="86" y2="52" stroke="#dc2626" strokeWidth="1.5" strokeDasharray="3 2" opacity=".5" />
+      {/* Worker on scaffold */}
+      <circle cx="52" cy="42" r="6" fill="#E91E63" opacity=".7" />
+      <rect x="47" y="48" width="10" height="8" rx="3" fill="#E91E63" opacity=".6" />
+      {/* Hard hat */}
+      <path d="M46 42 Q52 36 58 42" fill="#fbbf24" />
+      {/* Welding bay — right */}
+      <rect x="180" y="50" width="80" height="55" rx="3" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1" />
+      <text x="220" y="64" textAnchor="middle" fontSize="7" fontWeight="600" fill="#64748b">WELDING BAY 1</text>
+      {/* Gas cylinders */}
+      <rect x="192" y="72" width="10" height="28" rx="5" fill="#00897B" />
+      <rect x="194" y="68" width="6" height="6" rx="2" fill="#00695c" />
+      <rect x="208" y="74" width="10" height="26" rx="5" fill="#546E7A" />
+      <rect x="210" y="70" width="6" height="6" rx="2" fill="#37474f" />
+      {/* Welding sparks */}
+      <circle className="am-w1" cx="240" cy="86" r="2" fill="#fbbf24" />
+      <circle className="am-w2" cx="246" cy="82" r="2" fill="#f59e0b" />
+      <circle className="am-w1" cx="236" cy="90" r="1.5" fill="#fbbf24" opacity=".7" />
+      {/* Safety sign */}
+      <rect x="140" y="38" width="24" height="24" rx="2" fill="#fbbf24" stroke="#92400e" strokeWidth="1" />
+      <text x="152" y="55" textAnchor="middle" fontSize="14" fontWeight="800" fill="#92400e">!</text>
+      {/* Australian flag hint */}
+      <line x1="295" y1="10" x2="295" y2="30" stroke="#64748b" strokeWidth="1.5" />
+      <g className="am-flag"><rect x="295" y="10" width="16" height="10" rx="1" fill="#00008B" /><rect x="295" y="10" width="8" height="5" rx="0" fill="#fff" opacity=".3" /></g>
+    </svg>
+  );
+}
+
+/* ── Moment: Scaffold Fall ── */
+export function ScaffoldFallMoment({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <style>{`
+        @keyframes sfFall{0%{transform:translateY(-24px);opacity:0}50%{opacity:1}100%{transform:translateY(0);opacity:1}}
+        @keyframes sfRail{0%{transform:rotate(0deg)}100%{transform:rotate(25deg)}}
+        @keyframes sfAlert{0%,100%{opacity:.4;transform:scale(.95)}50%{opacity:1;transform:scale(1.05)}}
+        .sf-person{animation:sfFall 1.8s ease-in both}
+        .sf-rail{animation:sfRail 1s ease-out both;transform-origin:80px 40px}
+        .sf-alert{animation:sfAlert 1.5s ease-in-out infinite;transform-origin:center}
+        @media(prefers-reduced-motion:reduce){.sf-person,.sf-rail,.sf-alert{animation:none;opacity:.7}}
+      `}</style>
+      {/* Scaffold structure */}
+      <rect x="40" y="10" width="4" height="96" rx="1" fill="#f59e0b" />
+      <rect x="120" y="10" width="4" height="96" rx="1" fill="#f59e0b" />
+      <rect x="40" y="10" width="84" height="3" rx="1" fill="#f59e0b" />
+      <rect x="40" y="40" width="84" height="3" rx="1" fill="#f59e0b" />
+      <rect x="40" y="70" width="84" height="3" rx="1" fill="#f59e0b" />
+      {/* Plank */}
+      <rect x="38" y="37" width="88" height="4" rx="1" fill="#d97706" opacity=".7" />
+      {/* Detaching guardrail */}
+      <g className="sf-rail">
+        <rect x="80" y="28" width="44" height="3" rx="1" fill="#f59e0b" opacity=".6" />
+        <circle cx="84" cy="29" r="3" fill="#dc2626" opacity=".6" />
+        <text x="84" y="31" textAnchor="middle" fontSize="5" fontWeight="700" fill="#fff">X</text>
+      </g>
+      {/* Guardrail intact — left side */}
+      <rect x="40" y="28" width="44" height="3" rx="1" fill="#f59e0b" />
+      {/* Falling person */}
+      <g className="sf-person">
+        <circle cx="100" cy="58" r="8" fill="#E91E63" opacity=".7" />
+        <rect x="94" y="66" width="12" height="16" rx="4" fill="#E91E63" opacity=".6" />
+        {/* Hard hat flying off */}
+        <path d="M92 54 Q88 48 84 52" fill="#fbbf24" opacity=".8" />
+      </g>
+      {/* Fall trajectory */}
+      <line x1="100" y1="40" x2="100" y2="56" stroke="#dc2626" strokeWidth="1.5" strokeDasharray="4 3" opacity=".4" />
+      {/* Height indicator */}
+      <line x1="30" y1="40" x2="30" y2="96" stroke="#64748b" strokeWidth="1" strokeDasharray="2 2" opacity=".4" />
+      <text x="28" y="70" textAnchor="end" fontSize="7" fontWeight="600" fill="#dc2626" opacity=".7">3.2m</text>
+      {/* Ground / concrete */}
+      <rect x="0" y="96" width="320" height="14" rx="0" fill="#cbd5e1" />
+      {/* Impact star */}
+      <polygon points="100,96 104,92 108,96 104,100" fill="#dc2626" opacity=".3" />
+      {/* SafeWork NSW alert badge */}
+      <g className="sf-alert">
+        <rect x="170" y="20" width="120" height="40" rx="8" fill="#fff" stroke="#E91E63" strokeWidth="2" />
+        <text x="230" y="36" textAnchor="middle" fontSize="7" fontWeight="700" fill="#E91E63">NOTIFIABLE INCIDENT</text>
+        <text x="230" y="48" textAnchor="middle" fontSize="6" fill="#64748b">WHS Act 2011 s.35(b)</text>
+      </g>
+      {/* Phone icon — notify immediately */}
+      <g transform="translate(180,68)">
+        <rect x="0" y="0" width="24" height="24" rx="6" fill="#00897B" opacity=".15" />
+        <path d="M6 8 Q6 6 8 6 L10 6 Q12 6 12 8 L12 18 Q12 20 10 20 L8 20 Q6 20 6 18Z" fill="#00897B" opacity=".7" />
+        <text x="28" y="16" fontSize="6" fontWeight="600" fill="#00897B">Call 13 10 50</text>
+      </g>
+    </svg>
+  );
+}
+
+/* ── System: WHS / SafeWork NSW Form ── */
+export function WhsFormVisual({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 320 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <style>{`
+        @keyframes whsBadge{0%{transform:scale(0) rotate(-15deg);opacity:0}60%{transform:scale(1.1) rotate(2deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}
+        .whs-badge{animation:whsBadge .8s cubic-bezier(.34,1.56,.64,1) .5s both;transform-origin:center}
+        @media(prefers-reduced-motion:reduce){.whs-badge{animation:none;opacity:1;transform:none}}
+      `}</style>
+      {/* Form background */}
+      <rect x="60" y="6" width="200" height="98" rx="8" fill="#fff" stroke="#E91E63" strokeWidth="1.5" />
+      {/* Header bar */}
+      <rect x="60" y="6" width="200" height="24" rx="8" fill="#fce4ec" />
+      <rect x="60" y="22" width="200" height="8" fill="#fce4ec" />
+      <text x="160" y="22" textAnchor="middle" fontSize="8" fontWeight="700" fill="#E91E63">SafeWork NSW Notification</text>
+      {/* s.35 category checkboxes */}
+      <rect x="78" y="38" width="10" height="10" rx="2" fill="#fff" stroke="#E91E63" strokeWidth="1" />
+      <text x="94" y="47" fontSize="7" fill="#64748b">s.35(a) Death</text>
+      <rect x="78" y="54" width="10" height="10" rx="2" fill="#E91E63" />
+      <path d="M80 59 L82 61 L86 56" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+      <text x="94" y="63" fontSize="7" fontWeight="600" fill="#333">s.35(b) Serious injury</text>
+      <rect x="78" y="70" width="10" height="10" rx="2" fill="#fff" stroke="#E91E63" strokeWidth="1" />
+      <text x="94" y="79" fontSize="7" fill="#64748b">s.35(c) Dangerous incident</text>
+      {/* PCBU section */}
+      <rect x="170" y="38" width="76" height="34" rx="4" fill="#f8f9fb" stroke="#e0e0e0" strokeWidth="1" />
+      <text x="208" y="50" textAnchor="middle" fontSize="6" fontWeight="600" fill="#64748b">PCBU Details</text>
+      <rect x="176" y="54" width="40" height="3" rx="1" fill="#E91E63" opacity=".15" />
+      <rect x="176" y="60" width="60" height="3" rx="1" fill="#E91E63" opacity=".1" />
+      <rect x="176" y="66" width="34" height="3" rx="1" fill="#E91E63" opacity=".1" />
+      {/* Notifiable badge */}
+      <g className="whs-badge">
+        <rect x="110" y="82" width="100" height="18" rx="4" fill="none" stroke="#E91E63" strokeWidth="2" transform="rotate(-3 160 91)" />
+        <text x="160" y="95" textAnchor="middle" fontSize="8" fontWeight="800" fill="#E91E63" transform="rotate(-3 160 95)">NOTIFIABLE</text>
+      </g>
+    </svg>
+  );
+}
+
 /* ── System: Wizard Type Picker ── */
 export function WizardMockup({ className }) {
   return (

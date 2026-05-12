@@ -4,6 +4,8 @@ export const CHARACTERS = {
   priya:  { name: 'Priya Patel',      role: 'Supervisor',    initials: 'PP', color: '#2E7D32' },
   james:  { name: 'James Thompson',   role: 'Investigator',  initials: 'JT', color: '#ED6C02' },
   anya:   { name: 'Anya Kowalski',    role: 'CAPA Owner',    initials: 'AK', color: '#8b5cf6' },
+  tom:    { name: 'Tom Nguyen',       role: 'WHS Manager',   initials: 'TN', color: '#00897B' },
+  kate:   { name: 'Kate O\'Brien',    role: 'Supervisor',    initials: 'KO', color: '#E91E63' },
 };
 
 export const SETTINGS = {
@@ -11,6 +13,7 @@ export const SETTINGS = {
   construction:{ name: 'Metro Construction Site 7',   icon: 'factory' },
   warehouse:   { name: 'Lakeside Distribution Center',icon: 'factory' },
   office:      { name: 'Greenfield Office Campus',    icon: 'factory' },
+  auManufacturing: { name: 'Harbour Safety — Sydney Manufacturing', icon: 'factory' },
 };
 
 export const STORIES = [
@@ -568,6 +571,127 @@ export const STORIES = [
         ],
         whatIfs: [
           { scenario: 'Multiple expired extinguishers across the building', result: 'Pattern triggers a facility-wide fire equipment audit — one observation can launch site-wide action.' },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'whs_scaffold_fall',
+    incidentType: 'injury',
+    title: 'The Scaffold Fall',
+    subtitle: 'Australian WHS Act 2011 notification duties and site preservation',
+    setting: SETTINGS.auManufacturing,
+    characters: ['tom', 'kate'],
+    estimatedMinutes: 9,
+    difficulty: 'intermediate',
+    color: '#E91E63',
+    icon: 'shield',
+    coversModules: ['incidents', 'investigations', 'capas'],
+    learningOutcomes: [
+      'Identify SafeWork NSW notifiable incidents under s.35',
+      'Understand immediate phone notification duties (s.38)',
+      'Learn site preservation requirements (s.39)',
+      'Handle serious injury sub-classification under s.36',
+    ],
+    chapters: [
+      { title: 'The Scene', cards: [0, 1] },
+      { title: 'The Incident', cards: [2] },
+      { title: 'The WHS Act', cards: [3, 4, 5] },
+      { title: 'The Response', cards: [6, 7] },
+      { title: 'The Outcome', cards: [8, 9] },
+    ],
+    cards: [
+      {
+        type: 'narrative',
+        title: 'Harbour Safety — Sydney Manufacturing',
+        content: 'It\'s 10:15 AM on a Monday at the Harbour Safety manufacturing facility in Mascot, NSW. The assembly area is busy — fitters are working on Bay 2\'s scaffold platform, preparing structural steel for a new production line.',
+        character: 'kate',
+        quote: 'Bay 2 has been scaffolded for three weeks. The fitters are up there every day. We\'ve got hard hats and harness points, but I haven\'t seen the scaffold inspection checklist come through lately.',
+        setting: 'auManufacturing',
+      },
+      {
+        type: 'narrative',
+        title: 'Meet the Team',
+        content: 'Under Australian WHS law, these people have specific duties. The PCBU (Person Conducting a Business or Undertaking) has the primary duty of care — but officers and workers all play a role.',
+        characters: ['kate', 'tom'],
+        bullets: [
+          { char: 'kate', text: 'First responder — supervises the area, calls for help, secures the scene' },
+          { char: 'tom', text: 'WHS Manager — handles SafeWork NSW notification, manages investigation, ensures compliance with Part 3 of the Act' },
+        ],
+      },
+      {
+        type: 'narrative',
+        title: 'The Guardrail Gives Way',
+        content: 'Ryan Murphy, a fitter, is working on the scaffold platform approximately 3.2 metres above the concrete floor. He leans against the guardrail to reach a bolt — and the rail detaches. Ryan falls, landing on his back on the concrete floor below.',
+        character: 'kate',
+        quote: 'I heard the crash from across the bay. Ryan was on the ground, conscious but couldn\'t move his legs. I called 000 immediately and told everyone to stay clear — don\'t move him.',
+        highlight: 'This is a notifiable incident under the WHS Act 2011 (NSW). Section 35 requires the PCBU to notify the regulator immediately. Ryan\'s spinal injury triggers two s.36 categories: in-patient hospitalisation and spinal injury.',
+      },
+      {
+        type: 'annotation',
+        title: 'WHS Act 2011 — Section 35: Notifiable Incidents',
+        content: 'The WHS Act 2011 defines three categories of notifiable incidents. The PCBU must notify SafeWork NSW immediately for any of them.',
+        annotation: 'Section 35 categories:\n\n• s.35(a) — Death of a person\n• s.35(b) — Serious injury or illness (defined in s.36)\n• s.35(c) — Dangerous incident (defined in s.37)\n\nRyan\'s fall is s.35(b) — a serious injury. The system automatically classifies which sub-categories apply.',
+        highlightType: 'injury',
+        tip: 'Unlike OSHA (24-hour window) or RIDDOR (without delay), SafeWork NSW requires notification "immediately after becoming aware" — there is no grace period.',
+      },
+      {
+        type: 'annotation',
+        title: 'Section 36: What Makes an Injury "Serious"?',
+        content: 'Ryan\'s injury triggers two sub-categories under s.36. The system tracks all applicable sub-categories for each notification.',
+        annotation: 'Ryan\'s injury matches:\n\n• s.36(a) — Immediate treatment as an in-patient in a hospital (Ryan was admitted to RPA Hospital)\n• s.36(b)(vi) — A spinal injury\n\nOther s.36 categories include: amputation, serious head injury, serious eye injury, serious burn, degloving/scalping, loss of bodily function, serious lacerations, and medical treatment within 48 hours of substance exposure.',
+        tip: 'A single incident can match multiple s.36 sub-categories. The system captures them all — this matters for the written report to SafeWork NSW.',
+      },
+      {
+        type: 'exercise',
+        title: 'Classify the Risk',
+        content: 'A fitter falls 3.2 metres from a scaffold platform due to a detached guardrail. Suspected spinal injury. Consider:\n\n• Worker hospitalised as an in-patient\n• Fall from height in an active work area\n• Other workers use the same scaffold daily\n• Guardrail inspection was 6 weeks overdue',
+        exerciseType: 'risk_matrix',
+        correctLikelihood: 2,
+        correctConsequence: 4,
+        explanation: 'Likelihood "Possible" (scaffold used daily with overdue inspections, guardrail failure is a foreseeable risk) × Consequence "Catastrophic" (spinal injury, potential permanent disability) = **S1, Track A**. This triggers immediate regulatory notification, full investigation, and site preservation.',
+      },
+      {
+        type: 'annotation',
+        title: 'Section 38 & 39: Notification and Site Preservation',
+        content: 'Once a notifiable incident occurs, the PCBU has two immediate obligations: notify the regulator and preserve the site.',
+        annotation: 's.38 — Notification:\n• Phone SafeWork NSW immediately (13 10 50)\n• Written report within 48 hours if requested by the regulator\n• Keep records of the notification for at least 5 years\n\ns.39 — Site preservation:\n• Do NOT disturb the incident site\n• Exceptions: to help an injured person (s.39(3)(a)), remove a deceased person (s.39(3)(b)), make the site safe (s.39(3)(c)), or with inspector/police permission\n• Site remains preserved until a SafeWork NSW inspector arrives',
+        tip: 'The system tracks site preservation status and logs any disturbance with the applicable s.39(3) exception. This creates a defensible audit trail.',
+      },
+      {
+        type: 'lifecycle',
+        title: 'WHS Notification Lifecycle',
+        content: 'Here\'s how the system manages the full SafeWork NSW notification workflow:',
+        stages: [
+          { status: 'New', day: 'Minute 0', actor: 'kate', description: 'Kate reports the incident. System auto-classifies as S1 Track A and flags it as s.35(b) notifiable — serious injury (s.36(a) + s.36(b)(vi)).' },
+          { status: 'Triage', day: 'Minute 15', actor: 'tom', description: 'Tom phones SafeWork NSW (13 10 50). System logs phone notification with timestamp, regulator office, and notes. Site preservation status set to "preserved."' },
+          { status: 'Investigating', day: 'Day 1-7', actor: 'tom', description: 'Tom leads the investigation. 5-Why root cause: scaffold inspection regime non-compliant with AS/NZS 1576.3 (weekly inspection required, last done 6 weeks ago). SafeWork NSW requests written report — 48-hour deadline set.' },
+          { status: 'Awaiting CAPA', day: 'Day 8', actor: 'tom', description: 'CAPAs: (1) Implement weekly scaffold inspection per AS/NZS 1576.3, (2) Replace all guardrail clips, (3) Scaffold competency refresher for all fitters.' },
+          { status: 'Closed', day: 'Day 30', actor: 'tom', description: 'All CAPAs verified. SafeWork NSW inspector visited, site released. Written report submitted with PCBU details (ABN, ANZSIC, worker count).' },
+        ],
+      },
+      {
+        type: 'narrative',
+        title: 'What We Learned',
+        content: 'This scenario covers the complete WHS Act 2011 Part 3 workflow — from incident to regulator notification to site preservation to closure.',
+        learnings: [
+          's.35 defines three notifiable categories: death, serious injury, dangerous incident',
+          's.36 lists specific serious injury types — the system tracks all applicable sub-categories',
+          's.38 requires immediate phone notification, followed by written report within 48 hours if requested',
+          's.39 requires site preservation until an inspector arrives — exceptions are logged with the applicable clause',
+          'The system captures PCBU details (name, ABN, ANZSIC code) for each notification',
+        ],
+      },
+      {
+        type: 'narrative',
+        title: 'What If?',
+        content: 'Different outcomes change which parts of the WHS Act apply.',
+        whatIfs: [
+          { scenario: 'Ryan\'s injuries were fatal', result: 'Triggers s.35(a) — fatality. Same notification process, but SafeWork NSW inspector attendance is almost certain. Site preservation becomes critical evidence.' },
+          { scenario: 'The guardrail fell but nobody was on the platform', result: 'Triggers s.35(c) — dangerous incident under s.37(f) "fall or release from height of plant." Still notifiable, still requires phone call to SafeWork NSW.' },
+          { scenario: 'Ryan caught his balance and didn\'t fall', result: 'Not notifiable under Part 3, but report as a Near Miss with high potential severity. The overdue scaffold inspection is still a systemic risk.' },
+          { scenario: 'This happened at a mine site in NSW', result: 'The s.38(8) mines & petroleum carve-out applies — notification goes to the Resources Regulator, not SafeWork NSW. The system flags this exclusion.' },
         ],
       },
     ],
