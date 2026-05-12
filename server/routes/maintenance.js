@@ -16,11 +16,9 @@ import db from '../db/connection.js';
 import { writeActivity, diffFields } from '../services/activity_log.js';
 import { createCapaRow } from './capas.js';
 import { notifyUser } from '../services/notifications.js';
+import { isElevated, requireAssigneeOrElevated } from '../services/permissions.js';
 
 const router = Router();
-
-const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
-const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
 
 const SCHEDULE_TYPES = new Set(['preventive', 'calibration', 'inspection', 'other']);
 const OUTCOMES = new Set(['pass', 'fail', 'conditional']);
@@ -278,11 +276,9 @@ router.post('/', (req, res) => {
 
 // ----- UPDATE --------------------------------------------------------------
 router.patch('/:id', (req, res) => {
-  if (!isElevated(req.user)) {
-    return res.status(403).json({ error: 'Worker role cannot edit maintenance schedules.' });
-  }
   const schedule = getScopedSchedule(Number(req.params.id), req.user.org_id);
   if (!schedule) return res.status(404).json({ error: 'Maintenance schedule not found' });
+  if (!requireAssigneeOrElevated(req, res, schedule, 'assigned_to', 'this maintenance schedule')) return;
 
   const updatable = ['title', 'description', 'schedule_type', 'interval_days', 'active', 'assigned_to'];
   const sets = [];
@@ -391,6 +387,7 @@ router.delete('/:id', (req, res) => {
 router.post('/:id/complete', (req, res) => {
   const schedule = getScopedSchedule(Number(req.params.id), req.user.org_id);
   if (!schedule) return res.status(404).json({ error: 'Maintenance schedule not found' });
+  if (!requireAssigneeOrElevated(req, res, schedule, 'assigned_to', 'this maintenance schedule')) return;
   if (!schedule.active) {
     return res.status(409).json({ error: 'Restore the schedule before recording a completion.' });
   }

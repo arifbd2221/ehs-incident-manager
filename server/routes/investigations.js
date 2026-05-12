@@ -4,6 +4,7 @@ import { nextInvestigationNumber, nextCapaNumber } from '../services/numbering.j
 import { listLinksTouching } from '../services/entity_links.js';
 import { writeActivity } from '../services/activity_log.js';
 import { notifyUser } from '../services/notifications.js';
+import { requireAssigneeOrElevated } from '../services/permissions.js';
 
 const router = Router();
 
@@ -123,6 +124,7 @@ router.get('/:id', (req, res) => {
 router.patch('/:id', (req, res) => {
   const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
+  if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
 
   const updatable = ['findings', 'root_cause_summary', 'status', 'due_date', 'lead_investigator'];
   const sets = [];
@@ -158,6 +160,7 @@ router.patch('/:id', (req, res) => {
 router.post('/:id/five-whys', (req, res) => {
   const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
+  if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
 
   const { level, question, answer, is_root_cause } = req.body;
   if (!question || !answer) return res.status(400).json({ error: 'Question and answer are required' });
@@ -181,6 +184,7 @@ router.post('/:id/five-whys', (req, res) => {
 router.delete('/:id/five-whys/:whyId', (req, res) => {
   const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
+  if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
 
   // Snapshot the row we're about to remove so the audit metadata preserves
   // the exact text and level — deleting a root-cause finding is a
@@ -230,6 +234,7 @@ router.post('/:id/team', (req, res) => {
 router.post('/:id/close', (req, res) => {
   const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
+  if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
 
   const { reason } = req.body;
   db.prepare("UPDATE investigations SET status = 'closed', closed_at = datetime('now'), closed_by = ?, closed_reason = ?, updated_at = datetime('now') WHERE id = ?").run(req.user.id, reason || null, inv.id);
