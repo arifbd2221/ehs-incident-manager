@@ -8,6 +8,7 @@ import { renderOsha300Pdf } from '../services/pdf/osha_300.js';
 import { renderOsha301Pdf } from '../services/pdf/osha_301.js';
 import { renderGenericIncidentPdf, ALL_SECTIONS as GENERIC_ALL_SECTIONS } from '../services/pdf/generic_incident.js';
 import { renderSafeworkNswPdf } from '../services/pdf/safework_nsw.js';
+import { resolveOrgLogoPath } from '../services/pdf/logo.js';
 import { listAffectedPersons } from '../services/affected_persons.js';
 import {
   listSevereNotificationsForIncident,
@@ -113,7 +114,7 @@ router.get('/osha-300', (req, res) => {
     if (!site) {
       return res.status(400).json({ error: 'site_id is required for PDF format (one Log per establishment, 29 CFR 1904.30(a)).' });
     }
-    const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+    const org = db.prepare('SELECT name, logo_path FROM organizations WHERE id = ?').get(orgId);
     const filename = `osha-300-${(site.establishment_id || site.name || 'site').toString().replace(/[^A-Za-z0-9_.-]/g, '_')}-${currentYear}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -138,6 +139,7 @@ router.get('/osha-300', (req, res) => {
       entries,
       site,
       orgName: org?.name || '',
+      orgLogoPath: resolveOrgLogoPath(org?.logo_path),
     });
   }
 
@@ -176,7 +178,7 @@ router.get('/osha-300a', (req, res) => {
   // --- PDF / CSV download branches ---
   if (format === 'pdf' || format === 'csv') {
     const baseFn = (site.establishment_id || site.name || 'site').toString().replace(/[^A-Za-z0-9_.-]/g, '_');
-    const company = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+    const company = db.prepare('SELECT name, logo_path FROM organizations WHERE id = ?').get(orgId);
 
     if (format === 'pdf') {
       const filename = `osha-300a-${baseFn}-${currentYear}.pdf`;
@@ -210,6 +212,7 @@ router.get('/osha-300a', (req, res) => {
           certifier_title_label: snapshot.certifier_title_label,
         } : null,
         companyName: company?.name || '',
+        orgLogoPath: resolveOrgLogoPath(company?.logo_path),
       });
     }
 
@@ -593,6 +596,7 @@ router.get('/osha-301/:incidentId', (req, res) => {
       ...auditCtx(req),
     });
 
+    const org = db.prepare('SELECT logo_path FROM organizations WHERE id = ?').get(req.user.org_id);
     return renderOsha301Pdf(res, {
       incidentNumber: incident.incident_number,
       year,
@@ -603,6 +607,7 @@ router.get('/osha-301/:incidentId', (req, res) => {
       hospitalized: primaryInj?.hospitalized ?? incident.hospitalized ?? null,
       case: caseInfo,
       completedBy,
+      orgLogoPath: resolveOrgLogoPath(org?.logo_path),
     });
   }
 
@@ -687,7 +692,7 @@ router.get('/incidents/:incidentId/generic', (req, res) => {
   `).get(incidentId, orgId);
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
 
-  const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);
+  const org = db.prepare('SELECT name, logo_path FROM organizations WHERE id = ?').get(orgId);
 
   // Section filter — default all on.
   let sections = GENERIC_ALL_SECTIONS;
@@ -775,6 +780,7 @@ router.get('/incidents/:incidentId/generic', (req, res) => {
 
   return renderGenericIncidentPdf(res, {
     orgName: org?.name || '',
+    orgLogoPath: resolveOrgLogoPath(org?.logo_path),
     site: { name: incident.site_name, address: incident.site_address, naics_code: incident.site_naics },
     incident,
     affectedPersons,
@@ -919,7 +925,7 @@ router.get('/safework-nsw/:incidentId', (req, res) => {
   if (!row) return res.status(404).json({ error: 'No SafeWork NSW notification for this incident' });
 
   if (req.query.format === 'pdf') {
-    const org = db.prepare('SELECT name FROM organizations WHERE id = ?').get(req.user.org_id);
+    const org = db.prepare('SELECT name, logo_path FROM organizations WHERE id = ?').get(req.user.org_id);
     // Resolve the primary affected person (if any) for the narrative
     // section. Falls back to nothing when WI-A side tables are empty.
     const primaryAffected = db.prepare(`
@@ -957,6 +963,7 @@ router.get('/safework-nsw/:incidentId', (req, res) => {
 
     return renderSafeworkNswPdf(res, {
       orgName: org?.name || '',
+      orgLogoPath: resolveOrgLogoPath(org?.logo_path),
       notification: row,
       incident,
       site: { name: incident.site_name, address: incident.site_address },

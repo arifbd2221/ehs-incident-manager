@@ -9,6 +9,7 @@ export function generateToken(user) {
       id: user.id, email: user.email, role: user.role,
       org_id: user.org_id, org_name: user.org_name,
       compliance_frameworks: user.compliance_frameworks || [],
+      logo_path: user.logo_path || null,
       name: user.name, initials: user.initials,
     },
     JWT_SECRET,

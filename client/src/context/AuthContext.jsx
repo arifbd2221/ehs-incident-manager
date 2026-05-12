@@ -44,6 +44,15 @@ export function AuthProvider({ children }) {
     return result;
   };
 
+  // Refresh in-memory user + persisted JWT from a token that the caller
+  // already obtained (e.g., the /organization/logo response returns a
+  // re-minted token so the FE picks up the new logo_path without a
+  // forced logout).
+  const updateUserFromToken = (token, nextUser) => {
+    if (token) localStorage.setItem('token', token);
+    if (nextUser) setUser(nextUser);
+  };
+
   const saveDashLayout = async (widgets) => {
     const result = await saveDashboardLayout(widgets);
     setUser(prev => ({ ...prev, dashboard_layout: result.dashboard_layout }));
@@ -56,7 +65,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, signupOrg, updateUser, saveDashLayout, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, signupOrg, updateUser, updateUserFromToken, saveDashLayout, logout }}>
       {children}
     </AuthContext.Provider>
   );

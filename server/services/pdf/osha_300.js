@@ -26,6 +26,7 @@
 // First PDF chunk on this project — pdfkit landed here so WI-02/03/09 reuse it.
 
 import PDFDocument from 'pdfkit';
+import { embedOrgLogo } from './logo.js';
 
 // US Letter landscape, 0.4" margins. Gives ~10.2" usable width for the column
 // grid which is what the official form fits into.
@@ -265,13 +266,18 @@ function computeTotals(entries) {
   return t;
 }
 
-function drawHeader(doc, { year, establishmentName, address, orgName }) {
+function drawHeader(doc, { year, establishmentName, address, orgName, orgLogoPath }) {
   // Title block — matches the official "OSHA's Form 300 (Rev. 04/2004) — Log
   // of Work-Related Injuries and Illnesses" header.
   doc.font(FONT_BOLD).fontSize(11).fillColor('#000000');
   doc.text("OSHA's Form 300 (Rev. 04/2004)", 28, 28, { lineBreak: false });
   doc.font(FONT_BOLD).fontSize(14);
   doc.text('Log of Work-Related Injuries and Illnesses', 28, 44, { lineBreak: false });
+
+  // Optional org logo, sized small enough not to compromise the 1904.29(b)(4)
+  // equivalent-form claim (form-mandated text remains primary). Top-centre,
+  // between the title block and the right-hand info column.
+  embedOrgLogo(doc, orgLogoPath, 470, 26, 100, 38);
 
   doc.font(FONT_REG).fontSize(8).fillColor('#333333');
   doc.text(
@@ -330,7 +336,7 @@ function drawFooter(doc, pageIndex, pageCount) {
  * The route layer is responsible for setting Content-Type / Content-Disposition
  * before calling this (so error responses can stay JSON when prep fails).
  */
-export function renderOsha300Pdf(res, { year, entries, site, orgName }) {
+export function renderOsha300Pdf(res, { year, entries, site, orgName, orgLogoPath }) {
   const doc = new PDFDocument(PAGE_OPTS);
   doc.pipe(res);
 
@@ -348,6 +354,7 @@ export function renderOsha300Pdf(res, { year, entries, site, orgName }) {
       establishmentName: site?.name || (site?.establishment_id ? `Establishment ${site.establishment_id}` : ''),
       address: site?.address || '',
       orgName,
+      orgLogoPath,
     });
 
     const gridTop = 110;
