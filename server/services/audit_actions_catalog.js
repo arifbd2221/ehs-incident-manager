@@ -149,6 +149,7 @@ export const AUDIT_ACTIONS_CATALOG = [
   // entity_type='incident' keeps them on the incident's timeline so the
   // inspector narrative is "this incident produced this regulatory record".
   { entity_type: 'incident', action: 'osha_300_auto_entry' },
+  { entity_type: 'incident', action: 'osha_301_pdf_downloaded' },
   { entity_type: 'incident', action: 'riddor_opened' },
 
   // Multi-person incident management (WI-A). All entries hang off the

@@ -5,6 +5,8 @@ import { writeActivity, auditCtx } from '../services/activity_log.js';
 import { AUDIT_ACTIONS_CATALOG } from '../services/audit_actions_catalog.js';
 import { verifyChain } from '../db/activity_log_chain.js';
 import { renderOsha300Pdf } from '../services/pdf/osha_300.js';
+import { renderOsha301Pdf } from '../services/pdf/osha_301.js';
+import { listAffectedPersons } from '../services/affected_persons.js';
 
 const router = Router();
 
@@ -333,6 +335,88 @@ router.get('/osha-301/:incidentId', (req, res) => {
 
   const td = JSON.parse(incident.type_data || '{}');
   const logEntry = db.prepare('SELECT case_number FROM osha_300_log WHERE incident_id = ?').get(incident.id);
+
+  // WI-A multi-person: the primary affected_person + their first injury take
+  // precedence over the legacy type_data.injured_person JSON when present.
+  // Pre-WI-A incidents (and any post-WI-A incident still using the legacy
+  // shape) fall back to type_data.
+  const persons = listAffectedPersons({ orgId: req.user.org_id, incidentId: incident.id });
+  const primaryAp = persons.find(p => p.is_primary === 1) || persons[0] || null;
+  const primaryInj = primaryAp?.injuries?.[0] || null;
+
+  if (req.query.format === 'pdf') {
+    // Form 301 is per-recordable case per 29 CFR 1904.29(b)(2). We don't
+    // hard-block non-recordable PDFs (the FE hides the button instead) so
+    // an inspector can still pull a "draft" 301 if needed during triage.
+
+    // Build the renderer payload from the same shape the JSON branch
+    // returns below — keeps the two surfaces in lockstep.
+    const employee = {
+      name: primaryAp?.name || td.injured_person?.name || td.affected_person?.name || '',
+      address: primaryAp?.address || td.injured_person?.address || '',
+      dob: primaryAp?.dob || td.injured_person?.dob || td.affected_person?.dob || '',
+      hire_date: primaryAp?.date_hired || td.injured_person?.date_hired || td.injured_person?.hire_date || '',
+      gender: primaryAp?.gender || td.injured_person?.gender || td.affected_person?.gender || '',
+    };
+    const physician = {
+      name: primaryInj?.physician_name || td.physician_name || '',
+      facility_name: primaryInj?.physician_facility || td.facility_name || '',
+      facility_address: td.facility_address || '',
+    };
+    const caseInfo = {
+      event_date: incident.incident_datetime,
+      time_began_work: td.time_began_work || null,
+      activity_before: td.activity_before || td.task_at_time || '',
+      what_happened: incident.description || incident.title || '',
+      description: incident.description || '',
+      injury_summary: [
+        (primaryInj?.body_part || (td.body_parts || []).join(', ')) || '',
+        primaryInj?.injury_type || td.injury_type || td.illness_category || '',
+      ].filter(Boolean).join(' — '),
+      object_substance: primaryInj?.object_substance || td.object_substance || td.substance?.name || '',
+      date_of_death: primaryInj?.date_of_death || incident.osha_date_of_death || '',
+    };
+    const completedBy = {
+      name: req.user.name || '',
+      title: req.user.role || '',
+      phone: '',
+      date: new Date().toISOString().slice(0, 10),
+    };
+
+    const year = incident.incident_datetime
+      ? new Date(incident.incident_datetime).getFullYear()
+      : new Date().getFullYear();
+    const filename = `osha-301-${(incident.incident_number || incident.id).toString().replace(/[^A-Za-z0-9_.-]/g, '_')}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    writeActivity({
+      org_id: req.user.org_id,
+      entity_type: 'incident',
+      entity_id: incident.id,
+      action: 'osha_301_pdf_downloaded',
+      description: `downloaded OSHA 301 PDF for incident ${incident.incident_number}`,
+      user_id: req.user.id,
+      metadata: {
+        incident_id: incident.id,
+        case_number: logEntry?.case_number || null,
+        osha_recordable: incident.osha_recordable || 0,
+      },
+      ...auditCtx(req),
+    });
+
+    return renderOsha301Pdf(res, {
+      incidentNumber: incident.incident_number,
+      year,
+      caseNumber: logEntry?.case_number,
+      employee,
+      physician,
+      erTreated: primaryInj?.er_treated ?? incident.er_treated ?? null,
+      hospitalized: primaryInj?.hospitalized ?? incident.hospitalized ?? null,
+      case: caseInfo,
+      completedBy,
+    });
+  }
 
   res.json({
     incident_number: incident.incident_number,

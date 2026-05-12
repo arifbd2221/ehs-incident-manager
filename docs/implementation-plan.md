@@ -29,9 +29,10 @@ Defined in `plan-2026-05-11.md` Part 3. Each chunk ends with a ✋ owner checkpo
 | 6 | WI-B Override approval workflow | ✅ Done — `7ee1983` (BE: migration 026 + service + routes + 42-assertion `wib-e2e.sh`), `e660b16` (FE: modal + RecordabilityVerifyCard banner + `/approvals` page) |
 | 7 | WI-08 Deadline countdown UI | ✅ Done — `449539b` (single BE+FE commit: `server/services/deadlines.js` aggregator + `GET /incidents/:id/deadlines` + list/detail attachment + `DeadlineBadge.jsx` rendered in IncidentDetail header & IncidentsList rows + 19-assertion `wi08-e2e.sh`). |
 | 7a | WI-D Jurisdiction-aware wizard + forms | ✅ Done — `2e708d0` (single FE commit: `jurisdictionForContext()` + `showField()` registry in `client/src/utils/frameworks.js`; wizard threads jurisdiction to InjuryForm + AffectedPersonModal with "Show all" override toggle; 25-test `frameworks.test.js`). |
-| 8 | WI-01 OSHA 300 PDF | ✅ Done — single BE+FE commit. `server/services/pdf/osha_300.js` renderer + `?format=pdf` branch on `GET /reports/osha-300` + Download-PDF button on `Osha300Report` in `ReportsPage.jsx`. Privacy-case substitution per 29 CFR 1904.29(b)(7); per-establishment requirement per 1904.30(a). `pdfkit` landed on `server/package.json` (carries the dep for WI-02/03/09). |
-| **9** | **WI-03 OSHA 301 PDF + WI-07 OSHA 1904.39 severe-injury flow** | **Next.** OSHA sources cleared. Reuse `pdfkit` from WI-01. |
-| 9+ | WI-05, WI-06, WI-02, WI-09 | RIDDOR F2508 → SafeWork NSW → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
+| 8 | WI-01 OSHA 300 PDF | ✅ Done — single BE+FE commit `b7e3507`. `server/services/pdf/osha_300.js` renderer + `?format=pdf` branch on `GET /reports/osha-300` + Download-PDF button on `Osha300Report` in `ReportsPage.jsx`. Privacy-case substitution per 29 CFR 1904.29(b)(7); per-establishment requirement per 1904.30(a). `pdfkit` landed on `server/package.json`. |
+| 9 | WI-03 OSHA 301 PDF | ✅ Done — single BE+FE commit. `server/services/pdf/osha_301.js` renderer (Form 301 Rev. 04/2004; fields 1–18 + Completed by) + `?format=pdf` branch on `GET /reports/osha-301/:incidentId` + Download-PDF button in IncidentDetail OSHA-recordable section. Pulls primary `affected_persons` + first `injuries` row (WI-A) with `type_data.injured_person` legacy fallback. Manual word-wrap utility added (bypasses pdfkit's pagination on wrapped text). Audit verb `osha_301_pdf_downloaded` in catalog. |
+| **10** | **WI-07 OSHA 1904.39 severe-injury flow** | **Next.** New `osha_severe_notifications` table + service + countdown plug-in for `deadlines.js`. |
+| 10+ | WI-05, WI-06, WI-02, WI-09 | RIDDOR F2508 → SafeWork NSW → OSHA 300A + ITA → Generic PDF. Order may shift on hallucination-risk gate readiness. |
 
 ---
 
@@ -67,15 +68,23 @@ The 300A annual summary has both a paper-posting form (1904.32) and an electroni
 
 ---
 
-### WI-03: OSHA Form 301 PDF + DOB/hire-date/gender capture (29 CFR 1904.29)
+### WI-03: OSHA Form 301 PDF + DOB/hire-date/gender capture (29 CFR 1904.29) — ✅ DONE
 
-Form 301 is per-recordable-incident and prescribed. PRD §4.3 fields not currently captured: employee DOB, date hired, gender. Plan stores them in `incidents.type_data.injured_person` per `compliance-notes.md` §2.
+Shipped 2026-05-12 in a single BE+FE commit.
 
-- `client/src/pages/wizard/types/InjuryForm.jsx` — three new fields under the injured-person section, written to `type_data.injured_person.{dob,date_hired,gender}`.
-- `server/services/pdf/osha_301.js` — render the prescribed form, reading from `type_data` (and, after WI-A, also from `affected_persons` / `injuries` where present).
-- Extend `GET /reports/osha-301/:incidentId` for `?format=pdf`.
+- **Renderer** `server/services/pdf/osha_301.js` — US-Letter portrait. Three info sections (Employee 1–5, Physician 6–9, Case 10–18) + Completed by + 5-year retention notice in the footer (per 1904.33). Fields rendered with OSHA's original numbering verbatim so an inspector can map line-by-line. Yes/No checkboxes for 8/9; date-box visual for 3/4/11/18; manual word-wrap for 14–17 (sidesteps pdfkit's auto-pagination on wrapped text; see [[feedback_pdfkit_autopagination]]).
+- **Data wiring** — pulls the primary `affected_persons` row + their first `injuries` row when present (post-WI-A), falling back to `type_data.injured_person` for pre-WI-A incidents. DOB / gender / date_hired captured by the WI-04 FE pass + WI-A wizard primary card.
+- **Route** `GET /reports/osha-301/:incidentId?format=pdf` — reuses the same `org_id` WHERE clause as the JSON branch (cross-tenant 404 free). Audit verb `osha_301_pdf_downloaded` on `entity_type='incident'` so the download lands on the incident timeline.
+- **FE** — Download-PDF button in `IncidentDetail` OSHA-recordable section (`client/src/pages/incidents/IncidentDetail.jsx`). Only renders when `osha_recordable === 1` per 29 CFR 1904.29(b)(2). Reuses the auth-fetch + blob-`<a>` pattern from WI-01.
 
-**Complexity:** M. **New tables:** none. **Existing schema touched:** none (JSON write only).
+**Smoke matrix verified end-to-end:**
+- priya / INC-2026-0141 (recordable injury) → 1-page PDF with employee name, DOB, dates, ER/hospitalized checks, narrative (15), injury summary (16), substance (17) all populated.
+- priya / non-recordable incident → 1-page PDF (route doesn't block; FE button hides the path for workers).
+- acme requesting an org-1 incident → 404.
+- Unknown incident id → 404.
+- JSON branch unchanged.
+
+**Complexity:** M. **New tables:** none. **Existing schema touched:** none.
 
 ---
 

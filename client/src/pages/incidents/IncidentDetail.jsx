@@ -176,6 +176,8 @@ export default function IncidentDetail() {
   const [noteText, setNoteText] = useState('');
   const [postingNote, setPostingNote] = useState(false);
 
+  const [downloading301, setDownloading301] = useState(false);
+
   const [affectedPersons, setAffectedPersons] = useState([]);
   const [apModalOpen, setApModalOpen] = useState(false);
   // null = closed; person object = edit mode for that row
@@ -310,6 +312,42 @@ export default function IncidentDetail() {
       setModal(null);
       load();
     } catch (err) { showToast(err.response?.data?.error || 'Failed to force-close.'); }
+  };
+
+  // WI-03: OSHA 301 PDF download. Per 29 CFR 1904.29(b)(2) Form 301 is
+  // generated per-recordable-case, so the button only shows when
+  // osha_recordable === 1. Reuses the auth-fetch + blob-<a> pattern
+  // from the WI-01 Download-PDF button on ReportsPage.
+  const downloadOsha301Pdf = async () => {
+    if (!r?.id) return;
+    setDownloading301(true);
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`/api/reports/osha-301/${r.id}?format=pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `Download failed: ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      let filename = `osha-301-${r.incident_number || r.id}.pdf`;
+      const cd = resp.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      if (m) filename = m[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      showToast(e.message || 'Download failed.');
+    } finally {
+      setDownloading301(false);
+    }
   };
 
   const saveField = async (field, value) => {
@@ -810,6 +848,17 @@ export default function IncidentDetail() {
                 )}
                 {showOsha && r.osha_recordable === 1 && (
                   <>
+                    <div className="idet-triage-row">
+                      <span className="idet-triage-label">OSHA Form 301</span>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={downloadOsha301Pdf}
+                        disabled={downloading301}
+                        title="Download the OSHA 301 Injury and Illness Incident Report (29 CFR 1904.29(b)(2))"
+                      >
+                        <Icon name="download" size={13}/>{downloading301 ? 'Generating…' : 'Download PDF'}
+                      </button>
+                    </div>
                     {r.osha_privacy_case === 1 && (
                       <div className="idet-triage-row">
                         <span className="idet-triage-label">Privacy case</span>
