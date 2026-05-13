@@ -366,12 +366,27 @@ router.get('/:id', (req, res) => {
   const pending_deadlines = getPendingDeadlinesForIncident(req.user.org_id, incident.id) || [];
   const most_urgent_deadline = mostUrgent(pending_deadlines);
 
+  // Full RIDDOR rows for the incident so the detail page can render the
+  // Log phone / Log F2508 actions without a second fetch. JOIN the
+  // notifier/submitter names while we're here.
+  const riddor_reports = db.prepare(`
+    SELECT r.*,
+           u_phone.name AS phone_notified_by_name,
+           u_written.name AS written_submitted_by_name
+    FROM riddor_reports r
+    LEFT JOIN users u_phone ON u_phone.id = r.phone_notified_by
+    LEFT JOIN users u_written ON u_written.id = r.written_submitted_by
+    WHERE r.incident_id = ? AND r.org_id = ?
+    ORDER BY r.id
+  `).all(incident.id, req.user.org_id);
+
   res.json({
     ...incident,
     witnesses, attachments, activity,
     closure_request: closure_request || null,
     pending_deadlines,
     most_urgent_deadline,
+    riddor_reports,
   });
 });
 

@@ -1074,6 +1074,175 @@
   padding: 20px;
 }
 
+/* RIDDOR submission tracking — step-flow card on incident detail.
+   Each .rsub block is one HSE filing. Header row carries the RIDDOR
+   number + category + reg cite. Body is a vertical 1- or 2-step
+   timeline (phone → F2508 or just F2508) with markers connected by a
+   vertical line. Pending steps are muted grey; done steps go brand
+   primary with a check marker. */
+.rsub {
+  background: var(--sds-bg-surface);
+  border: 1px solid var(--sds-border);
+  border-radius: var(--sds-radius-lg);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  transition: border-color 200ms ease;
+}
+.rsub:last-child { margin-bottom: 0; }
+.rsub.is-done {
+  border-color: rgba(46, 125, 50, 0.25);
+  background: rgba(46, 125, 50, 0.04);
+}
+
+.rsub-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.rsub-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.rsub-num {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sds-fg-heading);
+  letter-spacing: 0.02em;
+}
+.rsub-cat {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sds-fg-primary);
+}
+.rsub-reg {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sds-fg-tertiary);
+  padding: 2px 8px;
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-bg-surface-alt);
+  border: 1px solid var(--sds-border);
+}
+.rsub-done-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sds-success);
+  padding: 3px 10px;
+  border-radius: var(--sds-radius-pill);
+  background: rgba(46, 125, 50, 0.1);
+}
+
+.rsub-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+/* Connector line behind the markers — only when there are 2 steps */
+.rsub-steps.step-count-2::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: var(--sds-border);
+  z-index: 0;
+}
+.rsub-step {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding-bottom: 16px;
+  z-index: 1;
+}
+.rsub-step:last-child { padding-bottom: 0; }
+
+.rsub-step-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--sds-border);
+  background: var(--sds-bg-surface);
+  color: var(--sds-fg-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 200ms ease;
+}
+.rsub-step.is-done .rsub-step-marker {
+  border-color: var(--sds-success);
+  background: var(--sds-success);
+  color: #fff;
+}
+.rsub-step.is-pending .rsub-step-marker {
+  border-color: var(--sds-warning);
+  color: var(--sds-warning);
+}
+.rsub-step-n { line-height: 1; }
+
+.rsub-step-body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 2px;
+}
+.rsub-step-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sds-fg-heading);
+  margin-bottom: 4px;
+}
+.rsub-step.is-pending .rsub-step-title { color: var(--sds-fg-primary); }
+.rsub-step-meta {
+  font-size: 12px;
+  color: var(--sds-fg-tertiary);
+  line-height: 1.5;
+}
+.rsub-step-meta b { color: var(--sds-fg-heading); font-weight: 600; }
+.rsub-step-meta code {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  background: var(--sds-bg-surface-alt);
+  padding: 1px 6px;
+  border-radius: var(--sds-radius-xs);
+}
+.rsub-step-btn { margin-top: 8px; }
+
+.rsub-error {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: var(--sds-radius-sm);
+  background: rgba(211, 47, 47, 0.08);
+  color: var(--sds-error);
+  font-size: 12px;
+}
+.rsub-note {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: var(--sds-radius-sm);
+  background: var(--sds-bg-surface-alt);
+  color: var(--sds-fg-tertiary);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* Description card */
 .idet-desc-text {
   font-size: 14px;

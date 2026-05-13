@@ -41,6 +41,22 @@
 .rpt-site-select .cb-label {
   font-weight: 600;
 }
+/* Compact year picker used in the 300A panel header. */
+.rpt-year-select {
+  width: 100px;
+  flex-shrink: 0;
+}
+.rpt-year-select .cb-trigger {
+  min-height: 32px;
+  border-color: var(--sds-border);
+  background: #fff;
+  border-radius: 8px;
+}
+.rpt-year-select .cb-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 30px;
+}
 
 /* Report type cards */
 .rpt-type-grid {

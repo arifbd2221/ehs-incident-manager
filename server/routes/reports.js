@@ -1244,10 +1244,16 @@ router.get('/riddor', (req, res) => {
   if (year) { where.push("strftime('%Y', r.event_date) = ?"); params.push(String(currentYear)); }
 
   const reports = db.prepare(`
-    SELECT r.*, s.name as site_name, i.incident_number, i.title as incident_title
+    SELECT r.*,
+           s.name as site_name,
+           i.incident_number, i.title as incident_title,
+           u_phone.name as phone_notified_by_name,
+           u_written.name as written_submitted_by_name
     FROM riddor_reports r
     LEFT JOIN sites s ON s.id = r.site_id
     LEFT JOIN incidents i ON i.id = r.incident_id
+    LEFT JOIN users u_phone ON u_phone.id = r.phone_notified_by
+    LEFT JOIN users u_written ON u_written.id = r.written_submitted_by
     WHERE ${where.join(' AND ')}
     ORDER BY r.event_date DESC
   `).all(...params);
@@ -1261,6 +1267,98 @@ router.get('/riddor', (req, res) => {
   };
 
   res.json({ reports, stats, year: Number(currentYear) });
+});
+
+// RIDDOR is a regulator-bound decision (filing with HSE), so the action
+// is restricted to EHS+ — matching the recordability gate on incidents.
+// Supervisors observe but don't speak to HSE on the org's behalf.
+const RIDDOR_ACTION_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
+
+// POST /reports/riddor/:id/phone-reported — log the without-delay phone
+// call to HSE (RIDDOR Reg.6 fatality, Reg.4(1) specified injury, Reg.7
+// dangerous occurrence, Reg.5 non-worker, Reg.11(1) gas). Idempotent —
+// re-firing returns the existing row without changing the timestamp.
+router.post('/riddor/:id/phone-reported', (req, res) => {
+  if (!RIDDOR_ACTION_ROLES.has(req.user?.role)) {
+    return res.status(403).json({ error: 'Only EHS officers, EHS managers, or admins can log RIDDOR phone notification.' });
+  }
+  const row = db.prepare(
+    'SELECT * FROM riddor_reports WHERE id = ? AND org_id = ?'
+  ).get(req.params.id, req.user.org_id);
+  if (!row) return res.status(404).json({ error: 'RIDDOR report not found.' });
+
+  if (row.phone_notified_at) {
+    return res.json(row); // idempotent
+  }
+
+  // phone_notified_by is declared TEXT (legacy from before user FK fanout),
+  // so coerce the user.id to a clean string — passing a JS number stores it
+  // as REAL and round-trips as '73.0'. Reads JOIN cleanly since SQLite's
+  // type affinity coerces back for the ON comparison.
+  db.prepare(`
+    UPDATE riddor_reports
+    SET phone_notified_at = datetime('now'),
+        phone_notified_by = ?,
+        status = CASE WHEN status = 'pending' THEN 'phone_reported' ELSE status END
+    WHERE id = ?
+  `).run(String(req.user.id), row.id);
+
+  writeActivity({
+    org_id: row.org_id,
+    entity_type: 'incident',
+    entity_id: row.incident_id,
+    action: 'riddor_phone_reported',
+    description: `logged RIDDOR phone notification for ${row.riddor_number} (${row.category})`,
+    user_id: req.user.id,
+    metadata: { riddor_report_id: row.id, category: row.category },
+  });
+
+  const updated = db.prepare('SELECT * FROM riddor_reports WHERE id = ?').get(row.id);
+  res.json(updated);
+});
+
+// POST /reports/riddor/:id/written-submitted — log F2508 filing with
+// HSE. Deadlines per category: 10 days (Reg.4/5/6/7), 15 days
+// (Reg.4(2) over-7-day), 14 days (Reg.11 gas), 40 days (Reg.8 disease,
+// not currently enforced). Idempotent.
+router.post('/riddor/:id/written-submitted', (req, res) => {
+  if (!RIDDOR_ACTION_ROLES.has(req.user?.role)) {
+    return res.status(403).json({ error: 'Only EHS officers, EHS managers, or admins can log RIDDOR F2508 submission.' });
+  }
+  const row = db.prepare(
+    'SELECT * FROM riddor_reports WHERE id = ? AND org_id = ?'
+  ).get(req.params.id, req.user.org_id);
+  if (!row) return res.status(404).json({ error: 'RIDDOR report not found.' });
+
+  if (row.written_submitted_at) {
+    return res.json(row); // idempotent
+  }
+
+  // Optional HSE reference from the F2508 receipt (HSE returns one on
+  // successful online submission). Stored on the existing hse_ref column.
+  const hseRef = (req.body?.hse_ref || '').toString().trim() || null;
+
+  db.prepare(`
+    UPDATE riddor_reports
+    SET written_submitted_at = datetime('now'),
+        written_submitted_by = ?,
+        hse_ref = COALESCE(?, hse_ref),
+        status = 'submitted'
+    WHERE id = ?
+  `).run(req.user.id, hseRef, row.id);
+
+  writeActivity({
+    org_id: row.org_id,
+    entity_type: 'incident',
+    entity_id: row.incident_id,
+    action: 'riddor_written_submitted',
+    description: `submitted RIDDOR F2508 for ${row.riddor_number} (${row.category})${hseRef ? ' · HSE ref ' + hseRef : ''}`,
+    user_id: req.user.id,
+    metadata: { riddor_report_id: row.id, category: row.category, hse_ref: hseRef },
+  });
+
+  const updated = db.prepare('SELECT * FROM riddor_reports WHERE id = ?').get(row.id);
+  res.json(updated);
 });
 
 router.get('/metrics', (req, res) => {
