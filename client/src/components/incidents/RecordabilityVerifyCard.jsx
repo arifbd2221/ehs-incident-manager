@@ -71,12 +71,16 @@ const TYPE_LABELS = {
   first_aid: 'First aid only',
 };
 
-export default function RecordabilityVerifyCard({ incident, onVerified }) {
+// `canVerify` (default true for back-compat) gates the verify form, re-verify
+// button, and submit. When false, non-EHS viewers see the verified summary
+// (or a "pending" notice) and may still submit an override request through
+// the existing banner — they just can't make the verification call directly.
+export default function RecordabilityVerifyCard({ incident, onVerified, canVerify = true }) {
   const { user } = useAuth();
   const isElevated = ELEVATED_ROLES.has(user?.role);
   const alreadyVerified = !!incident.osha_recordable_verified_at;
 
-  const [open, setOpen] = useState(!alreadyVerified);
+  const [open, setOpen] = useState(!alreadyVerified && canVerify);
   const [coveredWorker, setCoveredWorker] = useState('');
   const [workRelated, setWorkRelated] = useState('');
   const [exceptionId, setExceptionId] = useState('');
@@ -236,9 +240,11 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
             {overrideError && <div className="rv-error">{overrideError}</div>}
 
             <div className="rv-actions" style={{ marginTop: 8 }}>
-              <button className="rv-reverify" onClick={() => { reset(); setOpen(true); }}>
-                <Icon name="edit" size={13}/>Re-verify
-              </button>
+              {canVerify && (
+                <button className="rv-reverify" onClick={() => { reset(); setOpen(true); }}>
+                  <Icon name="edit" size={13}/>Re-verify
+                </button>
+              )}
               {!pendingOshaRequest && (
                 <button className="rv-reverify" onClick={() => setOverrideModalOpen(true)}>
                   <Icon name="shield" size={13}/>Request override
@@ -260,9 +266,11 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
               ))}
             </ul>
             <div className="rv-meta">Saved to the incident and the activity log.</div>
-            <button className="rv-reverify" onClick={() => { reset(); setDecision(null); setOpen(true); }}>
-              <Icon name="edit" size={13}/>Re-verify
-            </button>
+            {canVerify && (
+              <button className="rv-reverify" onClick={() => { reset(); setDecision(null); setOpen(true); }}>
+                <Icon name="edit" size={13}/>Re-verify
+              </button>
+            )}
           </div>
         ) : open ? (
           <div className="rv-form">
@@ -380,6 +388,14 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
               >
                 {submitting ? 'Verifying…' : 'Verify recordability'}
               </button>
+            </div>
+          </div>
+        ) : !canVerify ? (
+          <div className="rv-summary">
+            <div className="rv-meta">
+              Awaiting verification by an EHS officer. The 1904 recordability
+              call is reserved for EHS — supervisors can submit an override
+              request once a verification is recorded.
             </div>
           </div>
         ) : null}
