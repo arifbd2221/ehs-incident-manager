@@ -110,6 +110,23 @@ if (process.env.NODE_ENV === 'production' && existsSync(clientDist)) {
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+async function autoSeed() {
+  try {
+    const { default: seedDb } = await import('./db/connection.js');
+    const count = seedDb.prepare('SELECT COUNT(*) as c FROM organizations').get().c;
+    if (count === 0) {
+      console.log('Empty database detected — running seed...');
+      const { execSync } = await import('child_process');
+      execSync('node db/seed.js', { cwd: __dirname, stdio: 'inherit' });
+      console.log('Auto-seed complete.');
+    }
+  } catch (e) {
+    console.error('Auto-seed failed:', e.message);
+  }
+}
+
+autoSeed().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 });
