@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getOsha300, getOsha300A, getOsha301, getRiddor, getMetrics, getAuditLog, getAuditActions, createOsha300Entry } from '../../api/reports';
+import { getOsha300, getOsha300A, getOsha301, getRiddor, getMetrics, getAuditLog, getAuditActions, createOsha300Entry, logRiddorPhoneReported, logRiddorWrittenSubmitted } from '../../api/reports';
 import { listSafeworkNsw, getSafeworkNswLookups } from '../../api/safework_nsw';
 import { getSites, getUsers } from '../../api/users';
 import { getIncidents } from '../../api/incidents';
@@ -1248,12 +1248,54 @@ function Osha300AReport({ siteId }) {
 }
 
 function RiddorReport({ siteId }) {
+  const { user } = useAuth();
+  const canEdit = ELEVATED_ROLES.has(user?.role);
   const [data, setData] = useState(null);
-  useEffect(() => {
+  const [busy, setBusy] = useState(null);     // riddor row id while a POST is in-flight
+  const [toast, setToast] = useState(null);
+  const load = () => {
     setData(null);
     const params = siteId ? { site_id: siteId } : {};
     getRiddor(params).then(setData).catch(() => {});
-  }, [siteId]);
+  };
+  useEffect(load, [siteId]);
+
+  // RIDDOR Reg.4(1)/5/6/7/11(1) require an immediate phone call. Reg.4(2)
+  // over-7-day, Reg.8 disease, and Reg.11(2) gas fittings don't — so the
+  // phone-call button only renders for categories where it's actually owed.
+  const PHONE_CATEGORIES = new Set([
+    'fatality', 'specified_injury', 'dangerous_occurrence',
+    'non_worker_hospitalization', 'non_worker_specified_injury', 'gas_incident',
+  ]);
+
+  const doPhone = async (rid) => {
+    setBusy(rid);
+    try {
+      await logRiddorPhoneReported(rid);
+      setToast('Phone notification logged.');
+      load();
+    } catch (e) {
+      setToast(e?.response?.data?.error || 'Failed to log phone call.');
+    } finally {
+      setBusy(null);
+      setTimeout(() => setToast(null), 2500);
+    }
+  };
+
+  const doWritten = async (rid) => {
+    const hseRef = window.prompt('HSE reference number from F2508 receipt (optional):', '') || '';
+    setBusy(rid);
+    try {
+      await logRiddorWrittenSubmitted(rid, hseRef.trim() ? { hse_ref: hseRef.trim() } : {});
+      setToast('F2508 submission logged.');
+      load();
+    } catch (e) {
+      setToast(e?.response?.data?.error || 'Failed to log submission.');
+    } finally {
+      setBusy(null);
+      setTimeout(() => setToast(null), 2500);
+    }
+  };
 
   if (!data) return <ReportLoading/>;
 
@@ -1277,34 +1319,77 @@ function RiddorReport({ siteId }) {
         <div style={{ overflowX: 'auto' }}>
           <table className="rpt-table">
             <thead>
-              <tr><th>RIDDOR ref</th><th>Source</th><th>Date</th><th>Category</th><th>Description</th><th>HSE ref</th><th>Status</th></tr>
+              <tr><th>RIDDOR ref</th><th>Source</th><th>Date</th><th>Category</th><th>Description</th><th>HSE ref</th><th>Status</th>{canEdit && <th>Actions</th>}</tr>
             </thead>
             <tbody>
-              {(data.reports || []).map(r => (
-                <tr key={r.id}>
-                  <td className="cell-ref">{r.riddor_number}</td>
-                  <td className="cell-ref">{r.incident_number}</td>
-                  <td>{formatDateShort(r.event_date)}</td>
-                  <td>
-                    <span className="rpt-cat-pill" title={riddorCategoryReg(r.category) ? `RIDDOR ${riddorCategoryReg(r.category)}` : ''}>
-                      <span className="cat-dot"/>{riddorCategoryLabel(r.category)}
-                    </span>
-                  </td>
-                  <td>{r.description || r.incident_title}</td>
-                  <td className="cell-ref">{r.hse_ref || '—'}</td>
-                  <td>
-                    <span className={`rpt-status ${r.status === 'submitted' ? 'rs-submitted' : r.status === 'pending' ? 'rs-pending' : 'rs-draft'}`}>
-                      <span className="rs-dot"/>{r.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {(data.reports || []).map(r => {
+                const phoneOwed = PHONE_CATEGORIES.has(r.category);
+                const phoneDone = !!r.phone_notified_at;
+                const writtenDone = !!r.written_submitted_at;
+                const statusLabel = {
+                  pending: 'Pending',
+                  phone_reported: 'Phone reported',
+                  submitted: 'Submitted',
+                  overdue: 'Overdue',
+                }[r.status] || r.status;
+                return (
+                  <tr key={r.id}>
+                    <td className="cell-ref">{r.riddor_number}</td>
+                    <td className="cell-ref">{r.incident_number}</td>
+                    <td>{formatDateShort(r.event_date)}</td>
+                    <td>
+                      <span className="rpt-cat-pill" title={riddorCategoryReg(r.category) ? `RIDDOR ${riddorCategoryReg(r.category)}` : ''}>
+                        <span className="cat-dot"/>{riddorCategoryLabel(r.category)}
+                      </span>
+                    </td>
+                    <td>{r.description || r.incident_title}</td>
+                    <td className="cell-ref">{r.hse_ref || '—'}</td>
+                    <td>
+                      <span className={`rpt-status ${r.status === 'submitted' ? 'rs-submitted' : r.status === 'phone_reported' ? 'rs-draft' : r.status === 'overdue' ? 'rs-pending' : 'rs-pending'}`}>
+                        <span className="rs-dot"/>{statusLabel}
+                      </span>
+                    </td>
+                    {canEdit && (
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {phoneOwed && !phoneDone && (
+                            <button
+                              className="btn btn-tertiary btn-sm"
+                              onClick={() => doPhone(r.id)}
+                              disabled={busy === r.id}
+                              title="Log the without-delay phone call to HSE"
+                            >
+                              <Icon name="phone" size={12}/>Log phone
+                            </button>
+                          )}
+                          {!writtenDone && (
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => doWritten(r.id)}
+                              disabled={busy === r.id}
+                              title="Log the F2508 written submission (optionally with HSE ref)"
+                            >
+                              <Icon name="check" size={12}/>Log F2508
+                            </button>
+                          )}
+                          {phoneDone && writtenDone && (
+                            <span className="rpt-status rs-submitted" title={`Submitted ${r.written_submitted_at}`}>
+                              <Icon name="check" size={11}/>Done
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
               {data.reports?.length === 0 && (
-                <tr><td colSpan={7} className="cell-empty">No RIDDOR reports this year</td></tr>
+                <tr><td colSpan={canEdit ? 8 : 7} className="cell-empty">No RIDDOR reports this year</td></tr>
               )}
             </tbody>
           </table>
         </div>
+        {toast && <div className="toast">{toast}</div>}
 
         {data.stats && (
           <div className="rpt-riddor-stats">

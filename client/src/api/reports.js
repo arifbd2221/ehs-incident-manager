@@ -10,6 +10,15 @@ export const getOsha301 = (incidentId) => api.get(`/reports/osha-301/${incidentI
 export const createOsha300Entry = (data) => api.post('/reports/osha-300', data).then(r => r.data);
 export const getRiddor = (params) => api.get('/reports/riddor', { params }).then(r => r.data);
 
+// RIDDOR status transitions — both endpoints are idempotent on the server.
+// `logRiddorPhoneReported` flips status pending → phone_reported and stamps
+// phone_notified_at/by. `logRiddorWrittenSubmitted` flips to submitted and
+// optionally records the HSE reference returned by F2508 online submission.
+export const logRiddorPhoneReported = (id) =>
+  api.post(`/reports/riddor/${id}/phone-reported`).then(r => r.data);
+export const logRiddorWrittenSubmitted = (id, data) =>
+  api.post(`/reports/riddor/${id}/written-submitted`, data || {}).then(r => r.data);
+
 // WI-07 OSHA 1904.39 severe-injury notifications (per-incident).
 // Rows are auto-created on incident POST when evaluateSevereInjury detects
 // a reportable category (fatality / hospitalization / amputation / loss_of_eye).
