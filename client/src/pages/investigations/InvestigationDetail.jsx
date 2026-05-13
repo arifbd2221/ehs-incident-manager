@@ -12,6 +12,7 @@ import { frameworkVisibility } from '../../utils/frameworks';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
+import DatePicker from '../../components/shared/DatePicker';
 import { TypePill, SevBadge, TrackBadge } from '../../components/shared/Badges';
 import { timeAgo, formatDate } from '../../utils/time';
 import CloseInvestigationModal from './modals/CloseInvestigationModal';
@@ -64,6 +65,9 @@ export default function InvestigationDetail() {
   const [toast, setToast] = useState(null);
   const [newWhy, setNewWhy] = useState({ question: '', answer: '', is_root_cause: false });
   const [findings, setFindings] = useState('');
+  const [rootCause, setRootCause] = useState('');
+  const [lessons, setLessons] = useState('');
+  const [savingField, setSavingField] = useState(null); // 'findings' | 'root_cause' | 'lessons' | 'due_date'
 
   // Document linking modal state — supports folder navigation. When the user
   // types a search query we switch to flat global search across the whole
@@ -83,7 +87,12 @@ export default function InvestigationDetail() {
 
   const load = () => {
     setLoading(true);
-    getInvestigation(id).then(data => { setInv(data); setFindings(data.findings || ''); }).catch(() => {}).finally(() => setLoading(false));
+    getInvestigation(id).then(data => {
+      setInv(data);
+      setFindings(data.findings || '');
+      setRootCause(data.root_cause_summary || '');
+      setLessons(data.lessons_learned || '');
+    }).catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(load, [id]);
 
@@ -295,8 +304,27 @@ export default function InvestigationDetail() {
       load();
     } catch { showToast('Failed to add.'); }
   };
-  const handleSaveFindings = async () => {
-    try { await updateInvestigation(inv.id, { findings }); showToast('Findings saved.'); } catch {}
+  // Generic field-saver — surfaces BE errors (silent failure was hiding 403s
+  // when a non-elevated worker tried to edit, and made the user think the
+  // save button was broken). `key` is one of the entries in
+  // LABELS_BY_FIELD below; the spinner state is keyed on the same name.
+  const LABELS_BY_FIELD = {
+    findings: 'Findings',
+    root_cause_summary: 'Root cause',
+    lessons_learned: 'Lessons learned',
+    due_date: 'Target close date',
+  };
+  const handleSaveField = async (key, value) => {
+    setSavingField(key);
+    try {
+      await updateInvestigation(inv.id, { [key]: value });
+      showToast(`${LABELS_BY_FIELD[key] || key} saved.`);
+      load();
+    } catch (err) {
+      showToast(err?.response?.data?.error || `Failed to save ${LABELS_BY_FIELD[key] || key}.`);
+    } finally {
+      setSavingField(null);
+    }
   };
 
   const statusLabel = inv.status === 'closed' ? 'Closed' : inv.status === 'capa' ? 'Awaiting CAPA' : inv.status === 'progress' ? 'In progress' : 'Pending';
@@ -421,6 +449,7 @@ export default function InvestigationDetail() {
             <div className="invd-card-h">
               <div className="hicon hi-findings"><Icon name="edit" size={16}/></div>
               Investigation findings
+              <span className="invd-card-hint">What you observed — facts, evidence, timeline</span>
             </div>
             <div className="invd-card-body">
               <SmartTextarea
@@ -428,11 +457,68 @@ export default function InvestigationDetail() {
                 onChange={setFindings}
                 rows={5}
                 className="invd-findings-st"
-                examples={['Worker contacted chemical during transfer. Root cause: SOP did not require secondary containment for volumes over 10L. Contributing factor: glove type inadequate for sulfuric acid concentration.', 'Forklift struck racking due to obscured sightline at aisle intersection. Root cause: no convex mirrors or traffic management. Contributing factor: shift handover did not communicate changed layout.']}
-                chips={['Root cause identified', 'Contributing factors noted', 'Existing controls insufficient', 'Training gap identified']}
+                examples={['Worker contacted chemical during transfer. SOP did not require secondary containment for volumes over 10L. Glove type inadequate for sulfuric acid concentration.', 'Forklift struck racking due to obscured sightline at aisle intersection. No convex mirrors or traffic management. Shift handover did not communicate changed layout.']}
+                chips={['Witness statements collected', 'Site walk completed', 'Equipment inspected', 'CCTV reviewed']}
+                disabled={inv.status === 'closed'}
               />
-              <button className="invd-save-btn" onClick={handleSaveFindings}>
-                <Icon name="check" size={13}/>Save findings
+              <button
+                className="invd-save-btn"
+                onClick={() => handleSaveField('findings', findings)}
+                disabled={savingField === 'findings' || findings === (inv.findings || '') || inv.status === 'closed'}
+              >
+                <Icon name="check" size={13}/>{savingField === 'findings' ? 'Saving…' : 'Save findings'}
+              </button>
+            </div>
+          </div>
+
+          {/* Root cause summary */}
+          <div className="invd-card">
+            <div className="invd-card-h">
+              <div className="hicon hi-rca"><Icon name="pulse" size={16}/></div>
+              Root cause
+              <span className="invd-card-hint">Why it happened — the underlying causal chain</span>
+            </div>
+            <div className="invd-card-body">
+              <SmartTextarea
+                value={rootCause}
+                onChange={setRootCause}
+                rows={4}
+                examples={['Engineering control absent: no machine guarding required by site SOP for press operations under 50 strokes/min.', 'Procedural drift: pre-task hazard assessment skipped on time-pressured changeovers, normalized over six months.']}
+                chips={['Engineering control absent', 'Procedural drift', 'Training gap', 'Supervision gap', 'Design flaw']}
+                disabled={inv.status === 'closed'}
+              />
+              <button
+                className="invd-save-btn"
+                onClick={() => handleSaveField('root_cause_summary', rootCause)}
+                disabled={savingField === 'root_cause_summary' || rootCause === (inv.root_cause_summary || '') || inv.status === 'closed'}
+              >
+                <Icon name="check" size={13}/>{savingField === 'root_cause_summary' ? 'Saving…' : 'Save root cause'}
+              </button>
+            </div>
+          </div>
+
+          {/* Lessons learned */}
+          <div className="invd-card">
+            <div className="invd-card-h">
+              <div className="hicon hi-summary"><Icon name="check" size={16}/></div>
+              Lessons learned
+              <span className="invd-card-hint">What we'll change — systemic insights to carry forward</span>
+            </div>
+            <div className="invd-card-body">
+              <SmartTextarea
+                value={lessons}
+                onChange={setLessons}
+                rows={4}
+                examples={['Add secondary containment requirement to all chemical transfer SOPs site-wide, not just for >10L volumes. Roll out glove compatibility chart to all departments.', 'Pre-task hazard assessment must be the first item on every shift handover; tie compliance to monthly supervisor scorecard.']}
+                chips={['SOP change required', 'Training refresher', 'Policy update', 'Cross-site rollout', 'Audit cadence change']}
+                disabled={inv.status === 'closed'}
+              />
+              <button
+                className="invd-save-btn"
+                onClick={() => handleSaveField('lessons_learned', lessons)}
+                disabled={savingField === 'lessons_learned' || lessons === (inv.lessons_learned || '') || inv.status === 'closed'}
+              >
+                <Icon name="check" size={13}/>{savingField === 'lessons_learned' ? 'Saving…' : 'Save lessons'}
               </button>
             </div>
           </div>
@@ -571,6 +657,50 @@ export default function InvestigationDetail() {
 
         {/* Sidebar */}
         <div className="invd-side">
+          {/* Lifecycle — when it started, target close, actual close */}
+          <div className="invd-card">
+            <div className="invd-card-h">
+              <div className="hicon hi-activity"><Icon name="clock" size={16}/></div>
+              Lifecycle
+            </div>
+            <div className="invd-card-body">
+              <div className="invd-summary-rows">
+                <div className="invd-summary-row">
+                  <span className="invd-summary-label">Opened</span>
+                  <span className="invd-summary-val">{formatDate(inv.started_at || inv.created_at)}</span>
+                </div>
+                <div className="invd-summary-row">
+                  <span className="invd-summary-label">Target close</span>
+                  {inv.status === 'closed' ? (
+                    <span className="invd-summary-val muted">{inv.due_date ? formatDate(inv.due_date) : '—'}</span>
+                  ) : canEdit ? (
+                    <DatePicker
+                      value={inv.due_date || ''}
+                      onChange={(v) => handleSaveField('due_date', v || null)}
+                      placeholder="Set target date"
+                    />
+                  ) : (
+                    <span className="invd-summary-val">{inv.due_date ? formatDate(inv.due_date) : 'Not set'}</span>
+                  )}
+                </div>
+                <div className="invd-summary-row">
+                  <span className="invd-summary-label">Closed</span>
+                  <span className="invd-summary-val">
+                    {inv.closed_at
+                      ? formatDate(inv.closed_at)
+                      : <span className="muted">Open</span>}
+                  </span>
+                </div>
+                {inv.closed_at && inv.closed_reason && (
+                  <div className="invd-summary-row" style={{ alignItems: 'flex-start' }}>
+                    <span className="invd-summary-label">Close reason</span>
+                    <span className="invd-summary-val" style={{ textAlign: 'right', maxWidth: '60%' }}>{inv.closed_reason}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Incident summary */}
           <div className="invd-card">
             <div className="invd-card-h">

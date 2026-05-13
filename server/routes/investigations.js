@@ -140,7 +140,7 @@ router.patch('/:id', (req, res) => {
     });
   }
 
-  const updatable = ['findings', 'root_cause_summary', 'status', 'due_date', 'lead_investigator'];
+  const updatable = ['findings', 'root_cause_summary', 'lessons_learned', 'status', 'due_date', 'lead_investigator'];
   const sets = [];
   const params = [];
 

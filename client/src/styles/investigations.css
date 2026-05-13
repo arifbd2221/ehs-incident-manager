@@ -1132,6 +1132,21 @@
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
 }
+.invd-summary-val .muted,
+.invd-summary-val.muted {
+  color: var(--sds-fg-tertiary);
+  font-weight: 500;
+}
+/* Inline hint shown after card titles to explain "what goes here". */
+.invd-card-hint {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sds-fg-tertiary);
+}
+@media (max-width: 768px) {
+  .invd-card-hint { display: none; }
+}
 .invd-summary-divider {
   height: 1px;
   background: #f3f4f6;
