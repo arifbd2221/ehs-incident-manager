@@ -121,10 +121,24 @@ router.get('/:id', (req, res) => {
   res.json(inv);
 });
 
+// Lead investigator is a designation EHS owns — same logic as the
+// recordability gate on incidents. Site supervisors can run an investigation
+// once they're assigned, but they can't decide who leads one.
+const INVESTIGATION_LEAD_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
+
 router.patch('/:id', (req, res) => {
   const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
   if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
+
+  // Tighter gate when the patch touches lead_investigator. The general
+  // requireAssigneeOrElevated lets the current lead reassign themselves;
+  // promoting/demoting investigation leads is reserved for EHS+.
+  if (req.body.lead_investigator !== undefined && !INVESTIGATION_LEAD_ROLES.has(req.user?.role)) {
+    return res.status(403).json({
+      error: 'Only EHS officers, EHS managers, or admins can change the lead investigator.',
+    });
+  }
 
   const updatable = ['findings', 'root_cause_summary', 'status', 'due_date', 'lead_investigator'];
   const sets = [];

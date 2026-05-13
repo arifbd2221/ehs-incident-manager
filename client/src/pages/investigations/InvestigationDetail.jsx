@@ -22,6 +22,10 @@ import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/investigations.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+// Lead investigator is an EHS-owned designation (matches the recordability
+// gate). Adding members stays at ELEVATED — lead supervisors can still build
+// out their team, but only EHS picks who leads.
+const LEAD_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 
 const tlDotClass = (action) => {
   if (action === 'created') return 'td-created';
@@ -53,6 +57,7 @@ export default function InvestigationDetail() {
   const { user } = useAuth();
   const { showOsha, showRiddor } = frameworkVisibility(user);
   const canEdit = ELEVATED.has(user?.role);
+  const canManageLead = LEAD_ROLES.has(user?.role);
   const [inv, setInv] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
@@ -649,7 +654,7 @@ export default function InvestigationDetail() {
                           <div className="invd-team-name">{t.name}</div>
                           <div className="invd-team-role">{isLead ? 'Lead' : 'Member'}</div>
                         </div>
-                        {canEdit && inv.status !== 'closed' && (
+                        {canManageLead && inv.status !== 'closed' && (
                           <div className="invd-team-actions">
                             {isLead ? (
                               <>
@@ -668,7 +673,7 @@ export default function InvestigationDetail() {
               ) : (
                 <div className="invd-team-empty">
                   <p>No team members yet.</p>
-                  {canEdit && inv.status !== 'closed' && (
+                  {canManageLead && inv.status !== 'closed' && (
                     <button className="btn btn-primary btn-sm" onClick={() => setModal('reassign')}>Assign lead</button>
                   )}
                 </div>
