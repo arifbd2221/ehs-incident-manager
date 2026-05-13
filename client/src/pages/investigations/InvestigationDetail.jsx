@@ -261,6 +261,17 @@ export default function InvestigationDetail() {
       showToast(err.response?.data?.error || 'Failed to unassign.');
     }
   };
+  // Promote a non-lead team member to lead without opening the modal — the
+  // user is already on the team, the picker would just confirm them again.
+  const handleMakeLead = async (member) => {
+    try {
+      await updateInvestigation(inv.id, { lead_investigator: member.user_id });
+      showToast(`${member.name} is now lead.`);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to set lead.');
+    }
+  };
   const handleAddWhy = async () => {
     if (!newWhy.question.trim() || !newWhy.answer.trim()) return;
     try {
@@ -312,24 +323,6 @@ export default function InvestigationDetail() {
             </div>
           </div>
           <div className="invd-header-actions">
-            {inv.status !== 'closed' && canEdit && (
-              <>
-                {!inv.lead_investigator ? (
-                  <button className="idet-act-btn" onClick={() => setModal('reassign')}>
-                    <Icon name="person" size={14}/>Assign lead
-                  </button>
-                ) : (
-                  <>
-                    <button className="idet-act-btn" onClick={() => setModal('reassign')}>
-                      <Icon name="edit" size={14}/>Change lead
-                    </button>
-                    <button className="idet-act-btn" onClick={handleUnassign}>
-                      <Icon name="close" size={14}/>Unassign
-                    </button>
-                  </>
-                )}
-              </>
-            )}
             {inv.status !== 'closed' && (
               <>
                 <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no CAPA</button>
@@ -624,22 +617,86 @@ export default function InvestigationDetail() {
             <div className="invd-card-h">
               <div className="hicon hi-team"><Icon name="person" size={16}/></div>
               Investigation team
+              {canEdit && inv.status !== 'closed' && !inv.lead_investigator && (
+                <button
+                  className="invd-team-action invd-team-action-primary"
+                  onClick={() => setModal('reassign')}
+                  title="Pick a lead investigator"
+                  style={{ marginLeft: 'auto' }}
+                >
+                  <Icon name="person" size={12}/>Assign lead
+                </button>
+              )}
             </div>
             <div className="invd-card-body">
               {(inv.team || []).length > 0 ? (
                 <div className="invd-team-list">
-                  {inv.team.map(t => (
-                    <div key={t.user_id} className="invd-team-member">
-                      <div className="invd-team-av">{t.initials}</div>
-                      <div>
-                        <div className="invd-team-name">{t.name}</div>
-                        <div className="invd-team-role">{t.role}</div>
+                  {/* Lead first, then members — visually distinguishes the
+                      decision-maker from supporting team. */}
+                  {[...inv.team].sort((a, b) => (a.role === 'lead' ? -1 : b.role === 'lead' ? 1 : 0)).map(t => {
+                    const isLead = t.role === 'lead';
+                    return (
+                      <div key={t.user_id} className={`invd-team-member ${isLead ? 'is-lead' : ''}`}>
+                        <div className="invd-team-av">
+                          {t.initials}
+                          {isLead && (
+                            <span className="invd-team-av-mark" title="Lead investigator">
+                              <Icon name="shield" size={10}/>
+                            </span>
+                          )}
+                        </div>
+                        <div className="invd-team-info">
+                          <div className="invd-team-name">{t.name}</div>
+                          <div className="invd-team-meta">
+                            <span className={`invd-team-pill ${isLead ? 'is-lead' : ''}`}>
+                              {isLead ? 'Lead investigator' : 'Team member'}
+                            </span>
+                          </div>
+                        </div>
+                        {canEdit && inv.status !== 'closed' && (
+                          <div className="invd-team-actions">
+                            {isLead ? (
+                              <>
+                                <button
+                                  className="invd-team-action"
+                                  onClick={() => setModal('reassign')}
+                                  title="Hand the lead role to a different person"
+                                >
+                                  <Icon name="edit" size={12}/>Change
+                                </button>
+                                <button
+                                  className="invd-team-action invd-team-action-danger"
+                                  onClick={handleUnassign}
+                                  title="Clear the lead role (keeps this person on the team)"
+                                >
+                                  <Icon name="close" size={12}/>Unassign
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                className="invd-team-action"
+                                onClick={() => handleMakeLead(t)}
+                                title="Promote this member to lead investigator"
+                              >
+                                <Icon name="shield" size={12}/>Make lead
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No team members assigned</p>
+                <div className="invd-team-empty">
+                  <div className="invd-team-empty-icon"><Icon name="person" size={20}/></div>
+                  <div className="invd-team-empty-text">No team members yet</div>
+                  {canEdit && inv.status !== 'closed' && (
+                    <button className="invd-team-action invd-team-action-primary" onClick={() => setModal('reassign')}>
+                      <Icon name="person" size={12}/>Assign lead
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
