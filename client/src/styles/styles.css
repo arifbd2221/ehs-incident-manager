@@ -335,6 +335,34 @@ body {
 }
 .icon-btn.is-open { background: rgba(98,109,249,0.08); color: var(--sds-brand-primary); }
 
+.help-beacon:not(.is-open) {
+  animation: helpBeacon 4s ease-in-out 3s infinite;
+}
+.help-beacon:not(.is-open)::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 10px;
+  border: 2px solid var(--sds-brand-primary);
+  opacity: 0;
+  animation: helpRing 4s ease-in-out 3s infinite;
+  pointer-events: none;
+}
+@keyframes helpBeacon {
+  0%, 70%, 100% { color: var(--sds-fg-secondary); }
+  15% { color: var(--sds-brand-primary); }
+  30% { color: var(--sds-fg-secondary); }
+  40% { color: var(--sds-brand-primary); }
+  55% { color: var(--sds-fg-secondary); }
+}
+@keyframes helpRing {
+  0%, 70%, 100% { opacity: 0; transform: scale(1); }
+  15% { opacity: 0.5; transform: scale(1.15); }
+  25% { opacity: 0; transform: scale(1.25); }
+  40% { opacity: 0.5; transform: scale(1.15); }
+  50% { opacity: 0; transform: scale(1.25); }
+}
+
 /* Notification panel */
 .notif-anchor { position: relative; }
 .notif-backdrop {
@@ -613,6 +641,7 @@ body {
   background: var(--sds-brand-primary); color: #fff;
   display: flex; align-items: center; justify-content: center;
   font-weight: 600; font-size: 12px; letter-spacing: .04em;
+  cursor: pointer;
 }
 
 /* ================================================================

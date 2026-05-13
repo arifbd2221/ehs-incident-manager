@@ -377,7 +377,7 @@ export default function TopBar() {
         <button className="btn btn-primary btn-sm" onClick={() => setWizardOpen(true)}>
           <Icon name="plus" size={16} /><span>Report incident</span>
         </button>
-        <button className={`icon-btn ${helpOpen ? 'is-open' : ''}`} title="Help" onClick={() => setHelpOpen(v => !v)}><Icon name="help" size={20} /></button>
+        <button className={`icon-btn help-beacon ${helpOpen ? 'is-open' : ''}`} title="Help" onClick={() => setHelpOpen(v => !v)}><Icon name="help" size={20} /></button>
         <div className="notif-anchor">
           <button className={`icon-btn ${notifOpen ? 'is-open' : ''}`} title="Notifications" onClick={() => setNotifOpen(v => !v)}>
             <Icon name="bell" size={20} />
