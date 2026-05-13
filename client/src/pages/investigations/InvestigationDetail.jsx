@@ -16,6 +16,7 @@ import { TypePill, SevBadge, TrackBadge } from '../../components/shared/Badges';
 import { timeAgo, formatDate } from '../../utils/time';
 import CloseInvestigationModal from './modals/CloseInvestigationModal';
 import AssignCapaModal from './modals/AssignCapaModal';
+import ReassignLeadModal from './modals/ReassignLeadModal';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/investigations.css';
 
@@ -241,6 +242,15 @@ export default function InvestigationDetail() {
   const handleAssignCapa = async (form) => {
     try { await assignCapa(inv.id, form); showToast(`CAPA assigned · due ${form.due_date}.`); load(); } catch (err) { showToast(err.response?.data?.error || 'Failed to assign CAPA.'); }
   };
+  const handleReassign = async (form) => {
+    try {
+      await updateInvestigation(inv.id, form);
+      showToast('Lead reassigned.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to reassign.');
+    }
+  };
   const handleAddWhy = async () => {
     if (!newWhy.question.trim() || !newWhy.answer.trim()) return;
     try {
@@ -286,7 +296,19 @@ export default function InvestigationDetail() {
               <span className={`inv-list-lane ${statusClass}`}>
                 <span className="ln-dot"/>{statusLabel}
               </span>
-              <span className="invd-lead">Lead: <b>{inv.lead_name || 'Unassigned'}</b></span>
+              <span className="invd-lead">
+                Lead: <b>{inv.lead_name || 'Unassigned'}</b>
+                {canEdit && inv.status !== 'closed' && (
+                  <button
+                    className="invd-lead-reassign"
+                    onClick={() => setModal('reassign')}
+                    title={inv.lead_investigator ? 'Reassign lead investigator' : 'Assign a lead investigator'}
+                  >
+                    <Icon name="edit" size={11}/>
+                    {inv.lead_investigator ? 'Reassign' : 'Assign'}
+                  </button>
+                )}
+              </span>
             </div>
           </div>
           <div className="invd-header-actions">
@@ -637,6 +659,7 @@ export default function InvestigationDetail() {
       {/* Modals — portal to escape .page transform */}
       {modal === 'close' && createPortal(<CloseInvestigationModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
       {modal === 'capa' && createPortal(<AssignCapaModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAssignCapa}/>, document.body)}
+      {modal === 'reassign' && createPortal(<ReassignLeadModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleReassign}/>, document.body)}
 
       {docModalOpen && createPortal(
         <div className="modal-backdrop" onClick={closeDocModal}>

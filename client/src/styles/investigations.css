@@ -699,9 +699,30 @@
 .invd-lead {
   font-size: 12px;
   color: var(--sds-fg-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .invd-lead b {
   color: var(--sds-fg-heading);
+}
+.invd-lead-reassign {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--sds-radius-xs);
+  border: 1px solid var(--sds-border);
+  background: var(--sds-bg-surface);
+  color: var(--sds-fg-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.invd-lead-reassign:hover {
+  border-color: var(--sds-brand-primary);
+  color: var(--sds-brand-primary);
 }
 .invd-header-actions {
   display: flex;

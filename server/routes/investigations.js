@@ -143,10 +143,66 @@ router.patch('/:id', (req, res) => {
 
   if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
+  // Reassignment of lead_investigator: capture the old/new values BEFORE the
+  // UPDATE so we can detect a change and trigger the same side-effects the
+  // escalate route does (team membership row + notify + activity log).
+  const leadChanged =
+    req.body.lead_investigator !== undefined &&
+    Number(req.body.lead_investigator) !== inv.lead_investigator;
+  const newLeadId = leadChanged ? Number(req.body.lead_investigator) || null : null;
+
   sets.push("updated_at = datetime('now')");
   params.push(inv.id);
 
   db.prepare(`UPDATE investigations SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  if (leadChanged && newLeadId) {
+    // Demote any prior 'lead' team rows to 'member' so there is exactly one
+    // lead at a time. The canonical lead is investigations.lead_investigator
+    // — the team-role column is informational, but keeping it in sync avoids
+    // confusing UIs that surface both.
+    if (inv.lead_investigator) {
+      db.prepare(`
+        UPDATE investigation_team SET role = 'member'
+        WHERE investigation_id = ? AND user_id = ? AND role = 'lead'
+      `).run(inv.id, inv.lead_investigator);
+    }
+    // investigation_team has no UNIQUE constraint on (investigation_id,
+    // user_id), so we do an existence check rather than INSERT OR IGNORE
+    // to avoid duplicate rows. If the new lead is already a member, bump
+    // their role to 'lead'; otherwise insert a fresh team row.
+    const existingRow = db.prepare(
+      'SELECT id FROM investigation_team WHERE investigation_id = ? AND user_id = ?'
+    ).get(inv.id, newLeadId);
+    if (existingRow) {
+      db.prepare('UPDATE investigation_team SET role = ? WHERE id = ?').run('lead', existingRow.id);
+    } else {
+      db.prepare(
+        'INSERT INTO investigation_team (investigation_id, user_id, role) VALUES (?, ?, ?)'
+      ).run(inv.id, newLeadId, 'lead');
+    }
+
+    const oldLead = inv.lead_investigator
+      ? db.prepare('SELECT name, initials FROM users WHERE id = ?').get(inv.lead_investigator)
+      : null;
+    const newLead = db.prepare('SELECT name, initials FROM users WHERE id = ?').get(newLeadId);
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+      VALUES (?, 'investigation', ?, 'lead_reassigned', ?, ?)
+    `).run(
+      inv.org_id, inv.id,
+      `reassigned lead from ${oldLead?.initials || '—'} to ${newLead?.initials || '?'}`,
+      req.user.id,
+    );
+
+    notifyUser({
+      orgId: inv.org_id, userId: newLeadId, type: 'incident_escalated', incidentId: inv.incident_id,
+      title: `Investigation reassigned to you — ${inv.investigation_number}`,
+      body: `You are now lead investigator on ${inv.investigation_number}.`,
+      severity: 'warn',
+      actionUrl: `/investigations/${inv.id}`,
+    });
+  }
 
   if (req.body.status === 'progress' && inv.status === 'pending') {
     db.prepare(`INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id) VALUES (?, 'investigation', ?, 'started', ?, ?)`).run(inv.org_id, inv.id, `started investigation ${inv.investigation_number}`, req.user.id);
