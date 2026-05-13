@@ -1,10 +1,16 @@
 node_modules/
 .env
+.env.local
 server/db/*.db
 server/db/*.db-wal
 server/db/*.db-shm
+server/db/*.sqlite
+server/db/*.sqlite-wal
+server/db/*.sqlite-shm
 server/uploads/*
 !server/uploads/.gitkeep
 client/dist/
-.env.local
 .DS_Store
+.claude/
+*.pptx
+create_pitch_deck.py

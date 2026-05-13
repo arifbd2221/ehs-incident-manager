@@ -5,7 +5,9 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd server && node --watch index.js",
     "dev:client": "cd client && npx vite",
-    "build": "cd client && npx vite build",
+    "build": "cd client && npm install && npx vite build",
+    "build:server": "cd server && npm install",
+    "build:all": "npm run build && npm run build:server && npm run seed",
     "start": "cd server && NODE_ENV=production node index.js",
     "seed": "cd server && node db/seed.js"
   },
