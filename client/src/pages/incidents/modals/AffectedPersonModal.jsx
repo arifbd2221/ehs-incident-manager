@@ -24,6 +24,7 @@ const EMPLOYMENT_STATUSES = [
 
 const BLANK_FORM = {
   name: '', job_title: '', email: '', phone: '', dob: '', gender: '',
+  address: '', date_hired: '',
   employment_status: 'employee', is_primary: false, is_privacy_case: false,
   body_part: '', injury_type: '', mechanism: '', treatment: '',
   er_treated: false, hospitalized: false, days_away: 0,
@@ -56,6 +57,7 @@ export default function AffectedPersonModal({
           name: person.name || '', job_title: person.job_title || '',
           email: person.email || '', phone: person.phone || '',
           dob: person.dob || '', gender: person.gender || '',
+          address: person.address || '', date_hired: person.date_hired || '',
           employment_status: person.employment_status || 'employee',
           is_primary: person.is_primary === 1,
           is_privacy_case: person.is_privacy_case === 1,
@@ -95,7 +97,21 @@ export default function AffectedPersonModal({
   const handleUserPick = (val) => {
     setSelectedUserId(val);
     const u = users.find(x => String(x.id) === String(val));
-    if (u) setForm(f => ({ ...f, name: u.name || '', job_title: u.job_title || '', email: u.email || '' }));
+    if (u) setForm(f => ({
+      ...f,
+      name: u.name || '',
+      job_title: u.job_title || '',
+      email: u.email || '',
+      // Mig 035 surfaces the full OSHA 1904.29 / RIDDOR Sch.2 / NSW WHS s.37
+      // identity fields on the user record so the wizard doesn't ask the
+      // reporter to retype them. Falls back to current form value when the
+      // user's profile is partial.
+      phone: u.phone || f.phone,
+      dob: u.dob || f.dob,
+      gender: u.gender || f.gender,
+      address: u.address || f.address,
+      date_hired: u.hire_date || f.date_hired,
+    }));
   };
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -121,6 +137,8 @@ export default function AffectedPersonModal({
         phone: form.phone.trim() || null,
         dob: form.dob || null,
         gender: form.gender.trim() || null,
+        address: form.address.trim() || null,
+        date_hired: form.date_hired || null,
         employment_status: form.employment_status,
         is_primary: form.is_primary,
         is_privacy_case: form.is_privacy_case,
@@ -310,6 +328,37 @@ export default function AffectedPersonModal({
                   </div>
                 )}
               </div>
+              {/* Gender + date hired — required by OSHA 1904.29 (Form 301);
+                  SafeWork NSW notification also requires gender. Auto-fills
+                  from the picked user's profile (mig 035). */}
+              {(see('injured_gender') || see('injured_date_hired')) && (
+                <div className="field-row">
+                  {see('injured_gender') && (
+                    <div className="field">
+                      <label className="label">Gender</label>
+                      <ComboBox
+                        options={[
+                          { value: '', label: 'Select…' },
+                          { value: 'female', label: 'Female' },
+                          { value: 'male', label: 'Male' },
+                          { value: 'non_binary', label: 'Non-binary' },
+                          { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+                          { value: 'other', label: 'Other' },
+                        ]}
+                        value={form.gender}
+                        onChange={v => setField('gender', v)}
+                        placeholder="Select…"
+                      />
+                    </div>
+                  )}
+                  {see('injured_date_hired') && (
+                    <div className="field">
+                      <label className="label">Date hired</label>
+                      <DatePicker value={form.date_hired} onChange={v => setField('date_hired', v)} />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Contact fields */}
@@ -329,6 +378,12 @@ export default function AffectedPersonModal({
                   </div>
                 )}
               </div>
+              {see('injured_address') && (
+                <div className="field">
+                  <label className="label">Address</label>
+                  <input className="input" value={form.address} onChange={e => setField('address', e.target.value)} placeholder="123 Main St, City ST 12345" />
+                </div>
+              )}
             </div>
 
             {/* Regulatory options */}
