@@ -1,0 +1,16 @@
+email,name,role,department,job_title,site_name,password
+alex.morgan@example.com,Alex Morgan,worker,Production,Press Operator,Cleveland Plant,Welcome2026!
+brenda.kim@example.com,Brenda Kim,worker,Production,Assembly Tech,Cleveland Plant,Welcome2026!
+carlos.reyes@example.com,Carlos Reyes,supervisor,Production,Shift Lead,Cleveland Plant,Welcome2026!
+deepa.iyer@example.com,Deepa Iyer,ehs_officer,EHS,Safety Officer,Cleveland Plant,Welcome2026!
+ethan.boyd@example.com,Ethan Boyd,worker,Maintenance,Maintenance Tech,Cleveland Plant,Welcome2026!
+fatima.haddad@example.com,Fatima Haddad,worker,Production,Quality Inspector,Sheffield Site,Welcome2026!
+gareth.lloyd@example.com,Gareth Lloyd,supervisor,Production,Line Supervisor,Sheffield Site,Welcome2026!
+helena.fischer@example.com,Helena Fischer,ehs_manager,EHS,Site EHS Manager,Sheffield Site,Welcome2026!
+ivan.petrov@example.com,Ivan Petrov,worker,Maintenance,CNC Technician,Sheffield Site,Welcome2026!
+janet.olsen@example.com,Janet Olsen,worker,Logistics,Forklift Operator,Dallas Distribution,Welcome2026!
+kwame.asante@example.com,Kwame Asante,supervisor,Logistics,Dock Supervisor,Dallas Distribution,Welcome2026!
+liam.murphy@example.com,Liam Murphy,worker,Logistics,Picker/Packer,Dallas Distribution,Welcome2026!
+mia.tanaka@example.com,Mia Tanaka,ehs_officer,EHS,Safety Specialist,Sydney Manufacturing — AU,Welcome2026!
+noah.brennan@example.com,Noah Brennan,worker,Production,Process Operator,Sydney Manufacturing — AU,Welcome2026!
+olivia.warren@example.com,Olivia Warren,supervisor,Production,Shift Supervisor,Sydney Manufacturing — AU,Welcome2026!

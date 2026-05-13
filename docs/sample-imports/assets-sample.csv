@@ -1,0 +1,16 @@
+name,display_id,site_name,asset_type,location_description,serial_number,description
+Press 7,PRESS-07,Cleveland Plant,machine,Bay 4 — Production floor,P7-2020-99812,250-ton servo stamping press
+Conveyor C-3,CONV-C3,Cleveland Plant,machine,Assembly line A,CONV-2019-AB-0317,Belt conveyor — 18m run from press exit to QC station
+Air Compressor AC-2,AC-2,Cleveland Plant,machine,Utility room,ING-RANDR-7100,200 HP rotary screw air compressor
+Forklift FL-9,FL-9,Cleveland Plant,vehicle,Loading dock B,CAT-2022-99041,Class IV LPG forklift — 3000 lb capacity
+Lathe LT-4,LATHE-04,Sheffield Site,machine,Machine shop bay 1,MAZ-LT4-CG-2018,CNC lathe — 8" chuck
+Welding bay WB-2,WB-02,Sheffield Site,machine,Fabrication bay,LINC-PowerWave-7188,MIG/TIG welding station with fume extraction
+Crane OH-1,CRANE-01,Sheffield Site,machine,Fabrication bay,DEM-2017-OH-0011,5-ton overhead crane with radio remote
+Diesel generator DG-1,GEN-01,Sheffield Site,machine,Utility yard,KOH-150kW-2021,150 kW standby diesel generator
+Pallet jack PJ-15,PJ-15,Dallas Distribution,vehicle,Dispatch zone,CT-EPJ-2022-115,Electric pallet jack — 4500 lb
+Pallet jack PJ-16,PJ-16,Dallas Distribution,vehicle,Receiving zone,CT-EPJ-2022-116,Electric pallet jack — 4500 lb
+Stretch wrapper SW-3,SW-03,Dallas Distribution,machine,Outbound staging,LANTECH-Q300-2020,Semi-automatic stretch wrapper
+Order picker OP-2,OP-2,Dallas Distribution,vehicle,High-bay aisle G,RAY-7340-2021,Electric order picker — 24 ft lift
+Mixer MX-1,MX-01,Sydney Manufacturing — AU,machine,Process bay 3,IKA-MX1-2022,Industrial high-shear mixer 500L
+Decant station DS-2,DS-02,Sydney Manufacturing — AU,machine,Drum filling area,CUST-DS2-2023,Drum decant station with bonding/grounding interlock
+Storage tank ST-7,ST-07,Sydney Manufacturing — AU,chemical,Tank farm bay 2,ATL-12kL-2019-077,12 kL stainless storage tank — sulfuric acid 32%
