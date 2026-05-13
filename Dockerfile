@@ -23,6 +23,7 @@ ENV PORT=3001
 ENV JWT_SECRET=sds-incident-mgmt-secret-change-in-production
 ENV UPLOAD_DIR=./uploads
 ENV DB_PATH=./db/incident_management.db
+ENV RENDER=true
 
 WORKDIR /app/server
 

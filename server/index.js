@@ -47,6 +47,7 @@ app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
     if (allowedOrigins.includes(origin)) return cb(null, true);
+    if (process.env.RENDER) return cb(null, true);
     cb(new Error(`Origin ${origin} not allowed by CORS`));
   },
   credentials: true,
