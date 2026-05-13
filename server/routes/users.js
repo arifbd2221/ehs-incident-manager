@@ -2,7 +2,22 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import db from '../db/connection.js';
 import { writeActivity, diffFields } from '../services/activity_log.js';
-import { validEmail, checkLen, checkPassword, NAME_MAX, EMAIL_MAX } from '../services/validators.js';
+import { validEmail, checkLen, checkPassword, NAME_MAX, EMAIL_MAX, ADDRESS_MAX } from '../services/validators.js';
+
+// Same enum the FE shows in the affected-person + profile pickers.
+// Stored verbatim on users.gender. Empty string means "not set".
+const VALID_GENDERS = new Set(['', 'female', 'male', 'non_binary', 'prefer_not_to_say', 'other']);
+
+// Permissive ISO-date check — YYYY-MM-DD, no time component.
+// (Matches the FE DatePicker output and what the BE writes elsewhere.)
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function checkIsoDate(value, label) {
+  if (!value) return null;
+  if (!ISO_DATE_RE.test(value)) return `${label} must be YYYY-MM-DD`;
+  const d = new Date(value + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime())) return `${label} is not a real date`;
+  return null;
+}
 import { runImport, CsvImportError } from '../services/csv_import.js';
 
 const router = Router();
@@ -227,12 +242,20 @@ router.post('/:id/password', (req, res) => {
 
 // ---------- CSV import (P3-OB2) ----------------------------------------
 
-const USER_IMPORT_HEADERS = ['email', 'name', 'role', 'department', 'job_title', 'site_name', 'password'];
+// Profile fields (address/phone/dob/gender/hire_date) are required by
+// OSHA 1904.29, RIDDOR Sch.2, and NSW WHS s.37 for regulator-bound
+// reports, and the wizard now auto-fills them from users.* — so we
+// accept them on bulk import too. All optional; leave a column blank to
+// skip. Order matches USER_IMPORT_HEADERS for csv_import row-by-name access.
+const USER_IMPORT_HEADERS = [
+  'email', 'name', 'role', 'department', 'job_title', 'site_name', 'password',
+  'address', 'phone', 'dob', 'gender', 'hire_date',
+];
 
 const USER_IMPORT_TEMPLATE_BODY =
   USER_IMPORT_HEADERS.join(',') + '\n' +
-  'jane.doe@example.com,Jane Doe,worker,Production,Press Operator,,changeme1\n' +
-  'tom.lee@example.com,Tom Lee,supervisor,Production,Shift Lead,,changeme1\n';
+  'jane.doe@example.com,Jane Doe,worker,Production,Press Operator,,changeme1,"1421 W 9th St, Cleveland, OH 44113",+1 216-555-0142,1985-06-14,female,2017-03-10\n' +
+  'tom.lee@example.com,Tom Lee,supervisor,Production,Shift Lead,,changeme1,,,,,\n';
 
 // Per-entity definition consumed by services/csv_import.js. The validateRow
 // hook resolves site_name → site_id within the caller's org and surfaces
@@ -252,6 +275,13 @@ function buildUserImportDefinition() {
       const job_title = raw.job_title.trim();
       const site_name = raw.site_name.trim();
       const password = raw.password;  // do not trim — leading/trailing intentional
+      // Optional profile fields — present on the header but each row can
+      // leave them blank. `raw[k]` is '' (not undefined) for blank cells.
+      const address = (raw.address || '').trim();
+      const phone = (raw.phone || '').trim();
+      const dob = (raw.dob || '').trim();
+      const gender = (raw.gender || '').trim().toLowerCase();
+      const hire_date = (raw.hire_date || '').trim();
 
       if (!email) errors.push({ column: 'email', reason: 'Email is required' });
       else if (!validEmail(email) || email.length > EMAIL_MAX) {
@@ -295,6 +325,19 @@ function buildUserImportDefinition() {
       const pwErr = checkPassword(password);
       if (pwErr) errors.push({ column: 'password', reason: pwErr });
 
+      // Profile-field validation (all optional — blanks fall through).
+      const addrErr = checkLen(address, ADDRESS_MAX, 'Address');
+      if (addrErr) errors.push({ column: 'address', reason: addrErr });
+      const phoneErr = checkLen(phone, NAME_MAX, 'Phone');
+      if (phoneErr) errors.push({ column: 'phone', reason: phoneErr });
+      const dobErr = checkIsoDate(dob, 'dob');
+      if (dobErr) errors.push({ column: 'dob', reason: dobErr });
+      const hireErr = checkIsoDate(hire_date, 'hire_date');
+      if (hireErr) errors.push({ column: 'hire_date', reason: hireErr });
+      if (gender && !VALID_GENDERS.has(gender)) {
+        errors.push({ column: 'gender', reason: `gender must be one of: female, male, non_binary, prefer_not_to_say, other (or blank)` });
+      }
+
       if (errors.length === 0) {
         return {
           parsed: {
@@ -303,6 +346,11 @@ function buildUserImportDefinition() {
             job_title: job_title || null,
             site_id,
             password,
+            address: address || null,
+            phone: phone || null,
+            dob: dob || null,
+            gender: gender || null,
+            hire_date: hire_date || null,
           },
         };
       }
@@ -313,9 +361,15 @@ function buildUserImportDefinition() {
       const initials = parsed.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
       const passwordHash = bcrypt.hashSync(parsed.password, 10);
       const result = db.prepare(`
-        INSERT INTO users (org_id, site_id, email, password_hash, name, initials, role, department, job_title)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(ctx.orgId, parsed.site_id, parsed.email, passwordHash, parsed.name, initials, parsed.role, parsed.department, parsed.job_title);
+        INSERT INTO users (
+          org_id, site_id, email, password_hash, name, initials, role,
+          department, job_title, address, phone, dob, gender, hire_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        ctx.orgId, parsed.site_id, parsed.email, passwordHash, parsed.name, initials, parsed.role,
+        parsed.department, parsed.job_title,
+        parsed.address, parsed.phone, parsed.dob, parsed.gender, parsed.hire_date,
+      );
 
       writeActivity({
         org_id: ctx.orgId,
