@@ -1247,9 +1247,14 @@ function Osha300AReport({ siteId }) {
   );
 }
 
+// RIDDOR Log phone / Log F2508 are regulator-bound actions (HSE filing).
+// Matches the EHS-only gate on the BE route — supervisors see the rows
+// but no action buttons.
+const RIDDOR_ACTION_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
+
 function RiddorReport({ siteId }) {
   const { user } = useAuth();
-  const canEdit = ELEVATED_ROLES.has(user?.role);
+  const canEdit = RIDDOR_ACTION_ROLES.has(user?.role);
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(null);     // riddor row id while a POST is in-flight
   const [toast, setToast] = useState(null);

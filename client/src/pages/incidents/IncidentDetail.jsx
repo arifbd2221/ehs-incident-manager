@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getIncident, assignIncident, escalateIncident, closeIncident, updateIncident, uploadAttachments, deleteAttachment, addIncidentNote, addWitness, updateWitness, deleteWitness, requestClosure, approveClosure, rejectClosure, reopenIncident, forceCloseIncident, getAffectedPersons, deleteAffectedPerson } from '../../api/incidents';
-import { getOshaSevere, logOshaSeverePhoneNotified } from '../../api/reports';
+import { getOshaSevere, logOshaSeverePhoneNotified, logRiddorPhoneReported, logRiddorWrittenSubmitted } from '../../api/reports';
 import {
   getSafeworkNswForIncident,
   getSafeworkNswLookups,
@@ -38,6 +38,9 @@ const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'adm
 // Tighter set for OSHA 1904 recordability — supervisors observe but do not
 // decide. Matches the BE check on POST /incidents/:id/recordability-verify.
 const RECORDABILITY_VERIFY_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
+// RIDDOR Log phone / Log F2508 are regulator-bound (HSE filings) — same
+// EHS-only gate as recordability verification.
+const RIDDOR_ACTION_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 
 // WI-07: human labels for the 1904.39 reportable categories.
 const SEVERE_LABELS = {
@@ -171,6 +174,108 @@ function DescEdit({ value, fallback, onSave, allowed }) {
   );
 }
 
+// RIDDOR Reg.4(1)/5/6/7/11(1) require an immediate phone call. Reg.4(2)
+// over-7-day, Reg.8 disease, and Reg.11(2) gas fittings don't — so the
+// phone-call button only renders for categories where it's actually owed.
+const RIDDOR_PHONE_CATEGORIES = new Set([
+  'fatality', 'specified_injury', 'dangerous_occurrence',
+  'non_worker_hospitalization', 'non_worker_specified_injury', 'gas_incident',
+]);
+
+// Inline card on the incident detail page that mirrors the Actions column
+// in the Reports → RIDDOR tab — Log phone + Log F2508 per RIDDOR row,
+// gated to EHS+. Renders nothing if the incident has no riddor_reports.
+function RiddorActionsCard({ incident, canAct, onChange }) {
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState(null);
+  const rows = incident.riddor_reports || [];
+
+  const doPhone = async (rid) => {
+    setBusyId(rid); setError(null);
+    try { await logRiddorPhoneReported(rid); onChange?.(); }
+    catch (e) { setError(e?.response?.data?.error || 'Failed to log phone call.'); }
+    finally { setBusyId(null); }
+  };
+  const doWritten = async (rid) => {
+    const hseRef = window.prompt('HSE reference number from F2508 receipt (optional):', '') || '';
+    setBusyId(rid); setError(null);
+    try { await logRiddorWrittenSubmitted(rid, hseRef.trim() ? { hse_ref: hseRef.trim() } : {}); onChange?.(); }
+    catch (e) { setError(e?.response?.data?.error || 'Failed to log submission.'); }
+    finally { setBusyId(null); }
+  };
+
+  return (
+    <div className="idet-card">
+      <div className="idet-card-h">
+        <div className="hicon hi-verify"><Icon name="shield" size={16}/></div>
+        RIDDOR submission tracking
+      </div>
+      <div className="idet-card-body">
+        <div className="idet-riddor-list">
+          {rows.map(r => {
+            const phoneOwed = RIDDOR_PHONE_CATEGORIES.has(r.category);
+            const phoneDone = !!r.phone_notified_at;
+            const writtenDone = !!r.written_submitted_at;
+            const reg = riddorCategoryReg(r.category);
+            return (
+              <div key={r.id} className="idet-riddor-row">
+                <div className="idet-riddor-meta">
+                  <div className="idet-riddor-num">{r.riddor_number}</div>
+                  <div className="idet-riddor-cat">
+                    {riddorCategoryLabel(r.category)}{reg ? ` · Reg ${reg}` : ''}
+                  </div>
+                  <div className="idet-riddor-status">
+                    {phoneOwed && (
+                      <span className={`pill ${phoneDone ? 'pill-success' : 'pill-warn'}`}>
+                        <span className="dot"/>
+                        {phoneDone ? `Phone reported${r.phone_notified_by_name ? ` by ${r.phone_notified_by_name}` : ''}` : 'Phone pending'}
+                      </span>
+                    )}
+                    <span className={`pill ${writtenDone ? 'pill-success' : 'pill-warn'}`}>
+                      <span className="dot"/>
+                      {writtenDone
+                        ? `F2508 submitted${r.written_submitted_by_name ? ` by ${r.written_submitted_by_name}` : ''}${r.hse_ref ? ` · HSE ${r.hse_ref}` : ''}`
+                        : 'F2508 pending'}
+                    </span>
+                  </div>
+                </div>
+                {canAct && (!phoneDone || !writtenDone) && (
+                  <div className="idet-riddor-actions">
+                    {phoneOwed && !phoneDone && (
+                      <button
+                        className="btn btn-tertiary btn-sm"
+                        onClick={() => doPhone(r.id)}
+                        disabled={busyId === r.id}
+                      >
+                        <Icon name="phone" size={12}/>Log phone
+                      </button>
+                    )}
+                    {!writtenDone && (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => doWritten(r.id)}
+                        disabled={busyId === r.id}
+                      >
+                        <Icon name="check" size={12}/>Log F2508
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {error && <div className="helper" style={{ color: 'var(--sds-error)', marginTop: 8 }}>{error}</div>}
+        {!canAct && (
+          <div className="helper" style={{ marginTop: 8 }}>
+            Logging HSE notifications is reserved for EHS officers, EHS managers, and admins.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const fileTypeInfo = (a) => {
   const name = a.filename || '';
   const mime = a.mime_type || '';
@@ -188,6 +293,7 @@ export default function IncidentDetail() {
   const { showOsha, showRiddor, showNsw } = frameworkVisibility(user);
   const canVerify = ELEVATED_ROLES.has(user?.role);
   const canVerifyRecordability = RECORDABILITY_VERIFY_ROLES.has(user?.role);
+  const canManageRiddor = RIDDOR_ACTION_ROLES.has(user?.role);
   const canEdit = ELEVATED_ROLES.has(user?.role);
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1235,6 +1341,10 @@ export default function IncidentDetail() {
 
           {canVerify && showOsha && (r.type === 'injury' || r.type === 'illness') && (
             <RecordabilityVerifyCard incident={r} onVerified={load} canVerify={canVerifyRecordability}/>
+          )}
+
+          {showRiddor && (r.riddor_reports || []).length > 0 && (
+            <RiddorActionsCard incident={r} canAct={canManageRiddor} onChange={load}/>
           )}
         </div>
       </div>

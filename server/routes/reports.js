@@ -1269,13 +1269,18 @@ router.get('/riddor', (req, res) => {
   res.json({ reports, stats, year: Number(currentYear) });
 });
 
+// RIDDOR is a regulator-bound decision (filing with HSE), so the action
+// is restricted to EHS+ — matching the recordability gate on incidents.
+// Supervisors observe but don't speak to HSE on the org's behalf.
+const RIDDOR_ACTION_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
+
 // POST /reports/riddor/:id/phone-reported — log the without-delay phone
 // call to HSE (RIDDOR Reg.6 fatality, Reg.4(1) specified injury, Reg.7
 // dangerous occurrence, Reg.5 non-worker, Reg.11(1) gas). Idempotent —
 // re-firing returns the existing row without changing the timestamp.
 router.post('/riddor/:id/phone-reported', (req, res) => {
-  if (!isElevated(req.user)) {
-    return res.status(403).json({ error: 'Only elevated roles can log RIDDOR phone notification.' });
+  if (!RIDDOR_ACTION_ROLES.has(req.user?.role)) {
+    return res.status(403).json({ error: 'Only EHS officers, EHS managers, or admins can log RIDDOR phone notification.' });
   }
   const row = db.prepare(
     'SELECT * FROM riddor_reports WHERE id = ? AND org_id = ?'
@@ -1317,8 +1322,8 @@ router.post('/riddor/:id/phone-reported', (req, res) => {
 // (Reg.4(2) over-7-day), 14 days (Reg.11 gas), 40 days (Reg.8 disease,
 // not currently enforced). Idempotent.
 router.post('/riddor/:id/written-submitted', (req, res) => {
-  if (!isElevated(req.user)) {
-    return res.status(403).json({ error: 'Only elevated roles can log RIDDOR F2508 submission.' });
+  if (!RIDDOR_ACTION_ROLES.has(req.user?.role)) {
+    return res.status(403).json({ error: 'Only EHS officers, EHS managers, or admins can log RIDDOR F2508 submission.' });
   }
   const row = db.prepare(
     'SELECT * FROM riddor_reports WHERE id = ? AND org_id = ?'
