@@ -7,8 +7,8 @@
     "dev:client": "cd client && npx vite",
     "build": "cd client && npm install --include=dev && npx vite build",
     "build:server": "cd server && npm install",
-    "build:all": "npm run build && npm run build:server && npm run seed",
-    "start": "cd server && NODE_ENV=production node index.js",
+    "build:all": "npm run build && npm run build:server",
+    "start": "cd server && node db/seed.js; NODE_ENV=production node index.js",
     "seed": "cd server && node db/seed.js"
   },
   "devDependencies": {
