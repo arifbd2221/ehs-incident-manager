@@ -30,6 +30,27 @@
 .voice-fab:active {
   transform: scale(0.95);
 }
+/* Alternating icon crossfade */
+.voice-fab-icon-wrap {
+  position: relative;
+  width: 22px;
+  height: 22px;
+}
+.voice-fab-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.5) rotate(-20deg);
+  transition: opacity 400ms ease, transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.voice-fab-icon.active {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
 .voice-fab-pulse {
   position: absolute;
   inset: -4px;
