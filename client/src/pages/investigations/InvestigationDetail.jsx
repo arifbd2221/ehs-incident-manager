@@ -52,6 +52,44 @@ const capaStatusClass = (s) => {
   return 'cs-open';
 };
 
+// Edit-in-place block for investigation findings. Two modes:
+//   • Read    — saved value rendered as a clean prose block. No floating
+//               buttons or example chips. Empty state is a single muted line.
+//   • Editing — plain textarea (no SmartTextarea chip rail — it crowded the
+//               box) + Cancel/Save buttons. Save is disabled until dirty.
+// The Edit/Add affordance is a single button rendered by the caller in the
+// card header, so the body is just content.
+function FindingsView({ value }) {
+  if (!value) return <p className="invd-empty-line">Not recorded yet.</p>;
+  return <div className="invd-readonly-text">{value}</div>;
+}
+
+function FindingsEditor({ draft, setDraft, saving, onCancel, onSave, baseline }) {
+  return (
+    <>
+      <textarea
+        className="textarea"
+        value={draft}
+        autoFocus
+        rows={6}
+        placeholder="What did you observe? Facts, evidence, timeline…"
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Escape') onCancel(); }}
+      />
+      <div className="invd-edit-row">
+        <button className="btn btn-secondary btn-sm" onClick={onCancel} disabled={saving}>Cancel</button>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={onSave}
+          disabled={saving || draft.trim() === (baseline || '')}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </>
+  );
+}
+
 export default function InvestigationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -65,9 +103,8 @@ export default function InvestigationDetail() {
   const [toast, setToast] = useState(null);
   const [newWhy, setNewWhy] = useState({ question: '', answer: '', is_root_cause: false });
   const [findings, setFindings] = useState('');
-  const [rootCause, setRootCause] = useState('');
-  const [lessons, setLessons] = useState('');
-  const [savingField, setSavingField] = useState(null); // 'findings' | 'root_cause' | 'lessons' | 'due_date'
+  const [editingFindings, setEditingFindings] = useState(false);
+  const [savingField, setSavingField] = useState(null); // 'findings' | 'due_date' | 'status'
 
   // Document linking modal state — supports folder navigation. When the user
   // types a search query we switch to flat global search across the whole
@@ -90,8 +127,6 @@ export default function InvestigationDetail() {
     getInvestigation(id).then(data => {
       setInv(data);
       setFindings(data.findings || '');
-      setRootCause(data.root_cause_summary || '');
-      setLessons(data.lessons_learned || '');
     }).catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(load, [id]);
@@ -310,9 +345,8 @@ export default function InvestigationDetail() {
   // LABELS_BY_FIELD below; the spinner state is keyed on the same name.
   const LABELS_BY_FIELD = {
     findings: 'Findings',
-    root_cause_summary: 'Root cause',
-    lessons_learned: 'Lessons learned',
     due_date: 'Target close date',
+    lessons_learned: 'Lessons learned',
   };
   const handleSaveField = async (key, value) => {
     setSavingField(key);
@@ -444,84 +478,55 @@ export default function InvestigationDetail() {
             </div>
           </div>
 
-          {/* Findings */}
+          {/* Findings — locked-in read view by default; click Edit to modify. */}
           <div className="invd-card">
             <div className="invd-card-h">
               <div className="hicon hi-findings"><Icon name="edit" size={16}/></div>
               Investigation findings
-              <span className="invd-card-hint">What you observed — facts, evidence, timeline</span>
+              {!editingFindings && canEdit && inv.status !== 'closed' && (
+                <button
+                  className="btn btn-text btn-sm"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => { setFindings(inv.findings || ''); setEditingFindings(true); }}
+                >
+                  <Icon name="edit" size={12}/>{inv.findings ? 'Edit' : 'Add findings'}
+                </button>
+              )}
             </div>
             <div className="invd-card-body">
-              <SmartTextarea
-                value={findings}
-                onChange={setFindings}
-                rows={5}
-                className="invd-findings-st"
-                examples={['Worker contacted chemical during transfer. SOP did not require secondary containment for volumes over 10L. Glove type inadequate for sulfuric acid concentration.', 'Forklift struck racking due to obscured sightline at aisle intersection. No convex mirrors or traffic management. Shift handover did not communicate changed layout.']}
-                chips={['Witness statements collected', 'Site walk completed', 'Equipment inspected', 'CCTV reviewed']}
-                disabled={inv.status === 'closed'}
-              />
-              <button
-                className="invd-save-btn"
-                onClick={() => handleSaveField('findings', findings)}
-                disabled={savingField === 'findings' || findings === (inv.findings || '') || inv.status === 'closed'}
-              >
-                <Icon name="check" size={13}/>{savingField === 'findings' ? 'Saving…' : 'Save findings'}
-              </button>
+              {editingFindings ? (
+                <FindingsEditor
+                  draft={findings}
+                  setDraft={setFindings}
+                  saving={savingField === 'findings'}
+                  baseline={inv.findings || ''}
+                  onCancel={() => { setFindings(inv.findings || ''); setEditingFindings(false); }}
+                  onSave={async () => {
+                    await handleSaveField('findings', findings.trim() || null);
+                    setEditingFindings(false);
+                  }}
+                />
+              ) : (
+                <FindingsView value={inv.findings || ''} />
+              )}
             </div>
           </div>
 
-          {/* Root cause summary */}
-          <div className="invd-card">
-            <div className="invd-card-h">
-              <div className="hicon hi-rca"><Icon name="pulse" size={16}/></div>
-              Root cause
-              <span className="invd-card-hint">Why it happened — the underlying causal chain</span>
+          {/* Lessons learned — captured at close time via the close modal,
+              then surfaced here read-only. Hidden until the investigation
+              is closed (and only if something was recorded). */}
+          {inv.status === 'closed' && inv.lessons_learned && (
+            <div className="invd-card">
+              <div className="invd-card-h">
+                <div className="hicon hi-summary"><Icon name="check" size={16}/></div>
+                Lessons learned
+                <span className="invd-card-hint">Recorded at closure</span>
+              </div>
+              <div className="invd-card-body">
+                <p className="invd-readonly-text">{inv.lessons_learned}</p>
+              </div>
             </div>
-            <div className="invd-card-body">
-              <SmartTextarea
-                value={rootCause}
-                onChange={setRootCause}
-                rows={4}
-                examples={['Engineering control absent: no machine guarding required by site SOP for press operations under 50 strokes/min.', 'Procedural drift: pre-task hazard assessment skipped on time-pressured changeovers, normalized over six months.']}
-                chips={['Engineering control absent', 'Procedural drift', 'Training gap', 'Supervision gap', 'Design flaw']}
-                disabled={inv.status === 'closed'}
-              />
-              <button
-                className="invd-save-btn"
-                onClick={() => handleSaveField('root_cause_summary', rootCause)}
-                disabled={savingField === 'root_cause_summary' || rootCause === (inv.root_cause_summary || '') || inv.status === 'closed'}
-              >
-                <Icon name="check" size={13}/>{savingField === 'root_cause_summary' ? 'Saving…' : 'Save root cause'}
-              </button>
-            </div>
-          </div>
-
-          {/* Lessons learned */}
-          <div className="invd-card">
-            <div className="invd-card-h">
-              <div className="hicon hi-summary"><Icon name="check" size={16}/></div>
-              Lessons learned
-              <span className="invd-card-hint">What we'll change — systemic insights to carry forward</span>
-            </div>
-            <div className="invd-card-body">
-              <SmartTextarea
-                value={lessons}
-                onChange={setLessons}
-                rows={4}
-                examples={['Add secondary containment requirement to all chemical transfer SOPs site-wide, not just for >10L volumes. Roll out glove compatibility chart to all departments.', 'Pre-task hazard assessment must be the first item on every shift handover; tie compliance to monthly supervisor scorecard.']}
-                chips={['SOP change required', 'Training refresher', 'Policy update', 'Cross-site rollout', 'Audit cadence change']}
-                disabled={inv.status === 'closed'}
-              />
-              <button
-                className="invd-save-btn"
-                onClick={() => handleSaveField('lessons_learned', lessons)}
-                disabled={savingField === 'lessons_learned' || lessons === (inv.lessons_learned || '') || inv.status === 'closed'}
-              >
-                <Icon name="check" size={13}/>{savingField === 'lessons_learned' ? 'Saving…' : 'Save lessons'}
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* Evidence */}
           <div className="invd-card">
@@ -657,7 +662,9 @@ export default function InvestigationDetail() {
 
         {/* Sidebar */}
         <div className="invd-side">
-          {/* Lifecycle — when it started, target close, actual close */}
+          {/* Lifecycle — status + dates. Status advances via the buttons
+              below: Start moves pending → progress; Close uses the modal
+              in the header which moves progress → closed. */}
           <div className="invd-card">
             <div className="invd-card-h">
               <div className="hicon hi-activity"><Icon name="clock" size={16}/></div>
@@ -665,6 +672,35 @@ export default function InvestigationDetail() {
             </div>
             <div className="invd-card-body">
               <div className="invd-summary-rows">
+                <div className="invd-summary-row">
+                  <span className="invd-summary-label">Status</span>
+                  <span className={`inv-list-lane ${statusClass}`} style={{ flex: 'none' }}>
+                    <span className="ln-dot"/>{statusLabel}
+                  </span>
+                </div>
+                {canEdit && inv.status === 'pending' && (
+                  <div className="invd-summary-row">
+                    <span className="invd-summary-label"/>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => handleSaveField('status', 'progress')}
+                      disabled={savingField === 'status'}
+                    >
+                      <Icon name="arrow" size={12}/>{savingField === 'status' ? 'Starting…' : 'Start investigation'}
+                    </button>
+                  </div>
+                )}
+                {canEdit && inv.status === 'progress' && (
+                  <div className="invd-summary-row">
+                    <span className="invd-summary-label"/>
+                    <button
+                      className="btn btn-tertiary btn-sm"
+                      onClick={() => setModal('close')}
+                    >
+                      <Icon name="check" size={12}/>Mark complete & close
+                    </button>
+                  </div>
+                )}
                 <div className="invd-summary-row">
                   <span className="invd-summary-label">Opened</span>
                   <span className="invd-summary-val">{formatDate(inv.started_at || inv.created_at)}</span>

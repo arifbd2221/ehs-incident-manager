@@ -336,8 +336,23 @@ router.post('/:id/close', (req, res) => {
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
   if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
 
-  const { reason } = req.body;
-  db.prepare("UPDATE investigations SET status = 'closed', closed_at = datetime('now'), closed_by = ?, closed_reason = ?, updated_at = datetime('now') WHERE id = ?").run(req.user.id, reason || null, inv.id);
+  // lessons_learned is captured at close time (carry-forward synthesis) so
+  // the in-progress UI doesn't need a floating editor for it.
+  const reason = (req.body.reason || '').toString().trim() || null;
+  const lessonsLearned = req.body.lessons_learned == null
+    ? null
+    : (req.body.lessons_learned.toString().trim() || null);
+
+  db.prepare(`
+    UPDATE investigations
+    SET status = 'closed',
+        closed_at = datetime('now'),
+        closed_by = ?,
+        closed_reason = ?,
+        lessons_learned = COALESCE(?, lessons_learned),
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(req.user.id, reason, lessonsLearned, inv.id);
 
   db.prepare(`INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id) VALUES (?, 'investigation', ?, 'closed', ?, ?)`)
     .run(inv.org_id, inv.id, `closed investigation ${inv.investigation_number}${reason ? ' — ' + reason : ''}`, req.user.id);

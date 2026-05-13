@@ -1147,6 +1147,30 @@
 @media (max-width: 768px) {
   .invd-card-hint { display: none; }
 }
+
+/* Locked-in readonly content (findings, lessons learned). Renders as
+   clean prose with comfortable line-height so it doesn't feel like a
+   dumped string. white-space: pre-wrap preserves paragraph breaks. */
+.invd-readonly-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--sds-fg-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.invd-empty-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--sds-fg-tertiary);
+  font-style: italic;
+}
+.invd-edit-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
 .invd-summary-divider {
   height: 1px;
   background: #f3f4f6;
