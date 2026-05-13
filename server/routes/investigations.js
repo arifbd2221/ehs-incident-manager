@@ -284,19 +284,33 @@ router.delete('/:id/five-whys/:whyId', (req, res) => {
 router.post('/:id/team', (req, res) => {
   const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
+  if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
 
-  const { user_id, role } = req.body;
-  db.prepare('INSERT INTO investigation_team (investigation_id, user_id, role) VALUES (?, ?, ?)').run(inv.id, user_id, role || 'member');
+  const userId = Number(req.body.user_id);
+  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'user_id is required.' });
 
-  const addedUser = db.prepare('SELECT name, initials FROM users WHERE id = ?').get(user_id);
+  // Org isolation — adding a user from another org would cross-leak names.
+  const target = db.prepare('SELECT id, name FROM users WHERE id = ? AND org_id = ?').get(userId, req.user.org_id);
+  if (!target) return res.status(404).json({ error: 'User not in your organization.' });
+
+  // investigation_team has no UNIQUE(investigation_id, user_id) so we have
+  // to check manually to avoid duplicate rows.
+  const dupe = db.prepare(
+    'SELECT id FROM investigation_team WHERE investigation_id = ? AND user_id = ?'
+  ).get(inv.id, userId);
+  if (dupe) return res.status(409).json({ error: 'User is already on this investigation team.' });
+
+  const role = req.body.role === 'lead' ? 'member' : (req.body.role || 'member');
+  db.prepare('INSERT INTO investigation_team (investigation_id, user_id, role) VALUES (?, ?, ?)').run(inv.id, userId, role);
+
   writeActivity({
     org_id: inv.org_id,
     entity_type: 'investigation',
     entity_id: inv.id,
     action: 'team_member_added',
-    description: `added ${addedUser?.name || `user ${user_id}`} to investigation ${inv.investigation_number}`,
+    description: `added ${target.name} to investigation ${inv.investigation_number}`,
     user_id: req.user.id,
-    metadata: { added_user_id: user_id, role: role || 'member' },
+    metadata: { added_user_id: userId, role },
   });
 
   const team = db.prepare('SELECT it.*, u.name, u.initials FROM investigation_team it LEFT JOIN users u ON u.id = it.user_id WHERE it.investigation_id = ?').all(inv.id);

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation } from '../../api/investigations';
+import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation, addTeamMember } from '../../api/investigations';
 import { listDocuments } from '../../api/documents';
 import { listFolders } from '../../api/folders';
 import { uploadAttachments, deleteAttachment } from '../../api/incidents';
@@ -17,6 +17,7 @@ import { timeAgo, formatDate } from '../../utils/time';
 import CloseInvestigationModal from './modals/CloseInvestigationModal';
 import AssignCapaModal from './modals/AssignCapaModal';
 import ReassignLeadModal from './modals/ReassignLeadModal';
+import AddTeamMemberModal from './modals/AddTeamMemberModal';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/investigations.css';
 
@@ -270,6 +271,15 @@ export default function InvestigationDetail() {
       load();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to set lead.');
+    }
+  };
+  const handleAddMember = async (form) => {
+    try {
+      await addTeamMember(inv.id, form);
+      showToast('Member added.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to add member.');
     }
   };
   const handleAddWhy = async () => {
@@ -617,69 +627,37 @@ export default function InvestigationDetail() {
             <div className="invd-card-h">
               <div className="hicon hi-team"><Icon name="person" size={16}/></div>
               Investigation team
-              {canEdit && inv.status !== 'closed' && !inv.lead_investigator && (
+              {canEdit && inv.status !== 'closed' && (
                 <button
-                  className="invd-team-action invd-team-action-primary"
-                  onClick={() => setModal('reassign')}
-                  title="Pick a lead investigator"
+                  className="btn btn-text btn-sm"
+                  onClick={() => setModal('add-member')}
                   style={{ marginLeft: 'auto' }}
                 >
-                  <Icon name="person" size={12}/>Assign lead
+                  <Icon name="plus" size={13}/>Add member
                 </button>
               )}
             </div>
             <div className="invd-card-body">
               {(inv.team || []).length > 0 ? (
                 <div className="invd-team-list">
-                  {/* Lead first, then members — visually distinguishes the
-                      decision-maker from supporting team. */}
                   {[...inv.team].sort((a, b) => (a.role === 'lead' ? -1 : b.role === 'lead' ? 1 : 0)).map(t => {
                     const isLead = t.role === 'lead';
                     return (
-                      <div key={t.user_id} className={`invd-team-member ${isLead ? 'is-lead' : ''}`}>
-                        <div className="invd-team-av">
-                          {t.initials}
-                          {isLead && (
-                            <span className="invd-team-av-mark" title="Lead investigator">
-                              <Icon name="shield" size={10}/>
-                            </span>
-                          )}
-                        </div>
+                      <div key={t.user_id} className="invd-team-member">
+                        <div className="invd-team-av">{t.initials}</div>
                         <div className="invd-team-info">
                           <div className="invd-team-name">{t.name}</div>
-                          <div className="invd-team-meta">
-                            <span className={`invd-team-pill ${isLead ? 'is-lead' : ''}`}>
-                              {isLead ? 'Lead investigator' : 'Team member'}
-                            </span>
-                          </div>
+                          <div className="invd-team-role">{isLead ? 'Lead' : 'Member'}</div>
                         </div>
                         {canEdit && inv.status !== 'closed' && (
                           <div className="invd-team-actions">
                             {isLead ? (
                               <>
-                                <button
-                                  className="invd-team-action"
-                                  onClick={() => setModal('reassign')}
-                                  title="Hand the lead role to a different person"
-                                >
-                                  <Icon name="edit" size={12}/>Change
-                                </button>
-                                <button
-                                  className="invd-team-action invd-team-action-danger"
-                                  onClick={handleUnassign}
-                                  title="Clear the lead role (keeps this person on the team)"
-                                >
-                                  <Icon name="close" size={12}/>Unassign
-                                </button>
+                                <button className="btn btn-tertiary btn-sm" onClick={() => setModal('reassign')}>Change</button>
+                                <button className="btn btn-text btn-sm" onClick={handleUnassign}>Unassign</button>
                               </>
                             ) : (
-                              <button
-                                className="invd-team-action"
-                                onClick={() => handleMakeLead(t)}
-                                title="Promote this member to lead investigator"
-                              >
-                                <Icon name="shield" size={12}/>Make lead
-                              </button>
+                              <button className="btn btn-tertiary btn-sm" onClick={() => handleMakeLead(t)}>Make lead</button>
                             )}
                           </div>
                         )}
@@ -689,12 +667,9 @@ export default function InvestigationDetail() {
                 </div>
               ) : (
                 <div className="invd-team-empty">
-                  <div className="invd-team-empty-icon"><Icon name="person" size={20}/></div>
-                  <div className="invd-team-empty-text">No team members yet</div>
+                  <p>No team members yet.</p>
                   {canEdit && inv.status !== 'closed' && (
-                    <button className="invd-team-action invd-team-action-primary" onClick={() => setModal('reassign')}>
-                      <Icon name="person" size={12}/>Assign lead
-                    </button>
+                    <button className="btn btn-primary btn-sm" onClick={() => setModal('reassign')}>Assign lead</button>
                   )}
                 </div>
               )}
@@ -735,6 +710,7 @@ export default function InvestigationDetail() {
       {modal === 'close' && createPortal(<CloseInvestigationModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
       {modal === 'capa' && createPortal(<AssignCapaModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAssignCapa}/>, document.body)}
       {modal === 'reassign' && createPortal(<ReassignLeadModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleReassign}/>, document.body)}
+      {modal === 'add-member' && createPortal(<AddTeamMemberModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAddMember}/>, document.body)}
 
       {docModalOpen && createPortal(
         <div className="modal-backdrop" onClick={closeDocModal}>
