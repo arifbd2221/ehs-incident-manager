@@ -16,7 +16,13 @@ api.interceptors.request.use(config => {
   if (_activeSiteId && config.method === 'get') {
     const path = config.url || '';
     const excluded = SITE_FILTER_EXCLUDE.some(p => path.startsWith(p));
-    if (!excluded) config.params = { ...config.params, site_id: _activeSiteId };
+    // Inject the global active site ONLY when the caller hasn't passed a
+    // site_id of its own. The wizard's asset picker calls
+    // listAssets({ site_id: <picked-site> }) and must not be silently
+    // rewritten to the globally-selected site.
+    if (!excluded && config.params?.site_id == null) {
+      config.params = { ...config.params, site_id: _activeSiteId };
+    }
   }
   return config;
 });

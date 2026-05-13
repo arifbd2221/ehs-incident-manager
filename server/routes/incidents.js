@@ -1269,9 +1269,15 @@ router.post('/:id/create-capa', (req, res) => {
   }
 });
 
+// OSHA 1904 recordability is a specialist EHS judgment (the 1904.5(b)(2)
+// exception list + 1904.7(b)(5)(ii) first-aid list aren't intuitive), so this
+// route is tighter than the general isElevated gate — supervisors observe and
+// can request overrides, but only EHS owns the decision.
+const RECORDABILITY_VERIFY_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
+
 router.post('/:id/recordability-verify', (req, res) => {
-  if (!isElevated(req.user)) {
-    return res.status(403).json({ error: 'Only elevated roles can verify OSHA recordability.' });
+  if (!RECORDABILITY_VERIFY_ROLES.has(req.user?.role)) {
+    return res.status(403).json({ error: 'Only EHS officers, EHS managers, or admins can verify OSHA recordability.' });
   }
 
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);

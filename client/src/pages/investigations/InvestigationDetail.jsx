@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation } from '../../api/investigations';
+import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation, addTeamMember } from '../../api/investigations';
 import { listDocuments } from '../../api/documents';
 import { listFolders } from '../../api/folders';
 import { uploadAttachments, deleteAttachment } from '../../api/incidents';
@@ -12,14 +12,21 @@ import { frameworkVisibility } from '../../utils/frameworks';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
+import DatePicker from '../../components/shared/DatePicker';
 import { TypePill, SevBadge, TrackBadge } from '../../components/shared/Badges';
 import { timeAgo, formatDate } from '../../utils/time';
 import CloseInvestigationModal from './modals/CloseInvestigationModal';
 import AssignCapaModal from './modals/AssignCapaModal';
+import ReassignLeadModal from './modals/ReassignLeadModal';
+import AddTeamMemberModal from './modals/AddTeamMemberModal';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import '../../styles/investigations.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+// Lead investigator is an EHS-owned designation (matches the recordability
+// gate). Adding members stays at ELEVATED — lead supervisors can still build
+// out their team, but only EHS picks who leads.
+const LEAD_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 
 const tlDotClass = (action) => {
   if (action === 'created') return 'td-created';
@@ -45,18 +52,61 @@ const capaStatusClass = (s) => {
   return 'cs-open';
 };
 
+// Edit-in-place block for investigation findings. Two modes:
+//   • Read    — saved value rendered as a clean prose block. No floating
+//               buttons or example chips. Empty state is a single muted line.
+//   • Editing — plain textarea (no SmartTextarea chip rail — it crowded the
+//               box) + Cancel/Save buttons. Save is disabled until dirty.
+// The Edit/Add affordance is a single button rendered by the caller in the
+// card header, so the body is just content.
+function FindingsView({ value }) {
+  if (!value) return <p className="invd-empty-line">Not recorded yet.</p>;
+  return <div className="invd-readonly-text">{value}</div>;
+}
+
+function FindingsEditor({ draft, setDraft, saving, onCancel, onSave, baseline }) {
+  // SmartTextarea (without examples/chips) gives us the built-in mic button
+  // for voice-to-text on top of a clean plain textarea — same surface area
+  // as the textarea would be, just with a mic in the corner. Esc-to-cancel
+  // rides as a bubbled keydown on the wrapper.
+  return (
+    <div onKeyDown={e => { if (e.key === 'Escape') onCancel(); }}>
+      <SmartTextarea
+        value={draft}
+        onChange={setDraft}
+        rows={6}
+        autoFocus
+        placeholder="What did you observe? Facts, evidence, timeline… (click the mic to dictate)"
+      />
+      <div className="invd-edit-row">
+        <button className="btn btn-secondary btn-sm" onClick={onCancel} disabled={saving}>Cancel</button>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={onSave}
+          disabled={saving || draft.trim() === (baseline || '')}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function InvestigationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showOsha, showRiddor } = frameworkVisibility(user);
   const canEdit = ELEVATED.has(user?.role);
+  const canManageLead = LEAD_ROLES.has(user?.role);
   const [inv, setInv] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
   const [newWhy, setNewWhy] = useState({ question: '', answer: '', is_root_cause: false });
   const [findings, setFindings] = useState('');
+  const [editingFindings, setEditingFindings] = useState(false);
+  const [savingField, setSavingField] = useState(null); // 'findings' | 'due_date' | 'status'
 
   // Document linking modal state — supports folder navigation. When the user
   // types a search query we switch to flat global search across the whole
@@ -76,7 +126,10 @@ export default function InvestigationDetail() {
 
   const load = () => {
     setLoading(true);
-    getInvestigation(id).then(data => { setInv(data); setFindings(data.findings || ''); }).catch(() => {}).finally(() => setLoading(false));
+    getInvestigation(id).then(data => {
+      setInv(data);
+      setFindings(data.findings || '');
+    }).catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(load, [id]);
 
@@ -241,6 +294,45 @@ export default function InvestigationDetail() {
   const handleAssignCapa = async (form) => {
     try { await assignCapa(inv.id, form); showToast(`CAPA assigned · due ${form.due_date}.`); load(); } catch (err) { showToast(err.response?.data?.error || 'Failed to assign CAPA.'); }
   };
+  const handleReassign = async (form) => {
+    try {
+      await updateInvestigation(inv.id, form);
+      showToast('Lead reassigned.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to reassign.');
+    }
+  };
+  const handleUnassign = async () => {
+    if (!window.confirm('Remove the lead investigator? Their team membership stays — only the lead role is cleared.')) return;
+    try {
+      await updateInvestigation(inv.id, { lead_investigator: null });
+      showToast('Lead unassigned.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to unassign.');
+    }
+  };
+  // Promote a non-lead team member to lead without opening the modal — the
+  // user is already on the team, the picker would just confirm them again.
+  const handleMakeLead = async (member) => {
+    try {
+      await updateInvestigation(inv.id, { lead_investigator: member.user_id });
+      showToast(`${member.name} is now lead.`);
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to set lead.');
+    }
+  };
+  const handleAddMember = async (form) => {
+    try {
+      await addTeamMember(inv.id, form);
+      showToast('Member added.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to add member.');
+    }
+  };
   const handleAddWhy = async () => {
     if (!newWhy.question.trim() || !newWhy.answer.trim()) return;
     try {
@@ -249,8 +341,26 @@ export default function InvestigationDetail() {
       load();
     } catch { showToast('Failed to add.'); }
   };
-  const handleSaveFindings = async () => {
-    try { await updateInvestigation(inv.id, { findings }); showToast('Findings saved.'); } catch {}
+  // Generic field-saver — surfaces BE errors (silent failure was hiding 403s
+  // when a non-elevated worker tried to edit, and made the user think the
+  // save button was broken). `key` is one of the entries in
+  // LABELS_BY_FIELD below; the spinner state is keyed on the same name.
+  const LABELS_BY_FIELD = {
+    findings: 'Findings',
+    due_date: 'Target close date',
+    lessons_learned: 'Lessons learned',
+  };
+  const handleSaveField = async (key, value) => {
+    setSavingField(key);
+    try {
+      await updateInvestigation(inv.id, { [key]: value });
+      showToast(`${LABELS_BY_FIELD[key] || key} saved.`);
+      load();
+    } catch (err) {
+      showToast(err?.response?.data?.error || `Failed to save ${LABELS_BY_FIELD[key] || key}.`);
+    } finally {
+      setSavingField(null);
+    }
   };
 
   const statusLabel = inv.status === 'closed' ? 'Closed' : inv.status === 'capa' ? 'Awaiting CAPA' : inv.status === 'progress' ? 'In progress' : 'Pending';
@@ -286,7 +396,9 @@ export default function InvestigationDetail() {
               <span className={`inv-list-lane ${statusClass}`}>
                 <span className="ln-dot"/>{statusLabel}
               </span>
-              <span className="invd-lead">Lead: <b>{inv.lead_name || 'Unassigned'}</b></span>
+              <span className="invd-lead">
+                Lead: <b>{inv.lead_name || 'Unassigned'}</b>
+              </span>
             </div>
           </div>
           <div className="invd-header-actions">
@@ -368,26 +480,55 @@ export default function InvestigationDetail() {
             </div>
           </div>
 
-          {/* Findings */}
+          {/* Findings — locked-in read view by default; click Edit to modify. */}
           <div className="invd-card">
             <div className="invd-card-h">
               <div className="hicon hi-findings"><Icon name="edit" size={16}/></div>
               Investigation findings
+              {!editingFindings && canEdit && inv.status !== 'closed' && (
+                <button
+                  className="btn btn-text btn-sm"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => { setFindings(inv.findings || ''); setEditingFindings(true); }}
+                >
+                  <Icon name="edit" size={12}/>{inv.findings ? 'Edit' : 'Add findings'}
+                </button>
+              )}
             </div>
             <div className="invd-card-body">
-              <SmartTextarea
-                value={findings}
-                onChange={setFindings}
-                rows={5}
-                className="invd-findings-st"
-                examples={['Worker contacted chemical during transfer. Root cause: SOP did not require secondary containment for volumes over 10L. Contributing factor: glove type inadequate for sulfuric acid concentration.', 'Forklift struck racking due to obscured sightline at aisle intersection. Root cause: no convex mirrors or traffic management. Contributing factor: shift handover did not communicate changed layout.']}
-                chips={['Root cause identified', 'Contributing factors noted', 'Existing controls insufficient', 'Training gap identified']}
-              />
-              <button className="invd-save-btn" onClick={handleSaveFindings}>
-                <Icon name="check" size={13}/>Save findings
-              </button>
+              {editingFindings ? (
+                <FindingsEditor
+                  draft={findings}
+                  setDraft={setFindings}
+                  saving={savingField === 'findings'}
+                  baseline={inv.findings || ''}
+                  onCancel={() => { setFindings(inv.findings || ''); setEditingFindings(false); }}
+                  onSave={async () => {
+                    await handleSaveField('findings', findings.trim() || null);
+                    setEditingFindings(false);
+                  }}
+                />
+              ) : (
+                <FindingsView value={inv.findings || ''} />
+              )}
             </div>
           </div>
+
+          {/* Lessons learned — captured at close time via the close modal,
+              then surfaced here read-only. Hidden until the investigation
+              is closed (and only if something was recorded). */}
+          {inv.status === 'closed' && inv.lessons_learned && (
+            <div className="invd-card">
+              <div className="invd-card-h">
+                <div className="hicon hi-summary"><Icon name="check" size={16}/></div>
+                Lessons learned
+                <span className="invd-card-hint">Recorded at closure</span>
+              </div>
+              <div className="invd-card-body">
+                <p className="invd-readonly-text">{inv.lessons_learned}</p>
+              </div>
+            </div>
+          )}
 
           {/* Evidence */}
           <div className="invd-card">
@@ -523,6 +664,81 @@ export default function InvestigationDetail() {
 
         {/* Sidebar */}
         <div className="invd-side">
+          {/* Lifecycle — status + dates. Status advances via the buttons
+              below: Start moves pending → progress; Close uses the modal
+              in the header which moves progress → closed. */}
+          <div className="invd-card">
+            <div className="invd-card-h">
+              <div className="hicon hi-activity"><Icon name="clock" size={16}/></div>
+              Lifecycle
+            </div>
+            <div className="invd-card-body">
+              <div className="invd-summary-rows">
+                <div className="invd-summary-row">
+                  <span className="invd-summary-label">Status</span>
+                  <span className={`inv-list-lane ${statusClass}`} style={{ flex: 'none' }}>
+                    <span className="ln-dot"/>{statusLabel}
+                  </span>
+                </div>
+                {canEdit && inv.status === 'pending' && (
+                  <div className="invd-summary-row">
+                    <span className="invd-summary-label"/>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => handleSaveField('status', 'progress')}
+                      disabled={savingField === 'status'}
+                    >
+                      <Icon name="arrow" size={12}/>{savingField === 'status' ? 'Starting…' : 'Start investigation'}
+                    </button>
+                  </div>
+                )}
+                {canEdit && inv.status === 'progress' && (
+                  <div className="invd-summary-row">
+                    <span className="invd-summary-label"/>
+                    <button
+                      className="btn btn-tertiary btn-sm"
+                      onClick={() => setModal('close')}
+                    >
+                      <Icon name="check" size={12}/>Mark complete & close
+                    </button>
+                  </div>
+                )}
+                <div className="invd-summary-row">
+                  <span className="invd-summary-label">Opened</span>
+                  <span className="invd-summary-val">{formatDate(inv.started_at || inv.created_at)}</span>
+                </div>
+                <div className="invd-summary-row">
+                  <span className="invd-summary-label">Target close</span>
+                  {inv.status === 'closed' ? (
+                    <span className="invd-summary-val muted">{inv.due_date ? formatDate(inv.due_date) : '—'}</span>
+                  ) : canEdit ? (
+                    <DatePicker
+                      value={inv.due_date || ''}
+                      onChange={(v) => handleSaveField('due_date', v || null)}
+                      placeholder="Set target date"
+                    />
+                  ) : (
+                    <span className="invd-summary-val">{inv.due_date ? formatDate(inv.due_date) : 'Not set'}</span>
+                  )}
+                </div>
+                <div className="invd-summary-row">
+                  <span className="invd-summary-label">Closed</span>
+                  <span className="invd-summary-val">
+                    {inv.closed_at
+                      ? formatDate(inv.closed_at)
+                      : <span className="muted">Open</span>}
+                  </span>
+                </div>
+                {inv.closed_at && inv.closed_reason && (
+                  <div className="invd-summary-row" style={{ alignItems: 'flex-start' }}>
+                    <span className="invd-summary-label">Close reason</span>
+                    <span className="invd-summary-val" style={{ textAlign: 'right', maxWidth: '60%' }}>{inv.closed_reason}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Incident summary */}
           <div className="invd-card">
             <div className="invd-card-h">
@@ -584,22 +800,51 @@ export default function InvestigationDetail() {
             <div className="invd-card-h">
               <div className="hicon hi-team"><Icon name="person" size={16}/></div>
               Investigation team
+              {canEdit && inv.status !== 'closed' && (
+                <button
+                  className="btn btn-text btn-sm"
+                  onClick={() => setModal('add-member')}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  <Icon name="plus" size={13}/>Add member
+                </button>
+              )}
             </div>
             <div className="invd-card-body">
               {(inv.team || []).length > 0 ? (
                 <div className="invd-team-list">
-                  {inv.team.map(t => (
-                    <div key={t.user_id} className="invd-team-member">
-                      <div className="invd-team-av">{t.initials}</div>
-                      <div>
-                        <div className="invd-team-name">{t.name}</div>
-                        <div className="invd-team-role">{t.role}</div>
+                  {[...inv.team].sort((a, b) => (a.role === 'lead' ? -1 : b.role === 'lead' ? 1 : 0)).map(t => {
+                    const isLead = t.role === 'lead';
+                    return (
+                      <div key={t.user_id} className="invd-team-member">
+                        <div className="invd-team-av">{t.initials}</div>
+                        <div className="invd-team-info">
+                          <div className="invd-team-name">{t.name}</div>
+                          <div className="invd-team-role">{isLead ? 'Lead' : 'Member'}</div>
+                        </div>
+                        {canManageLead && inv.status !== 'closed' && (
+                          <div className="invd-team-actions">
+                            {isLead ? (
+                              <>
+                                <button className="btn btn-tertiary btn-sm" onClick={() => setModal('reassign')}>Change</button>
+                                <button className="btn btn-text btn-sm" onClick={handleUnassign}>Unassign</button>
+                              </>
+                            ) : (
+                              <button className="btn btn-tertiary btn-sm" onClick={() => handleMakeLead(t)}>Make lead</button>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No team members assigned</p>
+                <div className="invd-team-empty">
+                  <p>No team members yet.</p>
+                  {canManageLead && inv.status !== 'closed' && (
+                    <button className="btn btn-primary btn-sm" onClick={() => setModal('reassign')}>Assign lead</button>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -637,6 +882,8 @@ export default function InvestigationDetail() {
       {/* Modals — portal to escape .page transform */}
       {modal === 'close' && createPortal(<CloseInvestigationModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleClose}/>, document.body)}
       {modal === 'capa' && createPortal(<AssignCapaModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAssignCapa}/>, document.body)}
+      {modal === 'reassign' && createPortal(<ReassignLeadModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleReassign}/>, document.body)}
+      {modal === 'add-member' && createPortal(<AddTeamMemberModal investigation={inv} onCancel={() => setModal(null)} onConfirm={handleAddMember}/>, document.body)}
 
       {docModalOpen && createPortal(
         <div className="modal-backdrop" onClick={closeDocModal}>

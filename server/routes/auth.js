@@ -10,7 +10,10 @@ import { join } from 'path';
 
 const router = Router();
 
-const PROFILE_AUDIT_FIELDS = ['name', 'department', 'job_title', 'site_id'];
+const PROFILE_AUDIT_FIELDS = [
+  'name', 'department', 'job_title', 'site_id',
+  'hire_date', 'address', 'phone', 'dob', 'gender',
+];
 
 // Public sign-up of a brand-new organization. Founder gets role='admin'.
 // One transaction so a half-written org never exists.
@@ -140,7 +143,8 @@ router.post('/login', (req, res) => {
 router.get('/me', authMiddleware, (req, res) => {
   const user = db.prepare(`
     SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
-           u.department, u.job_title, u.created_at, u.dashboard_layout,
+           u.department, u.job_title, u.hire_date, u.address, u.phone,
+           u.dob, u.gender, u.created_at, u.dashboard_layout,
            o.name AS org_name, o.country, o.industry_sector, o.naics_code,
            o.compliance_frameworks, o.company_size, o.logo_path
     FROM users u JOIN organizations o ON o.id = u.org_id
@@ -159,10 +163,11 @@ router.get('/sites', authMiddleware, (req, res) => {
 
 router.patch('/profile', authMiddleware, (req, res) => {
   const before = db.prepare(
-    'SELECT id, org_id, site_id, email, name, initials, role, department, job_title FROM users WHERE id = ?'
+    `SELECT id, org_id, site_id, email, name, initials, role, department, job_title,
+            hire_date, address, phone, dob, gender FROM users WHERE id = ?`
   ).get(req.user.id);
 
-  const { name, department, job_title, site_id } = req.body;
+  const { name, department, job_title, site_id, hire_date, address, phone, dob, gender } = req.body;
   const sets = [];
   const params = [];
 
@@ -173,6 +178,13 @@ router.patch('/profile', authMiddleware, (req, res) => {
   if (department !== undefined) { sets.push('department = ?'); params.push(department || null); }
   if (job_title !== undefined) { sets.push('job_title = ?'); params.push(job_title || null); }
   if (site_id !== undefined) { sets.push('site_id = ?'); params.push(site_id || null); }
+  // Regulatory identity fields — these auto-populate the incident wizard's
+  // affected-person form when the reporter picks this user from the list.
+  if (hire_date !== undefined) { sets.push('hire_date = ?'); params.push(hire_date || null); }
+  if (address !== undefined) { sets.push('address = ?'); params.push(address || null); }
+  if (phone !== undefined) { sets.push('phone = ?'); params.push(phone || null); }
+  if (dob !== undefined) { sets.push('dob = ?'); params.push(dob || null); }
+  if (gender !== undefined) { sets.push('gender = ?'); params.push(gender || null); }
 
   if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
@@ -181,7 +193,8 @@ router.patch('/profile', authMiddleware, (req, res) => {
 
   const user = db.prepare(`
     SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
-           u.department, u.job_title, u.created_at,
+           u.department, u.job_title, u.hire_date, u.address, u.phone,
+           u.dob, u.gender, u.created_at,
            o.name AS org_name, o.country, o.industry_sector, o.naics_code,
            o.compliance_frameworks, o.company_size, o.logo_path
     FROM users u JOIN organizations o ON o.id = u.org_id

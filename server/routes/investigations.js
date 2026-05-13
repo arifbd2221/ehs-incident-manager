@@ -121,12 +121,26 @@ router.get('/:id', (req, res) => {
   res.json(inv);
 });
 
+// Lead investigator is a designation EHS owns — same logic as the
+// recordability gate on incidents. Site supervisors can run an investigation
+// once they're assigned, but they can't decide who leads one.
+const INVESTIGATION_LEAD_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
+
 router.patch('/:id', (req, res) => {
   const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
   if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
 
-  const updatable = ['findings', 'root_cause_summary', 'status', 'due_date', 'lead_investigator'];
+  // Tighter gate when the patch touches lead_investigator. The general
+  // requireAssigneeOrElevated lets the current lead reassign themselves;
+  // promoting/demoting investigation leads is reserved for EHS+.
+  if (req.body.lead_investigator !== undefined && !INVESTIGATION_LEAD_ROLES.has(req.user?.role)) {
+    return res.status(403).json({
+      error: 'Only EHS officers, EHS managers, or admins can change the lead investigator.',
+    });
+  }
+
+  const updatable = ['findings', 'root_cause_summary', 'lessons_learned', 'status', 'due_date', 'lead_investigator'];
   const sets = [];
   const params = [];
 
@@ -143,10 +157,82 @@ router.patch('/:id', (req, res) => {
 
   if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
+  // Reassignment of lead_investigator: capture the old/new values BEFORE the
+  // UPDATE so we can detect a change and trigger the same side-effects the
+  // escalate route does (team membership row + notify + activity log).
+  const leadChanged =
+    req.body.lead_investigator !== undefined &&
+    Number(req.body.lead_investigator) !== inv.lead_investigator;
+  const newLeadId = leadChanged ? Number(req.body.lead_investigator) || null : null;
+
   sets.push("updated_at = datetime('now')");
   params.push(inv.id);
 
   db.prepare(`UPDATE investigations SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  if (leadChanged) {
+    // Demote any prior 'lead' team rows to 'member' so there is exactly one
+    // lead at a time. The canonical lead is investigations.lead_investigator
+    // — the team-role column is informational, but keeping it in sync avoids
+    // confusing UIs that surface both.
+    if (inv.lead_investigator) {
+      db.prepare(`
+        UPDATE investigation_team SET role = 'member'
+        WHERE investigation_id = ? AND user_id = ? AND role = 'lead'
+      `).run(inv.id, inv.lead_investigator);
+    }
+
+    const oldLead = inv.lead_investigator
+      ? db.prepare('SELECT name, initials FROM users WHERE id = ?').get(inv.lead_investigator)
+      : null;
+
+    if (newLeadId) {
+      // Assign/reassign path — upsert the new lead's team row + notify them.
+      // investigation_team has no UNIQUE(investigation_id, user_id), so an
+      // existence check is used rather than INSERT OR IGNORE.
+      const existingRow = db.prepare(
+        'SELECT id FROM investigation_team WHERE investigation_id = ? AND user_id = ?'
+      ).get(inv.id, newLeadId);
+      if (existingRow) {
+        db.prepare('UPDATE investigation_team SET role = ? WHERE id = ?').run('lead', existingRow.id);
+      } else {
+        db.prepare(
+          'INSERT INTO investigation_team (investigation_id, user_id, role) VALUES (?, ?, ?)'
+        ).run(inv.id, newLeadId, 'lead');
+      }
+
+      const newLead = db.prepare('SELECT name, initials FROM users WHERE id = ?').get(newLeadId);
+      const action = inv.lead_investigator ? 'lead_reassigned' : 'lead_assigned';
+      const desc = inv.lead_investigator
+        ? `reassigned lead from ${oldLead?.initials || '—'} to ${newLead?.initials || '?'}`
+        : `assigned ${newLead?.initials || '?'} as lead investigator`;
+      db.prepare(`
+        INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+        VALUES (?, 'investigation', ?, ?, ?, ?)
+      `).run(inv.org_id, inv.id, action, desc, req.user.id);
+
+      notifyUser({
+        orgId: inv.org_id, userId: newLeadId, type: 'incident_escalated', incidentId: inv.incident_id,
+        title: inv.lead_investigator
+          ? `Investigation reassigned to you — ${inv.investigation_number}`
+          : `Investigation assigned to you — ${inv.investigation_number}`,
+        body: `You are now lead investigator on ${inv.investigation_number}.`,
+        severity: 'warn',
+        actionUrl: `/investigations/${inv.id}`,
+      });
+    } else if (inv.lead_investigator) {
+      // Unassign path — column already set to NULL by the UPDATE above; just
+      // record the audit row. No notify (no recipient).
+      db.prepare(`
+        INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+        VALUES (?, 'investigation', ?, 'lead_unassigned', ?, ?)
+      `).run(
+        inv.org_id, inv.id,
+        `unassigned ${oldLead?.initials || '—'} as lead investigator`,
+        req.user.id,
+      );
+    }
+  }
 
   if (req.body.status === 'progress' && inv.status === 'pending') {
     db.prepare(`INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id) VALUES (?, 'investigation', ?, 'started', ?, ?)`).run(inv.org_id, inv.id, `started investigation ${inv.investigation_number}`, req.user.id);
@@ -212,19 +298,33 @@ router.delete('/:id/five-whys/:whyId', (req, res) => {
 router.post('/:id/team', (req, res) => {
   const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
+  if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
 
-  const { user_id, role } = req.body;
-  db.prepare('INSERT INTO investigation_team (investigation_id, user_id, role) VALUES (?, ?, ?)').run(inv.id, user_id, role || 'member');
+  const userId = Number(req.body.user_id);
+  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'user_id is required.' });
 
-  const addedUser = db.prepare('SELECT name, initials FROM users WHERE id = ?').get(user_id);
+  // Org isolation — adding a user from another org would cross-leak names.
+  const target = db.prepare('SELECT id, name FROM users WHERE id = ? AND org_id = ?').get(userId, req.user.org_id);
+  if (!target) return res.status(404).json({ error: 'User not in your organization.' });
+
+  // investigation_team has no UNIQUE(investigation_id, user_id) so we have
+  // to check manually to avoid duplicate rows.
+  const dupe = db.prepare(
+    'SELECT id FROM investigation_team WHERE investigation_id = ? AND user_id = ?'
+  ).get(inv.id, userId);
+  if (dupe) return res.status(409).json({ error: 'User is already on this investigation team.' });
+
+  const role = req.body.role === 'lead' ? 'member' : (req.body.role || 'member');
+  db.prepare('INSERT INTO investigation_team (investigation_id, user_id, role) VALUES (?, ?, ?)').run(inv.id, userId, role);
+
   writeActivity({
     org_id: inv.org_id,
     entity_type: 'investigation',
     entity_id: inv.id,
     action: 'team_member_added',
-    description: `added ${addedUser?.name || `user ${user_id}`} to investigation ${inv.investigation_number}`,
+    description: `added ${target.name} to investigation ${inv.investigation_number}`,
     user_id: req.user.id,
-    metadata: { added_user_id: user_id, role: role || 'member' },
+    metadata: { added_user_id: userId, role },
   });
 
   const team = db.prepare('SELECT it.*, u.name, u.initials FROM investigation_team it LEFT JOIN users u ON u.id = it.user_id WHERE it.investigation_id = ?').all(inv.id);
@@ -236,8 +336,23 @@ router.post('/:id/close', (req, res) => {
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
   if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
 
-  const { reason } = req.body;
-  db.prepare("UPDATE investigations SET status = 'closed', closed_at = datetime('now'), closed_by = ?, closed_reason = ?, updated_at = datetime('now') WHERE id = ?").run(req.user.id, reason || null, inv.id);
+  // lessons_learned is captured at close time (carry-forward synthesis) so
+  // the in-progress UI doesn't need a floating editor for it.
+  const reason = (req.body.reason || '').toString().trim() || null;
+  const lessonsLearned = req.body.lessons_learned == null
+    ? null
+    : (req.body.lessons_learned.toString().trim() || null);
+
+  db.prepare(`
+    UPDATE investigations
+    SET status = 'closed',
+        closed_at = datetime('now'),
+        closed_by = ?,
+        closed_reason = ?,
+        lessons_learned = COALESCE(?, lessons_learned),
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(req.user.id, reason, lessonsLearned, inv.id);
 
   db.prepare(`INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id) VALUES (?, 'investigation', ?, 'closed', ?, ?)`)
     .run(inv.org_id, inv.id, `closed investigation ${inv.investigation_number}${reason ? ' — ' + reason : ''}`, req.user.id);

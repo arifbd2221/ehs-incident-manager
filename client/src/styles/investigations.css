@@ -1132,6 +1132,45 @@
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
 }
+.invd-summary-val .muted,
+.invd-summary-val.muted {
+  color: var(--sds-fg-tertiary);
+  font-weight: 500;
+}
+/* Inline hint shown after card titles to explain "what goes here". */
+.invd-card-hint {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sds-fg-tertiary);
+}
+@media (max-width: 768px) {
+  .invd-card-hint { display: none; }
+}
+
+/* Locked-in readonly content (findings, lessons learned). Renders as
+   clean prose with comfortable line-height so it doesn't feel like a
+   dumped string. white-space: pre-wrap preserves paragraph breaks. */
+.invd-readonly-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--sds-fg-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.invd-empty-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--sds-fg-tertiary);
+  font-style: italic;
+}
+.invd-edit-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
 .invd-summary-divider {
   height: 1px;
   background: #f3f4f6;
@@ -1142,12 +1181,21 @@
 .invd-team-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .invd-team-member {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.invd-team-info {
+  flex: 1;
+  min-width: 0;
+}
+.invd-team-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .invd-team-av {
   width: 36px;
@@ -1160,6 +1208,7 @@
   font-weight: 700;
   background: linear-gradient(135deg, #e0e7ff, #ede9fe);
   color: #626DF9;
+  flex-shrink: 0;
 }
 .invd-team-name {
   font-size: 13px;
@@ -1170,6 +1219,18 @@
   font-size: 11px;
   color: var(--sds-fg-tertiary);
   margin-top: 1px;
+  text-transform: capitalize;
+}
+.invd-team-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.invd-team-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--sds-fg-tertiary);
 }
 
 /* Activity timeline */

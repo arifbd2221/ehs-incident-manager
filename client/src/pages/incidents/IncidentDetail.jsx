@@ -35,6 +35,9 @@ import ComboBox from '../../components/shared/ComboBox';
 import '../../styles/incidents.css';
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
+// Tighter set for OSHA 1904 recordability — supervisors observe but do not
+// decide. Matches the BE check on POST /incidents/:id/recordability-verify.
+const RECORDABILITY_VERIFY_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 
 // WI-07: human labels for the 1904.39 reportable categories.
 const SEVERE_LABELS = {
@@ -184,6 +187,7 @@ export default function IncidentDetail() {
   const { user } = useAuth();
   const { showOsha, showRiddor, showNsw } = frameworkVisibility(user);
   const canVerify = ELEVATED_ROLES.has(user?.role);
+  const canVerifyRecordability = RECORDABILITY_VERIFY_ROLES.has(user?.role);
   const canEdit = ELEVATED_ROLES.has(user?.role);
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1230,7 +1234,7 @@ export default function IncidentDetail() {
           </div>
 
           {canVerify && showOsha && (r.type === 'injury' || r.type === 'illness') && (
-            <RecordabilityVerifyCard incident={r} onVerified={load}/>
+            <RecordabilityVerifyCard incident={r} onVerified={load} canVerify={canVerifyRecordability}/>
           )}
         </div>
       </div>

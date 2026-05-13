@@ -129,15 +129,21 @@ export default function InjuryForm({ data, onChange, jurisdiction = ['US-OSHA', 
 
   const handlePrimaryUserPick = (val) => {
     const u = users.find(x => String(x.id) === String(val));
+    // Mig 035 added address / phone / dob / gender to users so the full set
+    // of OSHA 1904.29 / RIDDOR Sch.2 / NSW WHS s.37 identity fields can be
+    // pre-filled from the employee record. Empty strings still fall back to
+    // the existing form value so partial profiles don't blank out manual edits.
     onChange({
       ...data,
       injured_user_id: val || null,
       injured_name: u?.name ?? data.injured_name ?? '',
       injured_job_title: u?.job_title ?? data.injured_job_title ?? '',
       injured_department: u?.department ?? data.injured_department ?? '',
-      // hire_date is the only regulatory identity field stored on users;
-      // dob + gender are not on the schema so still manual entry.
       injured_date_hired: u?.hire_date ?? data.injured_date_hired ?? '',
+      injured_address: u?.address ?? data.injured_address ?? '',
+      injured_phone: u?.phone ?? data.injured_phone ?? '',
+      injured_dob: u?.dob ?? data.injured_dob ?? '',
+      injured_gender: u?.gender ?? data.injured_gender ?? '',
     });
   };
 

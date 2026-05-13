@@ -4,6 +4,11 @@ import SmartTextarea from '../../../components/shared/SmartTextarea';
 
 export default function CloseInvestigationModal({ investigation, onCancel, onConfirm }) {
   const [reason, setReason] = useState('');
+  // Captured at closure rather than during the active investigation — this
+  // is the "what does the organization carry forward" synthesis, not the
+  // working notes. Once saved it locks into the read-only display on the
+  // detail page.
+  const [lessons, setLessons] = useState(investigation.lessons_learned || '');
 
   return (
     <div className="idet-modal-backdrop" onClick={onCancel}>
@@ -20,6 +25,16 @@ export default function CloseInvestigationModal({ investigation, onCancel, onCon
             The investigation will be marked closed and findings archived. No corrective or preventive actions will be tracked.
           </div>
           <div className="form-group">
+            <label className="form-label">Lessons learned <span className="optional">(optional)</span></label>
+            <SmartTextarea
+              value={lessons}
+              onChange={setLessons}
+              rows={4}
+              examples={['Add secondary containment requirement to all chemical transfer SOPs site-wide. Roll out glove compatibility chart to all departments.', 'Pre-task hazard assessment must be the first item on every shift handover; tie compliance to monthly supervisor scorecard.']}
+              chips={['SOP change required', 'Training refresher', 'Policy update', 'Cross-site rollout', 'Audit cadence change']}
+            />
+          </div>
+          <div className="form-group">
             <label className="form-label">Closure reason <span className="optional">(optional)</span></label>
             <SmartTextarea
               value={reason}
@@ -32,7 +47,7 @@ export default function CloseInvestigationModal({ investigation, onCancel, onCon
         </div>
         <div className="idet-modal-footer">
           <button className="modal-cancel" onClick={onCancel}>Cancel</button>
-          <button className="modal-confirm" onClick={() => onConfirm({ reason })}>
+          <button className="modal-confirm" onClick={() => onConfirm({ reason, lessons_learned: lessons.trim() || null })}>
             <Icon name="check" size={14}/>Close investigation
           </button>
         </div>

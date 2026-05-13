@@ -26,7 +26,8 @@ function countActiveAdmins(orgId) {
 router.get('/', (req, res) => {
   const users = db.prepare(`
     SELECT u.id, u.org_id, u.site_id, u.email, u.name, u.initials, u.role,
-           u.department, u.job_title, u.is_active, u.created_at,
+           u.department, u.job_title, u.hire_date, u.address, u.phone,
+           u.dob, u.gender, u.is_active, u.created_at,
            s.name AS site_name
     FROM users u LEFT JOIN sites s ON s.id = u.site_id
     WHERE u.org_id = ?
