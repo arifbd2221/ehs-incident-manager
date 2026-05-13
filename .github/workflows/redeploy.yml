@@ -1,0 +1,14 @@
+name: Redeploy & Reseed
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Re-seed every Monday at 6 AM UTC (keeps demo data fresh)
+    - cron: '0 6 * * 1'
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render redeploy
+        run: curl -s "${{ secrets.RENDER_DEPLOY_HOOK }}"
