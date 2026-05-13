@@ -15,6 +15,7 @@
 
 import db from '../db/connection.js';
 import { writeActivity } from '../services/activity_log.js';
+import { writeSeedPdf, writeSeedJpeg } from './seed-files.js';
 
 const ORG_ID = 1;
 
@@ -292,10 +293,13 @@ const run = db.transaction(() => {
   const manualsFolder  = folderByName('Equipment Manuals');
   const policiesFolder = folderByName('Policies');
 
+  // stored_filename + a real file on disk are required by the
+  // /api/documents/:id/download endpoint that powers preview — omitting them
+  // makes the preview modal 404 with "No file on disk for this document".
   const docIns = db.prepare(`
     INSERT INTO documents
-      (document_number, org_id, name, document_type, file_url, mime_type, size_bytes, uploaded_by, folder_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (document_number, org_id, name, document_type, file_url, stored_filename, mime_type, size_bytes, uploaded_by, folder_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   // existing docs use DOC-2026-NNNN format; query max number to continue
@@ -338,10 +342,13 @@ const run = db.transaction(() => {
   let docCount = 0;
   for (const d of DOCS) {
     const docNo = nextDocNo();
+    const isImage = d.mime.includes('image');
+    const { filename, size } = isImage ? writeSeedJpeg() : writeSeedPdf(d.name);
     docIns.run(
       docNo, ORG_ID, d.name, d.type,
-      `/uploads/demo/${docNo}.${d.mime.includes('image') ? 'jpg' : 'pdf'}`,
-      d.mime, d.size, d.uploader,
+      `/uploads/${filename}`,
+      filename,
+      d.mime, size, d.uploader,
       d.folder ? d.folder.id : null,
     );
     docCount++;
