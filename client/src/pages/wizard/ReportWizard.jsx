@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { createIncident, uploadAttachments } from '../../api/incidents';
-import VoiceIntakeModal from '../../components/wizard/VoiceIntakeModal';
 import { getSites } from '../../api/users';
 import { listAssets } from '../../api/assets';
 import api from '../../api/client';
@@ -154,11 +153,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
   // matrix selection AND show "N prior incidents at this asset/area" banner.
   const [classifyPreview, setClassifyPreview] = useState(null);
 
-  // Voice intake (W5 F5.1). Tracks which fields the AI suggested so we can
-  // badge them in the UI. Editing a field clears it from the set (auto-confirm
-  // via edit). On submit, the wizard sends voice_extraction_id along with the
-  // sets of fields the user kept, edited, or rejected.
-  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  // Voice intake — the in-wizard CTA + modal were removed per user request.
+  // The GlobalVoiceFab (top-right) can still hand off pre-extracted fields
+  // via voiceSheetData, which feeds handleVoiceExtracted below. These pieces
+  // of state track which fields the AI filled so we can badge them in the UI;
+  // editing clears the badge. On submit, the wizard sends voice_extraction_id
+  // along with the sets of fields the user kept, edited, or rejected.
   const [voiceExtractionId, setVoiceExtractionId] = useState(null);
   const [aiSuggestedFields, setAiSuggestedFields] = useState(new Set());
   const [aiOriginalValues, setAiOriginalValues] = useState({});
@@ -203,7 +203,6 @@ export default function ReportWizard({ onClose, onSubmit }) {
     setAiSuggestedFields(filled);
     setAiOriginalValues(originals);
     setVoiceFollowups(result.suggested_followups || []);
-    setShowVoiceModal(false);
   }, []);
 
   useEffect(() => {
@@ -535,21 +534,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
             {/* STEP 0 — What happened */}
             {step === 0 && (
               <>
-                {/* Voice intake CTA — only useful before the user starts
-                    typing; demoted to a thin info bar once any field is
-                    AI-suggested so it doesn't compete with the form. */}
-                {aiSuggestedFields.size === 0 ? (
-                  <button type="button" className="wiz-voice-cta" onClick={() => setShowVoiceModal(true)}>
-                    <span className="wiz-voice-cta-spark">✨</span>
-                    <div className="wiz-voice-cta-body">
-                      <div className="wiz-voice-cta-title">Voice intake</div>
-                      <div className="wiz-voice-cta-desc">
-                        Speak the incident — Claude pre-fills the wizard with what it heard. You review every field before submit.
-                      </div>
-                    </div>
-                    <span className="wiz-voice-cta-arrow"><Icon name="arrow" size={14}/></span>
-                  </button>
-                ) : (
+                {/* Active-voice banner is the only voice-related surface kept
+                    in the wizard — only renders when the GlobalVoiceFab (top-
+                    right) handed off pre-extracted fields. The in-wizard CTA
+                    was removed per user request; ✨ AI pills next to each
+                    field still indicate unedited FAB-driven suggestions. */}
+                {aiSuggestedFields.size > 0 && (
                   <div className="wiz-voice-active-banner">
                     <span className="wiz-voice-active-spark">✨</span>
                     <span className="wiz-voice-active-text">
@@ -1035,13 +1025,6 @@ export default function ReportWizard({ onClose, onSubmit }) {
         </div>
       </div>
 
-      {showVoiceModal && createPortal(
-        <VoiceIntakeModal
-          onCancel={() => setShowVoiceModal(false)}
-          onExtracted={handleVoiceExtracted}
-        />,
-        document.body
-      )}
     </div>
   );
 }
