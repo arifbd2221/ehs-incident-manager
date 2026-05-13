@@ -65,16 +65,18 @@ function FindingsView({ value }) {
 }
 
 function FindingsEditor({ draft, setDraft, saving, onCancel, onSave, baseline }) {
+  // SmartTextarea (without examples/chips) gives us the built-in mic button
+  // for voice-to-text on top of a clean plain textarea — same surface area
+  // as the textarea would be, just with a mic in the corner. Esc-to-cancel
+  // rides as a bubbled keydown on the wrapper.
   return (
-    <>
-      <textarea
-        className="textarea"
+    <div onKeyDown={e => { if (e.key === 'Escape') onCancel(); }}>
+      <SmartTextarea
         value={draft}
-        autoFocus
+        onChange={setDraft}
         rows={6}
-        placeholder="What did you observe? Facts, evidence, timeline…"
-        onChange={e => setDraft(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Escape') onCancel(); }}
+        autoFocus
+        placeholder="What did you observe? Facts, evidence, timeline… (click the mic to dictate)"
       />
       <div className="invd-edit-row">
         <button className="btn btn-secondary btn-sm" onClick={onCancel} disabled={saving}>Cancel</button>
@@ -86,7 +88,7 @@ function FindingsEditor({ draft, setDraft, saving, onCancel, onSave, baseline })
           {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
-    </>
+    </div>
   );
 }
 
