@@ -998,11 +998,15 @@ function Osha300AReport({ siteId }) {
   const [toast, setToast] = useState(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingCsv, setDownloadingCsv] = useState(false);
+  // 1904.32(a)(2) covers the *prior* calendar year, so the BE defaults
+  // year to YYYY-1. Year picker lets the user override to view the
+  // partial in-progress year (e.g. mid-2026 looking at 2026 YTD).
+  const [year, setYear] = useState(new Date().getFullYear() - 1);
 
   const load = () => {
     if (siteId) {
       setData(null);
-      getOsha300A({ site_id: siteId }).then(setData).catch(() => {});
+      getOsha300A({ site_id: siteId, year }).then(setData).catch(() => {});
       // WI-02: ITA designation lookup (1904.41 Appendix A/B + 250+).
       import('../../api/reports').then(m => {
         if (m.getOshaItaDesignation) {
@@ -1015,7 +1019,7 @@ function Osha300AReport({ siteId }) {
       setDesignation(null);
     }
   };
-  useEffect(load, [siteId]);
+  useEffect(load, [siteId, year]);
 
   const downloadCertifiedFile = async (format) => {
     if (!data?.snapshot?.has_snapshot && format === 'csv') {
@@ -1069,6 +1073,16 @@ function Osha300AReport({ siteId }) {
           <div className="rpt-panel-sub">{data.site?.name} · Calendar year {data.year}</div>
         </div>
         <div className="rpt-300a-cert-area" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <ComboBox
+            className="rpt-year-select"
+            options={(() => {
+              const now = new Date().getFullYear();
+              return [now, now - 1, now - 2, now - 3].map(y => ({ value: String(y), label: String(y) }));
+            })()}
+            value={String(year)}
+            onChange={v => setYear(Number(v))}
+            searchable={false}
+          />
           <button
             className="btn btn-secondary btn-sm"
             onClick={() => downloadCertifiedFile('pdf')}
