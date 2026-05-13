@@ -169,26 +169,6 @@ export default function TemplatesList() {
               <div className="tp-skel w40" />
             </div>
           ))
-        ) : templates.length === 0 ? (
-          <div className="tp-empty">
-            <div className="tp-empty-illustration" aria-hidden="true">
-              <span className="tp-ei-shape tp-ei-circle-1" />
-              <span className="tp-ei-shape tp-ei-circle-2" />
-              <span className="tp-ei-shape tp-ei-rect-1" />
-              <span className="tp-ei-shape tp-ei-rect-2" />
-              <span className="tp-ei-shape tp-ei-dot-1" />
-              <span className="tp-ei-shape tp-ei-dot-2" />
-              <span className="tp-ei-shape tp-ei-dot-3" />
-              <div className="tp-empty-icon"><Icon name="file" size={28} /></div>
-            </div>
-            <div className="tp-empty-title">No templates yet</div>
-            <div className="tp-empty-desc">Create your first inspection template to get started</div>
-            {canEdit && (
-              <button className="tp-btn-create" onClick={() => setShowCreate(true)}>
-                <Icon name="plus" size={16} /> Create Template
-              </button>
-            )}
-          </div>
         ) : (
           <table className="tp-table">
             <thead>
@@ -201,7 +181,31 @@ export default function TemplatesList() {
               </tr>
             </thead>
             <tbody>
-              {templates.map((tpl, idx) => (
+              {templates.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="tp-empty-row">
+                    <div className="tp-empty">
+                      <div className="tp-empty-illustration" aria-hidden="true">
+                        <span className="tp-ei-shape tp-ei-circle-1" />
+                        <span className="tp-ei-shape tp-ei-circle-2" />
+                        <span className="tp-ei-shape tp-ei-rect-1" />
+                        <span className="tp-ei-shape tp-ei-rect-2" />
+                        <span className="tp-ei-shape tp-ei-dot-1" />
+                        <span className="tp-ei-shape tp-ei-dot-2" />
+                        <span className="tp-ei-shape tp-ei-dot-3" />
+                        <div className="tp-empty-icon"><Icon name="file" size={28} /></div>
+                      </div>
+                      <div className="tp-empty-title">No templates yet</div>
+                      <div className="tp-empty-desc">Create your first inspection template to get started</div>
+                      {canEdit && (
+                        <button className="tp-btn-create" onClick={() => setShowCreate(true)}>
+                          <Icon name="plus" size={16} /> Create Template
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : templates.map((tpl, idx) => (
                 <tr key={tpl.id} onClick={() => navigate(`/templates/${tpl.id}/edit`)} style={{ animationDelay: `${50 + idx * 30}ms` }}>
                   <td>
                     <div className="tp-name">{tpl.name}</div>

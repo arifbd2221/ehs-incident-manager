@@ -180,17 +180,6 @@ export default function InspectionsList() {
               <div className="ip-skel" style={{ width: '40%' }} />
             </div>
           ))
-        ) : inspections.length === 0 ? (
-          <div className="ip-empty">
-            <div className="ip-empty-icon"><Icon name="shield" size={28} /></div>
-            <div className="ip-empty-title">No inspections yet</div>
-            <div className="ip-empty-desc">Start your first inspection from a published template</div>
-            {canCreate && (
-              <button className="ip-btn-start" onClick={openStartModal}>
-                <Icon name="plus" size={16} /> Start Inspection
-              </button>
-            )}
-          </div>
         ) : (
           <table className="ip-table">
             <thead>
@@ -204,7 +193,22 @@ export default function InspectionsList() {
               </tr>
             </thead>
             <tbody>
-              {inspections.map((ins, idx) => (
+              {inspections.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="ip-empty-row">
+                    <div className="ip-empty">
+                      <div className="ip-empty-icon"><Icon name="shield" size={28} /></div>
+                      <div className="ip-empty-title">No inspections yet</div>
+                      <div className="ip-empty-desc">Start your first inspection from a published template</div>
+                      {canCreate && (
+                        <button className="ip-btn-start" onClick={openStartModal}>
+                          <Icon name="plus" size={16} /> Start Inspection
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : inspections.map((ins, idx) => (
                 <tr key={ins.id} onClick={() => navigate(`/inspections/${ins.id}`)} style={{ animationDelay: `${50 + idx * 30}ms` }}>
                   <td><span className="ip-number">{ins.inspection_number}</span></td>
                   <td>

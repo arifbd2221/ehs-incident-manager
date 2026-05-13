@@ -461,6 +461,8 @@
   margin-right: auto;
 }
 
+.ip-empty-row { padding: 0 !important; border-bottom: none !important; }
+
 /* ---- Skeleton Rows ---- */
 .ip-skel-row {
   display: grid;

@@ -450,6 +450,8 @@
   margin-bottom: 20px;
 }
 
+.tp-empty-row { padding: 0 !important; border-bottom: none !important; }
+
 /* ---- SKELETON ---- */
 .tp-skel-row {
   display: grid;
