@@ -90,6 +90,9 @@ if (force && exists > 0) {
     'riddor_reports', 'osha_300_log', 'severity_history',
     'capas', 'five_whys', 'investigation_team', 'investigations',
     'attachments', 'witnesses', 'entity_links', 'documents', 'document_folders',
+    'inspection_items', 'inspections',
+    'template_version_items', 'template_versions', 'template_items', 'templates',
+    'answer_set_options', 'answer_sets',
     'incidents', 'work_hours', 'assets',
     'asset_categories',
     'users', 'sites', 'organizations',
@@ -913,6 +916,283 @@ db.transaction(() => {
       founder_email: 'sarah@sdsmanager.com',
     },
   });
+})();
+
+// =====================================================================
+// INSPECTION TEMPLATES — ISO-aligned checklists for SDS Manager Inc.
+// Imports the same 3 ISO templates that seed-templates.js creates,
+// plus two completed inspections so the inspections list isn't empty.
+// =====================================================================
+(() => {
+  const orgRow = db.prepare('SELECT id FROM organizations ORDER BY id LIMIT 1').get();
+  const elenaRow = db.prepare("SELECT id FROM users WHERE email = 'elena@sdsmanager.com'").get();
+  const marcusRow = db.prepare("SELECT id FROM users WHERE email = 'marcus@sdsmanager.com'").get();
+  if (!orgRow || !elenaRow || !marcusRow) { console.warn('Skipping template seed — missing org/users.'); return; }
+  const orgId = orgRow.id;
+  const elenaId = elenaRow.id;
+  const marcusId = marcusRow.id;
+
+  // Re-create default answer sets if they were wiped (migration 008 only runs once)
+  let yesNo = db.prepare("SELECT id FROM answer_sets WHERE org_id = ? AND name = 'Yes / No'").get(orgId);
+  let passFail = db.prepare("SELECT id FROM answer_sets WHERE org_id = ? AND name = 'Pass / Fail / N/A'").get(orgId);
+  if (!yesNo) {
+    const id = db.prepare("INSERT INTO answer_sets (org_id, name) VALUES (?, 'Yes / No')").run(orgId).lastInsertRowid;
+    const oi = db.prepare('INSERT INTO answer_set_options (answer_set_id, label, score, color, is_failed, position) VALUES (?, ?, ?, ?, ?, ?)');
+    oi.run(id, 'Yes', 1, '#2E7D32', 0, 0);
+    oi.run(id, 'No', 0, '#D32F2F', 1, 1);
+    yesNo = { id };
+  }
+  if (!passFail) {
+    const id = db.prepare("INSERT INTO answer_sets (org_id, name) VALUES (?, 'Pass / Fail / N/A')").run(orgId).lastInsertRowid;
+    const oi = db.prepare('INSERT INTO answer_set_options (answer_set_id, label, score, color, is_failed, position) VALUES (?, ?, ?, ?, ?, ?)');
+    oi.run(id, 'Pass', 1, '#2E7D32', 0, 0);
+    oi.run(id, 'Fail', 0, '#D32F2F', 1, 1);
+    oi.run(id, 'N/A', 0, '#90A4AE', 0, 2);
+    passFail = { id };
+  }
+
+  const complianceSetId = db.prepare(
+    "INSERT INTO answer_sets (org_id, name) VALUES (?, 'Compliant / Non-Compliant / N/A')"
+  ).run(orgId).lastInsertRowid;
+  const optIns = db.prepare(
+    'INSERT INTO answer_set_options (answer_set_id, label, score, color, is_failed, position) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  optIns.run(complianceSetId, 'Compliant', 1, '#2E7D32', 0, 0);
+  optIns.run(complianceSetId, 'Non-Compliant', 0, '#D32F2F', 1, 1);
+  optIns.run(complianceSetId, 'N/A', 0, '#90A4AE', 0, 2);
+
+  const conditionSetId = db.prepare(
+    "INSERT INTO answer_sets (org_id, name) VALUES (?, 'Good / Acceptable / Poor')"
+  ).run(orgId).lastInsertRowid;
+  optIns.run(conditionSetId, 'Good', 2, '#2E7D32', 0, 0);
+  optIns.run(conditionSetId, 'Acceptable', 1, '#ED6C02', 0, 1);
+  optIns.run(conditionSetId, 'Poor', 0, '#D32F2F', 1, 2);
+
+  const ISO_TEMPLATES = [
+    {
+      name: 'ISO 45001 — Occupational Health & Safety Audit',
+      description: 'Comprehensive audit checklist aligned with ISO 45001:2018 for OH&S management systems.',
+      sections: [
+        { label: '4. Context of the Organization', questions: [
+          { label: 'Are internal and external issues relevant to OH&S identified and monitored?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Are the needs and expectations of workers and interested parties determined?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Is the scope of the OH&S management system defined and documented?', answer_set_id: yesNo.id, required: 1 },
+        ]},
+        { label: '5. Leadership & Worker Participation', questions: [
+          { label: 'Does top management demonstrate leadership and commitment to the OH&S system?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Is there an OH&S policy that is appropriate, communicated, and available?', answer_set_id: yesNo.id, required: 1 },
+          { label: 'Are roles, responsibilities, and authorities assigned and communicated?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Is there evidence of worker consultation and participation in OH&S decisions?', answer_set_id: yesNo.id, required: 1 },
+        ]},
+        { label: '6. Planning', questions: [
+          { label: 'Are hazards systematically identified on an ongoing basis?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Are OH&S risks and opportunities assessed using a defined methodology?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Are legal and other compliance requirements identified and tracked?', answer_set_id: yesNo.id, required: 1 },
+          { label: 'Are measurable OH&S objectives established and documented?', answer_set_id: complianceSetId, required: 1 },
+        ]},
+        { label: '7. Support', questions: [
+          { label: 'Are adequate resources provided for the OH&S management system?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Is worker competence determined, and training provided where needed?', answer_set_id: yesNo.id, required: 1 },
+          { label: 'Is documented information controlled and maintained as required?', answer_set_id: complianceSetId, required: 1 },
+        ]},
+        { label: '8. Operation', questions: [
+          { label: 'Is the hierarchy of controls applied to eliminate hazards and reduce risks?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Are emergency preparedness and response procedures established and tested?', answer_set_id: complianceSetId, required: 1 },
+        ]},
+        { label: '9. Performance Evaluation', questions: [
+          { label: 'Is OH&S performance monitored, measured, analyzed, and evaluated?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Are internal audits conducted at planned intervals?', answer_set_id: yesNo.id, required: 1 },
+        ]},
+        { label: '10. Improvement', questions: [
+          { label: 'Are incidents and nonconformities investigated with corrective actions taken?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Is the OH&S management system continually improved?', answer_set_id: complianceSetId, required: 1 },
+        ]},
+      ],
+    },
+    {
+      name: 'ISO 14001 — Environmental Management Audit',
+      description: 'Audit checklist aligned with ISO 14001:2015 for environmental management systems.',
+      sections: [
+        { label: '4. Context of the Organization', questions: [
+          { label: 'Are internal and external issues relevant to the EMS identified?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Is the scope of the EMS clearly defined?', answer_set_id: yesNo.id, required: 1 },
+        ]},
+        { label: '5. Leadership', questions: [
+          { label: 'Does top management demonstrate commitment to environmental protection?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Is the environmental policy appropriate to the nature and scale of impacts?', answer_set_id: complianceSetId, required: 1 },
+        ]},
+        { label: '6. Planning', questions: [
+          { label: 'Are significant environmental aspects and impacts identified?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Are compliance obligations identified and accessible?', answer_set_id: yesNo.id, required: 1 },
+        ]},
+        { label: '8. Operation', questions: [
+          { label: 'Are operational controls in place for significant environmental aspects?', answer_set_id: complianceSetId, required: 1 },
+          { label: 'Are spill containment and prevention measures in place?', answer_set_id: passFail.id, required: 1 },
+        ]},
+        { label: '10. Improvement', questions: [
+          { label: 'Are nonconformities investigated and corrective actions taken?', answer_set_id: complianceSetId, required: 1 },
+        ]},
+      ],
+    },
+    {
+      name: 'Weekly Workplace Safety Walkthrough',
+      description: 'Quick weekly walkthrough checklist for supervisors — covers housekeeping, PPE, fire safety, and hazard identification.',
+      sections: [
+        { label: 'Housekeeping & Access', questions: [
+          { label: 'Are walkways and exits clear of obstructions?', answer_set_id: passFail.id, required: 1 },
+          { label: 'Are floors clean, dry, and free of slip/trip hazards?', answer_set_id: passFail.id, required: 1 },
+          { label: 'Is waste properly segregated and bins not overflowing?', answer_set_id: passFail.id, required: 1 },
+        ]},
+        { label: 'PPE & Worker Safety', questions: [
+          { label: 'Are all workers wearing required PPE for their area?', answer_set_id: yesNo.id, required: 1 },
+          { label: 'Is PPE in serviceable condition (no visible damage)?', answer_set_id: passFail.id, required: 1 },
+          { label: 'Are safety signs clearly visible and legible?', answer_set_id: passFail.id, required: 0 },
+        ]},
+        { label: 'Fire Safety & Emergency', questions: [
+          { label: 'Are fire extinguishers accessible and within inspection date?', answer_set_id: passFail.id, required: 1 },
+          { label: 'Are emergency exits clearly marked and unobstructed?', answer_set_id: passFail.id, required: 1 },
+          { label: 'Is the first aid kit stocked and accessible?', answer_set_id: yesNo.id, required: 1 },
+        ]},
+        { label: 'Equipment & Machinery', questions: [
+          { label: 'Are machine guards in place and functional?', answer_set_id: passFail.id, required: 1 },
+          { label: 'Are lockout/tagout devices available where required?', answer_set_id: yesNo.id, required: 1 },
+          { label: 'Are any hazards or unsafe conditions observed?', answer_set_id: yesNo.id, required: 1 },
+        ]},
+      ],
+    },
+  ];
+
+  const tplIns = db.prepare(
+    `INSERT INTO templates (org_id, name, description, status, published_at, created_by, latest_version)
+     VALUES (?, ?, ?, 'published', datetime('now'), ?, 1)`
+  );
+  const itemIns = db.prepare(
+    `INSERT INTO template_items (template_id, item_key, parent_key, type, label, region, sort_order, required, meta)
+     VALUES (?, ?, ?, ?, ?, 'body', ?, ?, ?)`
+  );
+  const verIns = db.prepare(
+    `INSERT INTO template_versions (template_id, version_number, published_by) VALUES (?, 1, ?)`
+  );
+  const verItemIns = db.prepare(
+    `INSERT INTO template_version_items (version_id, item_key, parent_key, type, label, region, sort_order, required, meta)
+     VALUES (?, ?, ?, ?, ?, 'body', ?, ?, ?)`
+  );
+
+  let keyCounter = 0;
+  const nextKey = () => `item_${++keyCounter}`;
+  const templateIds = [];
+
+  db.transaction(() => {
+    for (const tpl of ISO_TEMPLATES) {
+      const tplId = tplIns.run(orgId, tpl.name, tpl.description, elenaId).lastInsertRowid;
+      const verId = verIns.run(tplId, elenaId).lastInsertRowid;
+      templateIds.push({ id: tplId, verId, name: tpl.name, sections: tpl.sections });
+
+      let sectionOrder = 0;
+      for (const section of tpl.sections) {
+        const sectionKey = nextKey();
+        itemIns.run(tplId, sectionKey, null, 'section', section.label, sectionOrder, 0, null);
+        verItemIns.run(verId, sectionKey, null, 'section', section.label, sectionOrder, 0, null);
+        sectionOrder++;
+
+        let qOrder = 0;
+        for (const q of section.questions) {
+          const qKey = nextKey();
+          const meta = JSON.stringify({ answer_set_id: q.answer_set_id });
+          itemIns.run(tplId, qKey, sectionKey, 'question', q.label, qOrder, q.required, meta);
+          verItemIns.run(verId, qKey, sectionKey, 'question', q.label, qOrder, q.required, meta);
+          qOrder++;
+        }
+      }
+    }
+
+    // --- Seed two completed inspections for the weekly walkthrough ---
+    const walkthrough = templateIds.find(t => t.name.includes('Weekly'));
+    if (walkthrough) {
+      const clevelandRow = db.prepare("SELECT id FROM sites WHERE org_id = ? AND name LIKE '%Cleveland%'").get(orgId);
+      const siteId = clevelandRow?.id;
+
+      const insIns = db.prepare(
+        `INSERT INTO inspections (org_id, template_id, template_version_id, inspection_number, title, status, conducted_on, location, started_by, completed_at, site_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      const iiIns = db.prepare(
+        `INSERT INTO inspection_items (inspection_id, item_key, type, selected_option_id, response_text, is_flagged, is_failed, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+
+      // Get the Pass option from the Pass/Fail/N/A set for auto-filling
+      const passOpt = db.prepare("SELECT id FROM answer_set_options WHERE answer_set_id = ? AND label = 'Pass'").get(passFail.id);
+      const failOpt = db.prepare("SELECT id FROM answer_set_options WHERE answer_set_id = ? AND label = 'Fail'").get(passFail.id);
+      const yesOpt = db.prepare("SELECT id FROM answer_set_options WHERE answer_set_id = ? AND label = 'Yes'").get(yesNo.id);
+      const noOpt = db.prepare("SELECT id FROM answer_set_options WHERE answer_set_id = ? AND label = 'No'").get(yesNo.id);
+
+      // Inspection 1 — completed, all pass
+      const ins1Id = insIns.run(
+        orgId, walkthrough.id, walkthrough.verId,
+        'INS-2026-0001', 'Weekly Safety Walkthrough — Bay 3',
+        'completed', new Date(Date.now() - 7 * 86400000).toISOString(),
+        'Bay 3 — Production floor', marcusId,
+        new Date(Date.now() - 7 * 86400000 + 3600000).toISOString(),
+        siteId,
+      ).lastInsertRowid;
+
+      // Fill all questions with Pass/Yes
+      const vItems = db.prepare('SELECT item_key, type, meta FROM template_version_items WHERE version_id = ?').all(walkthrough.verId);
+      for (const vi of vItems) {
+        if (vi.type !== 'question') continue;
+        const meta = vi.meta ? JSON.parse(vi.meta) : {};
+        const optId = meta.answer_set_id === passFail.id ? passOpt?.id : yesOpt?.id;
+        iiIns.run(ins1Id, vi.item_key, 'question', optId, null, 0, 0, null);
+      }
+
+      // Inspection 2 — completed, one flagged fail
+      const ins2Id = insIns.run(
+        orgId, walkthrough.id, walkthrough.verId,
+        'INS-2026-0002', 'Weekly Safety Walkthrough — Loading Dock',
+        'completed', new Date(Date.now() - 1 * 86400000).toISOString(),
+        'Loading dock', elenaId,
+        new Date(Date.now() - 1 * 86400000 + 2700000).toISOString(),
+        siteId,
+      ).lastInsertRowid;
+
+      let flaggedOne = false;
+      for (const vi of vItems) {
+        if (vi.type !== 'question') continue;
+        const meta = vi.meta ? JSON.parse(vi.meta) : {};
+        // Flag "machine guards" question as failed
+        if (!flaggedOne && vi.item_key && meta.answer_set_id === passFail.id) {
+          const lastQ = db.prepare('SELECT item_key FROM template_version_items WHERE version_id = ? AND type = ? ORDER BY sort_order DESC LIMIT 1')
+            .get(walkthrough.verId, 'question');
+          if (lastQ && vi.item_key === lastQ.item_key) {
+            // not this one — flag the machine guards question
+          }
+        }
+        // Flag the question about machine guards
+        if (vi.item_key && !flaggedOne) {
+          const label = db.prepare('SELECT label FROM template_version_items WHERE version_id = ? AND item_key = ?').get(walkthrough.verId, vi.item_key);
+          if (label?.label?.includes('machine guard')) {
+            iiIns.run(ins2Id, vi.item_key, 'question', failOpt?.id, null, 1, 1, 'Guard missing on grinder #4 — reported as incident');
+            flaggedOne = true;
+            continue;
+          }
+        }
+        const optId = meta.answer_set_id === passFail.id ? passOpt?.id : yesOpt?.id;
+        iiIns.run(ins2Id, vi.item_key, 'question', optId, null, 0, 0, null);
+      }
+
+      // Inspection 3 — in progress (not yet completed)
+      insIns.run(
+        orgId, walkthrough.id, walkthrough.verId,
+        'INS-2026-0003', 'Weekly Safety Walkthrough — Paint Booth Area',
+        'in_progress', new Date().toISOString(),
+        'Finishing line', marcusId, null, siteId,
+      );
+    }
+  })();
+
+  console.log('Template & inspection seed complete.');
+  for (const t of templateIds) console.log(`  ✓ ${t.name}`);
 })();
 
 console.log('Seed complete.');

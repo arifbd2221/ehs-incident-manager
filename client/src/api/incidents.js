@@ -38,6 +38,15 @@ export const voiceReport = (audioBlob) => {
   }).then(r => r.data);
 };
 
+export const videoReport = (videoBlob) => {
+  const form = new FormData();
+  form.append('video', videoBlob, 'recording.mp4');
+  return api.post('/incidents/video-report', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+  }).then(r => r.data);
+};
+
 export const addIncidentNote = (id, text) =>
   api.post(`/incidents/${id}/note`, { text }).then(r => r.data);
 

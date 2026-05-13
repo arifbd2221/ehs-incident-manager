@@ -1,8 +1,8 @@
 import { useReducer, useCallback, useRef, useState, useEffect } from 'react';
 import Icon from '../shared/Icon';
 import { useApp } from '../../context/AppContext';
-import { voiceReport, voiceExtract, createIncident } from '../../api/incidents';
-import useAudioRecorder from '../../hooks/useAudioRecorder';
+import { voiceExtract, videoReport, createIncident } from '../../api/incidents';
+import useVideoRecorder from '../../hooks/useVideoRecorder';
 import useSpeechRecognition from '../../hooks/useSpeechRecognition';
 import VoiceReviewCard from './VoiceReviewCard';
 
@@ -18,7 +18,8 @@ const EMPTY_EXTRACTION = {
 function reducer(state, action) {
   switch (action.type) {
     case 'START_LISTEN': return { ...state, phase: 'listening', error: null };
-    case 'START_RECORD': return { ...state, phase: 'recording', error: null };
+    case 'START_VIDEO_PREVIEW': return { ...state, phase: 'video-preview', error: null };
+    case 'START_VIDEO_RECORD': return { ...state, phase: 'video-recording', error: null };
     case 'START_PROCESS': return { ...state, phase: 'processing', error: null };
     case 'EXTRACT_OK': return { ...state, phase: 'review', extraction: action.payload, transcript: action.transcript || state.transcript, error: null };
     case 'EXTRACT_ERR': return { ...state, phase: 'idle', error: action.payload };
@@ -40,17 +41,20 @@ function formatTime(s) {
 export default function VoiceBottomSheet() {
   const { setVoiceSheetOpen, setVoiceSheetData, setWizardOpen, triggerRefresh } = useApp();
   const speech = useSpeechRecognition();
-  const recorder = useAudioRecorder();
+  const videoRecorder = useVideoRecorder();
   const [state, dispatch] = useReducer(reducer, initial);
   const [manualText, setManualText] = useState('');
-  const audioBlobRef = useRef(null);
-  const [mode, setMode] = useState(speech.speechSupported ? 'live' : 'record');
+  const videoBlobRef = useRef(null);
+  const videoRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [mode, setMode] = useState('live');
+  const [exampleOpen, setExampleOpen] = useState(false);
 
   const close = useCallback(() => {
     speech.stopMic();
-    if (recorder.recording) recorder.stop();
+    videoRecorder.cleanup();
     setVoiceSheetOpen(false);
-  }, [speech, recorder, setVoiceSheetOpen]);
+  }, [speech, videoRecorder, setVoiceSheetOpen]);
 
   // --- Live mode (SpeechRecognition) ---
   const handleStartLive = useCallback(() => {
@@ -73,28 +77,58 @@ export default function VoiceBottomSheet() {
     }
   }, []);
 
-  // --- Record mode (MediaRecorder → Gemini) ---
-  const handleStartRecording = useCallback(async () => {
-    dispatch({ type: 'START_RECORD' });
-    const blobPromise = recorder.start();
-    audioBlobRef.current = blobPromise;
-  }, [recorder]);
+  // --- Video mode ---
+  const handleOpenCamera = useCallback(async () => {
+    dispatch({ type: 'START_VIDEO_PREVIEW' });
+    const s = await videoRecorder.startPreview();
+    if (!s) dispatch({ type: 'EXTRACT_ERR', payload: videoRecorder.error || 'Could not access camera.' });
+  }, [videoRecorder]);
 
-  const handleStopAndProcess = useCallback(async () => {
-    recorder.stop();
+  const handleStartVideoRecording = useCallback(async () => {
+    dispatch({ type: 'START_VIDEO_RECORD' });
+    videoBlobRef.current = videoRecorder.start();
+  }, [videoRecorder]);
+
+  const handleStopVideoAndProcess = useCallback(async () => {
+    videoRecorder.stop();
     dispatch({ type: 'START_PROCESS' });
     try {
-      const blob = await audioBlobRef.current;
+      const blob = await videoBlobRef.current;
       if (!blob || blob.size === 0) {
-        dispatch({ type: 'EXTRACT_ERR', payload: 'No audio captured. Try again.' });
+        dispatch({ type: 'EXTRACT_ERR', payload: 'No video captured. Try again.' });
         return;
       }
-      const result = await voiceReport(blob);
+      videoRecorder.stopPreview();
+      const result = await videoReport(blob);
       dispatch({ type: 'EXTRACT_OK', payload: result, transcript: result.transcript });
     } catch {
-      dispatch({ type: 'MANUAL_REVIEW', transcript: '(Recording could not be transcribed — please fill in the details below)' });
+      videoRecorder.stopPreview();
+      dispatch({ type: 'MANUAL_REVIEW', transcript: '(Video could not be analyzed — please fill in the details below)' });
     }
-  }, [recorder]);
+  }, [videoRecorder]);
+
+  const handleVideoUpload = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    if (file.size > 25 * 1024 * 1024) {
+      dispatch({ type: 'EXTRACT_ERR', payload: 'Video must be under 25 MB.' });
+      return;
+    }
+    dispatch({ type: 'START_PROCESS' });
+    try {
+      const result = await videoReport(file);
+      dispatch({ type: 'EXTRACT_OK', payload: result, transcript: result.transcript });
+    } catch {
+      dispatch({ type: 'MANUAL_REVIEW', transcript: '(Video could not be analyzed — please fill in the details below)' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (videoRef.current && videoRecorder.stream) {
+      videoRef.current.srcObject = videoRecorder.stream;
+    }
+  }, [videoRecorder.stream]);
 
   // --- Shared ---
   const handleSubmit = useCallback(async (fields) => {
@@ -128,16 +162,18 @@ export default function VoiceBottomSheet() {
     dispatch({ type: 'BACK_TO_IDLE' });
     setManualText('');
     speech.resetTranscript();
-    audioBlobRef.current = null;
-  }, [speech]);
+    videoBlobRef.current = null;
+    videoRecorder.cleanup();
+  }, [speech, videoRecorder]);
 
   const currentTranscript = mode === 'live' ? speech.transcript : manualText;
-  const isActive = state.phase === 'listening' || state.phase === 'recording';
+  const isActive = state.phase === 'listening' || state.phase === 'video-recording';
 
   const phaseTitle = {
-    idle: 'Voice Report',
+    idle: mode === 'video' ? 'Video Report' : 'Voice Report',
     listening: 'Listening...',
-    recording: 'Recording...',
+    'video-preview': 'Video Report',
+    'video-recording': 'Recording Video...',
     processing: 'Processing...',
     review: 'Review & Complete',
     success: 'Report Created',
@@ -158,51 +194,110 @@ export default function VoiceBottomSheet() {
         {state.phase === 'idle' && (
           <div className="voice-sheet-body">
             <div className="voice-hint">
-              Tap the mic and describe the incident — mention <b>who</b>, <b>what</b>, <b>where</b>, and any <b>injuries</b>.
+              Tap the mic and describe the incident — mention <b>who</b>, <b>what</b>, <b>where</b>, <b>when</b>, and any <b>injuries</b>.
+            </div>
+
+            <button
+              className={`voice-example-toggle ${exampleOpen ? 'open' : ''}`}
+              onClick={() => setExampleOpen(o => !o)}
+              aria-expanded={exampleOpen}
+              type="button"
+            >
+              <Icon name="info" size={14} />
+              <span>See an example report</span>
+              <Icon name="chevDown" size={14} />
+            </button>
+            <div className={`voice-example-panel ${exampleOpen ? 'open' : ''}`}>
+              <div className="voice-example-inner">
+                <p className="voice-example-text">
+                  "This morning around 9:15 at the Cleveland Plant, a forklift
+                  struck a shelving unit in aisle 4 while reversing. The operator,
+                  Marcus Rivera, was uninjured but a nearby worker, Priya Singh,
+                  was hit by falling boxes and has a bruised left shoulder. First
+                  aid was given on site."
+                </p>
+                <div className="voice-example-covers">
+                  <span className="voice-example-tag">Where</span>
+                  <span className="voice-example-tag">When</span>
+                  <span className="voice-example-tag">What happened</span>
+                  <span className="voice-example-tag">Who</span>
+                  <span className="voice-example-tag">Injuries</span>
+                  <span className="voice-example-tag">Actions taken</span>
+                </div>
+              </div>
             </div>
 
             {/* Mode toggle */}
-            {speech.speechSupported && (
-              <div className="voice-mode-toggle">
-                <button className={`voice-mode-btn ${mode === 'live' ? 'active' : ''}`} onClick={() => setMode('live')}>
-                  Live transcription
-                </button>
-                <button className={`voice-mode-btn ${mode === 'record' ? 'active' : ''}`} onClick={() => setMode('record')}>
-                  Record & send
-                </button>
+            <div className="voice-mode-toggle">
+              <button className={`voice-mode-btn ${mode === 'live' ? 'active' : ''}`} onClick={() => setMode('live')}>
+                <Icon name="mic" size={14} /> Voice
+              </button>
+              <button className={`voice-mode-btn ${mode === 'video' ? 'active' : ''}`} onClick={() => setMode('video')}>
+                <Icon name="videocam" size={14} /> Video
+              </button>
+            </div>
+
+            {mode === 'live' && (
+              <>
+                <div className="voice-mic-area">
+                  <button
+                    className="voice-mic-btn"
+                    onClick={handleStartLive}
+                    aria-label="Start"
+                  >
+                    <Icon name="mic" size={28} />
+                  </button>
+                  <div className="voice-listening-label">Tap to start speaking</div>
+                </div>
+
+                <div className="voice-or-divider"><span>or type it</span></div>
+
+                <textarea
+                  className="textarea voice-transcript"
+                  placeholder="Type the incident description here..."
+                  value={manualText}
+                  onChange={e => setManualText(e.target.value)}
+                  rows={3}
+                />
+              </>
+            )}
+
+            {mode === 'video' && (
+              <div className="voice-video-area">
+                <div className="voice-video-buttons">
+                  <button className="voice-video-record-btn" onClick={handleOpenCamera}>
+                    <Icon name="videocam" size={24} />
+                    <span>Record video</span>
+                  </button>
+                  <button className="voice-upload-btn" onClick={() => fileInputRef.current?.click()}>
+                    <Icon name="upload" size={24} />
+                    <span>Upload video</span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/mp4,video/webm,video/quicktime,video/3gpp"
+                    style={{ display: 'none' }}
+                    onChange={handleVideoUpload}
+                  />
+                </div>
+                <div className="voice-video-hint">
+                  Film the scene while narrating what happened — AI analyzes both audio and visuals.
+                </div>
               </div>
             )}
 
-            <div className="voice-mic-area">
-              <button
-                className="voice-mic-btn"
-                onClick={mode === 'live' ? handleStartLive : handleStartRecording}
-                aria-label="Start"
-              >
-                <Icon name="mic" size={28} />
-              </button>
-              <div className="voice-listening-label">Tap to start {mode === 'live' ? 'speaking' : 'recording'}</div>
-            </div>
-
-            <div className="voice-or-divider"><span>or type it</span></div>
-
-            <textarea
-              className="textarea voice-transcript"
-              placeholder="Type the incident description here..."
-              value={manualText}
-              onChange={e => setManualText(e.target.value)}
-              rows={3}
-            />
-
             {state.error && <div className="voice-error"><Icon name="warning" size={14} /> {state.error}</div>}
             {speech.micError && <div className="voice-error"><Icon name="warning" size={14} /> {speech.micError}</div>}
-            {recorder.error && <div className="voice-error"><Icon name="warning" size={14} /> {recorder.error}</div>}
+            {videoRecorder.error && <div className="voice-error"><Icon name="warning" size={14} /> {videoRecorder.error}</div>}
 
             <div className="voice-sheet-footer">
               <button className="btn btn-secondary" onClick={close}>Cancel</button>
-              <button className="btn btn-primary" onClick={() => handleExtractFromText(manualText)} disabled={!manualText.trim()}>
-                Extract fields
-              </button>
+              {mode !== 'video' && (
+                <button className="btn btn-primary" onClick={() => handleExtractFromText(manualText)} disabled={!manualText.trim()}>
+                  Extract fields
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -210,8 +305,9 @@ export default function VoiceBottomSheet() {
         {/* Listening — live SpeechRecognition */}
         {state.phase === 'listening' && (
           <div className="voice-sheet-body">
-            <div className="voice-hint">
-              Speak naturally. Your words appear below in real-time.
+            <div className="voice-reminder-bar">
+              <Icon name="info" size={12} />
+              <span>Remember: <b>who</b>, <b>what</b>, <b>where</b>, <b>when</b>, and any <b>injuries</b></span>
             </div>
 
             <div className="voice-mic-area">
@@ -251,23 +347,40 @@ export default function VoiceBottomSheet() {
           </div>
         )}
 
-        {/* Recording — MediaRecorder */}
-        {state.phase === 'recording' && (
+        {/* Video preview — camera viewfinder before recording */}
+        {state.phase === 'video-preview' && (
           <div className="voice-sheet-body">
-            <div className="voice-hint">
-              Speak naturally. Tap stop when done — audio will be sent for transcription.
+            <div className="voice-video-viewfinder">
+              <video ref={videoRef} autoPlay playsInline muted className="voice-video-preview" />
             </div>
-
-            <div className="voice-mic-area">
-              <button className="voice-mic-btn is-on" onClick={handleStopAndProcess} aria-label="Stop recording">
-                <Icon name="pulse" size={28} />
-                <span className="voice-mic-ring" />
+            <div className="voice-sheet-footer">
+              <button className="btn btn-secondary" onClick={() => { videoRecorder.stopPreview(); dispatch({ type: 'BACK_TO_IDLE' }); }}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleStartVideoRecording}>
+                <Icon name="videocam" size={16} /> Start Recording
               </button>
-              <div className="voice-rec-timer">{formatTime(recorder.duration)}</div>
-              <div className="voice-listening-label">Recording — tap to stop</div>
             </div>
+          </div>
+        )}
 
-            {recorder.error && <div className="voice-error"><Icon name="warning" size={14} /> {recorder.error}</div>}
+        {/* Video recording — viewfinder with rec indicator */}
+        {state.phase === 'video-recording' && (
+          <div className="voice-sheet-body">
+            <div className="voice-reminder-bar">
+              <Icon name="info" size={12} />
+              <span>Narrate what happened — AI analyzes <b>audio</b> and <b>visuals</b></span>
+            </div>
+            <div className="voice-video-viewfinder">
+              <video ref={videoRef} autoPlay playsInline muted className="voice-video-preview" />
+              <div className="voice-video-rec-indicator">
+                <span className="voice-video-rec-dot" />
+                <span>{formatTime(videoRecorder.duration)}</span>
+              </div>
+            </div>
+            <div className="voice-sheet-footer">
+              <button className="btn btn-primary" onClick={handleStopVideoAndProcess} style={{ flex: 1 }}>
+                Stop & Analyze
+              </button>
+            </div>
           </div>
         )}
 
