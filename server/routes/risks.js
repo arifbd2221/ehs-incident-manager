@@ -66,6 +66,13 @@ router.get('/', (req, res) => {
     LIMIT ? OFFSET ?
   `).all(...params, Number(limit), offset);
 
+  // Stats must respect the site filter — otherwise the count tiles on the
+  // risks page stay at org-wide totals when the user picks a single site,
+  // which makes the page look broken ("filter shows 3 rows but the
+  // critical-high tile says 7").
+  const statsWhere = ['org_id = ?'];
+  const statsParams = [org_id];
+  if (site_id) { statsWhere.push('site_id = ?'); statsParams.push(Number(site_id)); }
   const stats = db.prepare(`
     SELECT
       COUNT(*) FILTER (WHERE status != 'Closed') AS active,
@@ -77,8 +84,8 @@ router.get('/', (req, res) => {
       COUNT(*) FILTER (WHERE status = 'Closed') AS closed,
       COUNT(*) FILTER (WHERE inherent_risk_level IN ('crit','high') AND status != 'Closed') AS critical_high,
       COUNT(*) FILTER (WHERE review_date IS NOT NULL AND review_date <= date('now','+30 days') AND status != 'Closed') AS review_due
-    FROM risks WHERE org_id = ?
-  `).get(org_id);
+    FROM risks WHERE ${statsWhere.join(' AND ')}
+  `).get(...statsParams);
 
   res.json({ risks, total, page: Number(page), limit: Number(limit), stats });
 });
@@ -86,22 +93,31 @@ router.get('/', (req, res) => {
 // ── Matrix heatmap data ──────────────────────────────────────────────
 router.get('/matrix', (req, res) => {
   const { org_id } = req.user;
+  const { site_id } = req.query;
+
+  // Same site filter as the list endpoint — the matrix view is just a
+  // different rendering of the same underlying rows, so the two views
+  // must agree when a site is selected. Without this, the matrix shows
+  // org-wide counts that disagree with the filtered list.
+  const where = ["org_id = ?", "status != 'Closed'"];
+  const params = [org_id];
+  if (site_id) { where.push('site_id = ?'); params.push(Number(site_id)); }
 
   const inherent = db.prepare(`
     SELECT inherent_likelihood AS likelihood, inherent_consequence AS consequence,
       COUNT(*) AS count
     FROM risks
-    WHERE org_id = ? AND status != 'Closed' AND inherent_likelihood IS NOT NULL
+    WHERE ${where.join(' AND ')} AND inherent_likelihood IS NOT NULL
     GROUP BY inherent_likelihood, inherent_consequence
-  `).all(org_id);
+  `).all(...params);
 
   const residual = db.prepare(`
     SELECT residual_likelihood AS likelihood, residual_consequence AS consequence,
       COUNT(*) AS count
     FROM risks
-    WHERE org_id = ? AND status != 'Closed' AND residual_likelihood IS NOT NULL
+    WHERE ${where.join(' AND ')} AND residual_likelihood IS NOT NULL
     GROUP BY residual_likelihood, residual_consequence
-  `).all(org_id);
+  `).all(...params);
 
   const matrixRef = db.prepare('SELECT * FROM risk_matrix_cells').all();
 
