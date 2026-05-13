@@ -47,6 +47,16 @@ export const videoReport = (videoBlob) => {
   }).then(r => r.data);
 };
 
+export const imageReport = (files, caption) => {
+  const form = new FormData();
+  files.forEach(f => form.append('images', f));
+  if (caption) form.append('caption', caption);
+  return api.post('/incidents/image-report', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 90000,
+  }).then(r => r.data);
+};
+
 export const addIncidentNote = (id, text) =>
   api.post(`/incidents/${id}/note`, { text }).then(r => r.data);
 

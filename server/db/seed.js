@@ -149,6 +149,14 @@ db.transaction(() => {
   const mehtaId = ins.run(orgId, clevelandId, 'mehta@sdsmanager.com', pw, 'Dr. Mehta', 'DM', 'ehs_officer', 'Occupational Health', 'Occupational Health Physician').lastInsertRowid;
   const wendyId = ins.run(orgId, clevelandId, 'wendy@sdsmanager.com', pw, 'Wendy Webb', 'WW', 'worker', 'Production', 'Press Operator').lastInsertRowid;
 
+  const profileUpd = db.prepare('UPDATE users SET address = ?, phone = ?, dob = ?, gender = ?, hire_date = ? WHERE id = ?');
+  profileUpd.run('1420 Lakeside Ave E, Cleveland, OH 44114', '+1-216-555-0101', '1985-03-14', 'female', '2018-06-01', priyaId);
+  profileUpd.run('2750 Euclid Ave, Cleveland, OH 44115', '+1-216-555-0102', '1990-11-22', 'female', '2020-02-15', elenaId);
+  profileUpd.run('880 E 9th St, Cleveland, OH 44199', '+1-216-555-0103', '1988-07-09', 'male', '2019-09-10', marcusId);
+  profileUpd.run('45 Ecclesall Road, Sheffield S11 8PR', '+44-114-555-0201', '1982-01-30', 'male', '2017-04-20', jamesId);
+  profileUpd.run('1100 Carnegie Ave, Cleveland, OH 44115', '+1-216-555-0104', '1975-05-18', 'male', '2016-01-05', mehtaId);
+  profileUpd.run('3200 W 25th St, Cleveland, OH 44109', '+1-216-555-0105', '1995-09-03', 'female', '2022-08-12', wendyId);
+
   // ----- Assets — Press 4 is the trending hotspot (3 incidents) -----
   const assetIns = db.prepare(
     `INSERT INTO assets (asset_number, org_id, site_id, name, asset_type, location_description, serial_number)
@@ -518,6 +526,8 @@ db.transaction(() => {
   const acmeFounderId = db.prepare(
     'INSERT INTO users (org_id, site_id, email, password_hash, name, initials, role, department, job_title) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)'
   ).run(acmeOrgId, 'acme@sdsmanager.com', acmePw, 'Aisha Carter', 'AC', 'admin', 'Leadership', 'Founder').lastInsertRowid;
+  db.prepare('UPDATE users SET address = ?, phone = ?, dob = ?, gender = ?, hire_date = ? WHERE id = ?')
+    .run('500 Commerce St, Dallas, TX 75201', '+1-214-555-0301', '1987-12-05', 'female', '2021-03-01', acmeFounderId);
 
   writeActivity({
     org_id: acmeOrgId,
@@ -573,6 +583,12 @@ db.transaction(() => {
   const tomId = auIns.run(auOrgId, sydneyId, 'tom@sdsmanager.com', auPw, 'Tom Nguyen', 'TN', 'ehs_manager', 'WHS', 'WHS Manager').lastInsertRowid;
   const kateId = auIns.run(auOrgId, sydneyId, 'kate@sdsmanager.com', auPw, 'Kate O\'Brien', 'KO', 'supervisor', 'Production', 'Production Supervisor').lastInsertRowid;
   const benId = auIns.run(auOrgId, penrithId, 'ben@sdsmanager.com', auPw, 'Ben Walker', 'BW', 'worker', 'Warehouse', 'Plant Operator').lastInsertRowid;
+
+  const auProfileUpd = db.prepare('UPDATE users SET address = ?, phone = ?, dob = ?, gender = ?, hire_date = ? WHERE id = ?');
+  auProfileUpd.run('12 Harbour St, Sydney NSW 2000', '+61-2-5550-0401', '1980-08-21', 'female', '2017-11-06', sarahId);
+  auProfileUpd.run('88 George St, Sydney NSW 2000', '+61-2-5550-0402', '1991-04-15', 'male', '2020-07-13', tomId);
+  auProfileUpd.run('5 Pitt St, Sydney NSW 2000', '+61-2-5550-0403', '1993-10-28', 'female', '2021-01-18', kateId);
+  auProfileUpd.run('21 High St, Penrith NSW 2750', '+61-2-5550-0404', '1997-02-11', 'male', '2023-04-02', benId);
 
   // ----- Assets — Australian facilities -----
   const auAssetIns = db.prepare(

@@ -5,7 +5,7 @@ import { useApp } from '../../context/AppContext';
 import VoiceBottomSheet from './VoiceBottomSheet';
 import '../../styles/voice.css';
 
-const FAB_ICONS = ['mic', 'videocam'];
+const FAB_ICONS = ['mic', 'videocam', 'photo'];
 
 export default function GlobalVoiceFab() {
   const { voiceSheetOpen, setVoiceSheetOpen, wizardOpen } = useApp();
@@ -26,7 +26,7 @@ export default function GlobalVoiceFab() {
           className="voice-fab"
           onClick={() => setVoiceSheetOpen(true)}
           aria-label="Report incident"
-          title="AI Report — voice or video"
+          title="AI Report — voice, video, or photo"
         >
           <span className="voice-fab-icon-wrap">
             {FAB_ICONS.map((name, i) => (

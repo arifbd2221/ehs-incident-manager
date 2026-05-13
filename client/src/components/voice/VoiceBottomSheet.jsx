@@ -1,7 +1,7 @@
 import { useReducer, useCallback, useRef, useState, useEffect } from 'react';
 import Icon from '../shared/Icon';
 import { useApp } from '../../context/AppContext';
-import { voiceExtract, videoReport, createIncident } from '../../api/incidents';
+import { voiceExtract, videoReport, imageReport, createIncident } from '../../api/incidents';
 import useVideoRecorder from '../../hooks/useVideoRecorder';
 import useSpeechRecognition from '../../hooks/useSpeechRecognition';
 import VoiceReviewCard from './VoiceReviewCard';
@@ -47,6 +47,9 @@ export default function VoiceBottomSheet() {
   const videoBlobRef = useRef(null);
   const videoRef = useRef(null);
   const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const [photoFiles, setPhotoFiles] = useState([]);
+  const [photoCaption, setPhotoCaption] = useState('');
   const [mode, setMode] = useState('live');
   const [exampleOpen, setExampleOpen] = useState(false);
 
@@ -124,6 +127,33 @@ export default function VoiceBottomSheet() {
     }
   }, []);
 
+  const handleAddPhotos = useCallback((e) => {
+    const incoming = Array.from(e.target.files || []);
+    e.target.value = '';
+    const combined = [...photoFiles, ...incoming].slice(0, 5);
+    const oversized = combined.find(f => f.size > 10 * 1024 * 1024);
+    if (oversized) {
+      dispatch({ type: 'EXTRACT_ERR', payload: 'Each image must be under 10 MB.' });
+      return;
+    }
+    setPhotoFiles(combined);
+  }, [photoFiles]);
+
+  const handleRemovePhoto = useCallback((idx) => {
+    setPhotoFiles(prev => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const handleAnalyzePhotos = useCallback(async () => {
+    if (photoFiles.length === 0) return;
+    dispatch({ type: 'START_PROCESS' });
+    try {
+      const result = await imageReport(photoFiles, photoCaption);
+      dispatch({ type: 'EXTRACT_OK', payload: result, transcript: result.transcript });
+    } catch {
+      dispatch({ type: 'MANUAL_REVIEW', transcript: photoCaption || '(Images could not be analyzed — please fill in the details below)' });
+    }
+  }, [photoFiles, photoCaption]);
+
   useEffect(() => {
     if (videoRef.current && videoRecorder.stream) {
       videoRef.current.srcObject = videoRecorder.stream;
@@ -161,6 +191,8 @@ export default function VoiceBottomSheet() {
   const handleRetry = useCallback(() => {
     dispatch({ type: 'BACK_TO_IDLE' });
     setManualText('');
+    setPhotoFiles([]);
+    setPhotoCaption('');
     speech.resetTranscript();
     videoBlobRef.current = null;
     videoRecorder.cleanup();
@@ -170,7 +202,7 @@ export default function VoiceBottomSheet() {
   const isActive = state.phase === 'listening' || state.phase === 'video-recording';
 
   const phaseTitle = {
-    idle: mode === 'video' ? 'Video Report' : 'Voice Report',
+    idle: mode === 'photo' ? 'Photo Report' : mode === 'video' ? 'Video Report' : 'Voice Report',
     listening: 'Listening...',
     'video-preview': 'Video Report',
     'video-recording': 'Recording Video...',
@@ -235,6 +267,9 @@ export default function VoiceBottomSheet() {
               <button className={`voice-mode-btn ${mode === 'video' ? 'active' : ''}`} onClick={() => setMode('video')}>
                 <Icon name="videocam" size={14} /> Video
               </button>
+              <button className={`voice-mode-btn ${mode === 'photo' ? 'active' : ''}`} onClick={() => setMode('photo')}>
+                <Icon name="photo" size={14} /> Photo
+              </button>
             </div>
 
             {mode === 'live' && (
@@ -287,13 +322,57 @@ export default function VoiceBottomSheet() {
               </div>
             )}
 
+            {mode === 'photo' && (
+              <div className="voice-photo-area">
+                <div
+                  className="voice-photo-dropzone"
+                  onClick={() => imageInputRef.current?.click()}
+                >
+                  <Icon name="photo" size={28} />
+                  <span>Upload up to 5 photos</span>
+                  <span className="voice-photo-dropzone-sub">JPEG, PNG, or WebP · 10 MB each</span>
+                </div>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/heic"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={handleAddPhotos}
+                />
+                {photoFiles.length > 0 && (
+                  <div className="voice-photo-grid">
+                    {photoFiles.map((f, i) => (
+                      <div key={i} className="voice-photo-thumb">
+                        <img src={URL.createObjectURL(f)} alt={f.name} />
+                        <button className="voice-photo-remove" onClick={() => handleRemovePhoto(i)} aria-label="Remove">
+                          <Icon name="close" size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <textarea
+                  className="textarea voice-transcript"
+                  placeholder="Add context (optional) — e.g. 'Forklift collision in aisle 4, worker reported shoulder pain'"
+                  value={photoCaption}
+                  onChange={e => setPhotoCaption(e.target.value)}
+                  rows={2}
+                />
+              </div>
+            )}
+
             {state.error && <div className="voice-error"><Icon name="warning" size={14} /> {state.error}</div>}
             {speech.micError && <div className="voice-error"><Icon name="warning" size={14} /> {speech.micError}</div>}
             {videoRecorder.error && <div className="voice-error"><Icon name="warning" size={14} /> {videoRecorder.error}</div>}
 
             <div className="voice-sheet-footer">
               <button className="btn btn-secondary" onClick={close}>Cancel</button>
-              {mode !== 'video' && (
+              {mode === 'photo' ? (
+                <button className="btn btn-primary" onClick={handleAnalyzePhotos} disabled={photoFiles.length === 0}>
+                  Analyze Photos
+                </button>
+              ) : mode !== 'video' && (
                 <button className="btn btn-primary" onClick={() => handleExtractFromText(manualText)} disabled={!manualText.trim()}>
                   Extract fields
                 </button>
