@@ -9,8 +9,18 @@ import multer from 'multer';
 import { extractFromTranscript } from '../services/voice_extract.js';
 import { extractFromTranscriptGemini } from '../services/gemini_extract.js';
 import { transcribeAudio } from '../services/gemini_transcribe.js';
+import { analyzeVideo } from '../services/gemini_video.js';
 
 const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+const videoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['video/mp4', 'video/webm', 'video/quicktime', 'video/3gpp'];
+    if (allowed.includes(file.mimetype)) return cb(null, true);
+    cb(new Error(`Unsupported video type: ${file.mimetype}. Use MP4, WebM, or MOV.`));
+  },
+});
 import { injuryTypeForOsha300, descriptionForOsha300 } from '../services/osha_300_helpers.js';
 import { createCapaRow } from './capas.js';
 import { notifyUser, notifyElevatedAtSite, notifyRole } from '../services/notifications.js';
@@ -975,6 +985,49 @@ router.post('/voice-report', audioUpload.single('audio'), async (req, res, next)
     if (err.message?.includes('GoogleGenerativeAI') || err.message?.includes('fetch failed')) {
       console.error('[voice-report] Gemini error:', err.message);
       return res.status(502).json({ error: 'Voice service unavailable. Try again later.' });
+    }
+    next(err);
+  }
+});
+
+router.post('/video-report', videoUpload.single('video'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No video file uploaded.' });
+
+    const narrative = await analyzeVideo(req.file.buffer, req.file.mimetype);
+
+    const extractArgs = { transcript: narrative, orgId: req.user.org_id, userId: req.user.id };
+    const result = process.env.GEMINI_API_KEY
+      ? await extractFromTranscriptGemini(extractArgs)
+      : await extractFromTranscript(extractArgs);
+
+    result.transcript = narrative;
+
+    db.prepare(`
+      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id, metadata)
+      VALUES (?, 'system', NULL, 'voice_extracted', ?, ?, ?)
+    `).run(
+      req.user.org_id,
+      `video analyzed + extracted via Gemini (${result.transcript_hash.slice(0, 8)}…)`,
+      req.user.id,
+      JSON.stringify({
+        extraction_id: result.extraction_id,
+        transcript_hash: result.transcript_hash,
+        extracted_type: result.extracted_fields.type,
+        missing_required: result.missing_required,
+        engine: 'gemini-video',
+      }),
+    );
+
+    res.json(result);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err.status === 429 || err.message?.includes('429') || err.message?.includes('quota')) {
+      return res.status(429).json({ error: 'API quota exceeded. Please wait a moment and try again.' });
+    }
+    if (err.message?.includes('GoogleGenerativeAI') || err.message?.includes('fetch failed')) {
+      console.error('[video-report] Gemini error:', err.message);
+      return res.status(502).json({ error: 'Video analysis service unavailable. Try again later.' });
     }
     next(err);
   }
