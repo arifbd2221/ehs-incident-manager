@@ -251,6 +251,16 @@ export default function InvestigationDetail() {
       showToast(err.response?.data?.error || 'Failed to reassign.');
     }
   };
+  const handleUnassign = async () => {
+    if (!window.confirm('Remove the lead investigator? Their team membership stays — only the lead role is cleared.')) return;
+    try {
+      await updateInvestigation(inv.id, { lead_investigator: null });
+      showToast('Lead unassigned.');
+      load();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to unassign.');
+    }
+  };
   const handleAddWhy = async () => {
     if (!newWhy.question.trim() || !newWhy.answer.trim()) return;
     try {
@@ -298,20 +308,28 @@ export default function InvestigationDetail() {
               </span>
               <span className="invd-lead">
                 Lead: <b>{inv.lead_name || 'Unassigned'}</b>
-                {canEdit && inv.status !== 'closed' && (
-                  <button
-                    className="invd-lead-reassign"
-                    onClick={() => setModal('reassign')}
-                    title={inv.lead_investigator ? 'Reassign lead investigator' : 'Assign a lead investigator'}
-                  >
-                    <Icon name="edit" size={11}/>
-                    {inv.lead_investigator ? 'Reassign' : 'Assign'}
-                  </button>
-                )}
               </span>
             </div>
           </div>
           <div className="invd-header-actions">
+            {inv.status !== 'closed' && canEdit && (
+              <>
+                {!inv.lead_investigator ? (
+                  <button className="idet-act-btn" onClick={() => setModal('reassign')}>
+                    <Icon name="person" size={14}/>Assign lead
+                  </button>
+                ) : (
+                  <>
+                    <button className="idet-act-btn" onClick={() => setModal('reassign')}>
+                      <Icon name="edit" size={14}/>Change lead
+                    </button>
+                    <button className="idet-act-btn" onClick={handleUnassign}>
+                      <Icon name="close" size={14}/>Unassign
+                    </button>
+                  </>
+                )}
+              </>
+            )}
             {inv.status !== 'closed' && (
               <>
                 <button className="idet-act-btn" onClick={() => setModal('close')}>Close — no CAPA</button>

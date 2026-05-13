@@ -156,7 +156,7 @@ router.patch('/:id', (req, res) => {
 
   db.prepare(`UPDATE investigations SET ${sets.join(', ')} WHERE id = ?`).run(...params);
 
-  if (leadChanged && newLeadId) {
+  if (leadChanged) {
     // Demote any prior 'lead' team rows to 'member' so there is exactly one
     // lead at a time. The canonical lead is investigations.lead_investigator
     // — the team-role column is informational, but keeping it in sync avoids
@@ -167,41 +167,57 @@ router.patch('/:id', (req, res) => {
         WHERE investigation_id = ? AND user_id = ? AND role = 'lead'
       `).run(inv.id, inv.lead_investigator);
     }
-    // investigation_team has no UNIQUE constraint on (investigation_id,
-    // user_id), so we do an existence check rather than INSERT OR IGNORE
-    // to avoid duplicate rows. If the new lead is already a member, bump
-    // their role to 'lead'; otherwise insert a fresh team row.
-    const existingRow = db.prepare(
-      'SELECT id FROM investigation_team WHERE investigation_id = ? AND user_id = ?'
-    ).get(inv.id, newLeadId);
-    if (existingRow) {
-      db.prepare('UPDATE investigation_team SET role = ? WHERE id = ?').run('lead', existingRow.id);
-    } else {
-      db.prepare(
-        'INSERT INTO investigation_team (investigation_id, user_id, role) VALUES (?, ?, ?)'
-      ).run(inv.id, newLeadId, 'lead');
-    }
 
     const oldLead = inv.lead_investigator
       ? db.prepare('SELECT name, initials FROM users WHERE id = ?').get(inv.lead_investigator)
       : null;
-    const newLead = db.prepare('SELECT name, initials FROM users WHERE id = ?').get(newLeadId);
-    db.prepare(`
-      INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
-      VALUES (?, 'investigation', ?, 'lead_reassigned', ?, ?)
-    `).run(
-      inv.org_id, inv.id,
-      `reassigned lead from ${oldLead?.initials || '—'} to ${newLead?.initials || '?'}`,
-      req.user.id,
-    );
 
-    notifyUser({
-      orgId: inv.org_id, userId: newLeadId, type: 'incident_escalated', incidentId: inv.incident_id,
-      title: `Investigation reassigned to you — ${inv.investigation_number}`,
-      body: `You are now lead investigator on ${inv.investigation_number}.`,
-      severity: 'warn',
-      actionUrl: `/investigations/${inv.id}`,
-    });
+    if (newLeadId) {
+      // Assign/reassign path — upsert the new lead's team row + notify them.
+      // investigation_team has no UNIQUE(investigation_id, user_id), so an
+      // existence check is used rather than INSERT OR IGNORE.
+      const existingRow = db.prepare(
+        'SELECT id FROM investigation_team WHERE investigation_id = ? AND user_id = ?'
+      ).get(inv.id, newLeadId);
+      if (existingRow) {
+        db.prepare('UPDATE investigation_team SET role = ? WHERE id = ?').run('lead', existingRow.id);
+      } else {
+        db.prepare(
+          'INSERT INTO investigation_team (investigation_id, user_id, role) VALUES (?, ?, ?)'
+        ).run(inv.id, newLeadId, 'lead');
+      }
+
+      const newLead = db.prepare('SELECT name, initials FROM users WHERE id = ?').get(newLeadId);
+      const action = inv.lead_investigator ? 'lead_reassigned' : 'lead_assigned';
+      const desc = inv.lead_investigator
+        ? `reassigned lead from ${oldLead?.initials || '—'} to ${newLead?.initials || '?'}`
+        : `assigned ${newLead?.initials || '?'} as lead investigator`;
+      db.prepare(`
+        INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+        VALUES (?, 'investigation', ?, ?, ?, ?)
+      `).run(inv.org_id, inv.id, action, desc, req.user.id);
+
+      notifyUser({
+        orgId: inv.org_id, userId: newLeadId, type: 'incident_escalated', incidentId: inv.incident_id,
+        title: inv.lead_investigator
+          ? `Investigation reassigned to you — ${inv.investigation_number}`
+          : `Investigation assigned to you — ${inv.investigation_number}`,
+        body: `You are now lead investigator on ${inv.investigation_number}.`,
+        severity: 'warn',
+        actionUrl: `/investigations/${inv.id}`,
+      });
+    } else if (inv.lead_investigator) {
+      // Unassign path — column already set to NULL by the UPDATE above; just
+      // record the audit row. No notify (no recipient).
+      db.prepare(`
+        INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id)
+        VALUES (?, 'investigation', ?, 'lead_unassigned', ?, ?)
+      `).run(
+        inv.org_id, inv.id,
+        `unassigned ${oldLead?.initials || '—'} as lead investigator`,
+        req.user.id,
+      );
+    }
   }
 
   if (req.body.status === 'progress' && inv.status === 'pending') {
