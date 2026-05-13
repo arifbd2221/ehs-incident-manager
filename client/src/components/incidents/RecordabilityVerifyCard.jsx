@@ -308,7 +308,6 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
               <div className="rv-gate">
                 <div className="rv-gate-label">Exception that applies</div>
                 <ComboBox
-                  className="rv-select"
                   value={exceptionId}
                   onChange={setExceptionId}
                   placeholder="— select —"
@@ -339,7 +338,6 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
               <div className="rv-gate">
                 <div className="rv-gate-label"><span className="rv-gate-num">4</span>Recording criterion met</div>
                 <ComboBox
-                  className="rv-select"
                   value={criterionId}
                   onChange={setCriterionId}
                   placeholder="— none / first aid only —"
@@ -352,7 +350,6 @@ export default function RecordabilityVerifyCard({ incident, onVerified }) {
               <div className="rv-gate">
                 <div className="rv-gate-label"><span className="rv-gate-num">5</span>Treatment <span className="rv-optional">(optional)</span></div>
                 <ComboBox
-                  className="rv-select"
                   value={treatmentChoice}
                   onChange={setTreatmentChoice}
                   placeholder="— select if first aid —"

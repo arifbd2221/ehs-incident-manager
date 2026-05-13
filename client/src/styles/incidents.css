@@ -2377,21 +2377,6 @@
   background: var(--sds-brand-primary-tint);
   color: var(--sds-brand-primary);
 }
-.rv-select {
-  padding: 9px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--sds-border);
-  background: #fff;
-  font-size: 12px;
-  color: var(--sds-fg-heading);
-  outline: none;
-  font-family: inherit;
-  transition: all 150ms;
-}
-.rv-select:focus {
-  border-color: var(--sds-brand-primary);
-  box-shadow: 0 0 0 3px rgba(98, 109, 249, 0.1);
-}
 .rv-checkbox-row {
   margin-top: 8px;
   font-size: 12px;
