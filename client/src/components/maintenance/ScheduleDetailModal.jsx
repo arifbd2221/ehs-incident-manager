@@ -9,6 +9,7 @@ import Icon from '../shared/Icon';
 import api from '../../api/client';
 import { getSchedule } from '../../api/maintenance';
 import { formatDateShort, timeAgo, dueLabel } from '../../utils/time';
+import { useAlert } from '../shared/Dialog';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
@@ -50,6 +51,7 @@ export default function ScheduleDetailModal({ schedule: initial, user, onClose, 
   const canEdit = ELEVATED.has(user?.role);
   const [schedule, setSchedule] = useState(initial);
   const [loading, setLoading] = useState(false);
+  const alertDialog = useAlert();
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +77,13 @@ export default function ScheduleDetailModal({ schedule: initial, user, onClose, 
       link.href = url; link.download = a.filename;
       document.body.appendChild(link); link.click(); link.remove();
       URL.revokeObjectURL(url);
-    } catch { alert('Download failed'); }
+    } catch {
+      await alertDialog({
+        title: 'Download failed',
+        body: 'Could not download the attachment. Please try again.',
+        tone: 'error',
+      });
+    }
   };
 
   const goToAsset = () => { onClose(); navigate(`/assets/${schedule.asset_id}`); };

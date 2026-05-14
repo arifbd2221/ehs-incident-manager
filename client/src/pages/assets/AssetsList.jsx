@@ -11,6 +11,7 @@ import { listAssetCategories, createAssetCategory, listCategoryFields } from '..
 import Icon from '../../components/shared/Icon';
 import AssetTypesModal from '../../components/modals/AssetTypesModal';
 import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
+import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import '../../styles/assets.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -38,6 +39,8 @@ export default function AssetsList() {
   const { user } = useAuth();
   const { refreshKey, activeSiteId } = useApp();
   const canEdit = ELEVATED.has(user?.role);
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
 
   const [assets, setAssets] = useState([]);
   const [sites, setSites] = useState([]);
@@ -265,12 +268,22 @@ export default function AssetsList() {
 
   const handleDelete = async (asset, e) => {
     e?.stopPropagation();
-    if (!window.confirm(`Archive "${asset.name}"? It will be hidden from active views.`)) return;
+    const ok = await confirmDialog({
+      title: `Archive asset "${asset.name}"?`,
+      body: 'The asset will be hidden from active views but retained for audit history. You can restore it later from the Archived tab.',
+      confirmLabel: 'Archive asset',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteAsset(asset.id);
       refreshAssets();
     } catch (err) {
-      alert(err.response?.data?.error || 'Archive failed');
+      await alertDialog({
+        title: "Couldn't archive asset",
+        body: err.response?.data?.error || 'Archive failed',
+        tone: 'error',
+      });
     }
   };
 
@@ -280,7 +293,11 @@ export default function AssetsList() {
       await updateAsset(asset.id, { active: 1 });
       refreshAssets();
     } catch (err) {
-      alert(err.response?.data?.error || 'Restore failed');
+      await alertDialog({
+        title: "Couldn't restore asset",
+        body: err.response?.data?.error || 'Restore failed',
+        tone: 'error',
+      });
     }
   };
 

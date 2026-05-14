@@ -13,6 +13,7 @@ import Icon from './Icon';
 import { getReferences, deleteLink } from '../../api/links';
 import { useAuth } from '../../context/AuthContext';
 import AddLinkModal from './AddLinkModal';
+import { useConfirm } from './Dialog';
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
@@ -41,6 +42,7 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
   const [tick, setTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const confirmDialog = useConfirm();
 
   useEffect(() => {
     if (!entityType || !entityId) return;
@@ -56,7 +58,13 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
   const unlink = async (linkId, e) => {
     e.stopPropagation();
     if (!linkId) return;
-    if (!window.confirm('Remove this link? The two records will no longer be connected.')) return;
+    const ok = await confirmDialog({
+      title: 'Remove this link?',
+      body: 'The two records will no longer be connected. You can re-link them later if needed.',
+      confirmLabel: 'Remove link',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteLink(linkId);
       refresh();

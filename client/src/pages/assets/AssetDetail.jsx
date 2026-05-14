@@ -10,6 +10,7 @@ import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
 import CustomFieldsDisplay from '../../components/assets/CustomFieldsDisplay';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import MaintenanceTab from '../../components/maintenance/MaintenanceTab';
+import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import { listSchedules } from '../../api/maintenance';
 import { timeAgo } from '../../utils/time';
 import '../../styles/assets.css';
@@ -38,6 +39,8 @@ export default function AssetDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canEdit = ELEVATED.has(user?.role);
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
 
   const [asset, setAsset] = useState(null);
   const [sites, setSites] = useState([]);
@@ -175,13 +178,31 @@ export default function AssetDetail() {
   };
 
   const handleArchive = async () => {
-    if (!window.confirm(`Archive "${asset.name}"?`)) return;
+    const ok = await confirmDialog({
+      title: `Archive asset "${asset.name}"?`,
+      body: 'The asset will be hidden from active views but retained for audit history. You can restore it later from the Archived tab.',
+      confirmLabel: 'Archive asset',
+      danger: true,
+    });
+    if (!ok) return;
     try { await deleteAsset(asset.id); refresh(); }
-    catch (e) { alert(e.response?.data?.error || 'Archive failed'); }
+    catch (e) {
+      await alertDialog({
+        title: "Couldn't archive asset",
+        body: e.response?.data?.error || 'Archive failed',
+        tone: 'error',
+      });
+    }
   };
   const handleRestore = async () => {
     try { await updateAsset(asset.id, { active: 1 }); refresh(); }
-    catch (e) { alert(e.response?.data?.error || 'Restore failed'); }
+    catch (e) {
+      await alertDialog({
+        title: "Couldn't restore asset",
+        body: e.response?.data?.error || 'Restore failed',
+        tone: 'error',
+      });
+    }
   };
 
   const siteName = sites.find(s => String(s.id) === String(form.site_id))?.name;
