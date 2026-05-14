@@ -803,34 +803,29 @@ export default function InvestigationDetail() {
                   </span>
                 </div>
                 {canEdit && inv.status === 'pending' && (
-                  <div className="invd-summary-row">
-                    <span className="invd-summary-label"/>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => handleSaveField('status', 'progress')}
-                      disabled={savingField === 'status'}
-                    >
-                      <Icon name="arrow" size={12}/>{savingField === 'status' ? 'Starting…' : 'Start investigation'}
-                    </button>
-                  </div>
+                  <button
+                    className="invd-lifecycle-action btn btn-primary btn-sm"
+                    onClick={() => handleSaveField('status', 'progress')}
+                    disabled={savingField === 'status'}
+                  >
+                    <Icon name="arrow" size={12}/>{savingField === 'status' ? 'Starting…' : 'Start investigation'}
+                  </button>
                 )}
                 {canEdit && inv.status === 'progress' && (
-                  <div className="invd-summary-row">
-                    <span className="invd-summary-label"/>
-                    <button
-                      className="btn btn-tertiary btn-sm"
-                      onClick={() => setModal('close')}
-                    >
-                      <Icon name="check" size={12}/>Mark complete & close
-                    </button>
-                  </div>
+                  <button
+                    className="invd-lifecycle-action btn btn-tertiary btn-sm"
+                    onClick={() => setModal('close')}
+                  >
+                    <Icon name="check" size={12}/>Mark complete & close
+                  </button>
                 )}
+                <div className="invd-summary-divider"/>
                 <div className="invd-summary-row">
                   <span className="invd-summary-label">Opened</span>
                   <span className="invd-summary-val">{formatDate(inv.started_at || inv.created_at)}</span>
                 </div>
                 <div className="invd-summary-row">
-                  <span className="invd-summary-label">Target close</span>
+                  <span className="invd-summary-label">Due</span>
                   {inv.status === 'closed' ? (
                     <span className="invd-summary-val muted">{inv.due_date ? formatDate(inv.due_date) : '—'}</span>
                   ) : canEdit ? (
@@ -848,13 +843,13 @@ export default function InvestigationDetail() {
                   <span className="invd-summary-val">
                     {inv.closed_at
                       ? formatDate(inv.closed_at)
-                      : <span className="muted">Open</span>}
+                      : <span className="muted">—</span>}
                   </span>
                 </div>
                 {inv.closed_at && inv.closed_reason && (
-                  <div className="invd-summary-row" style={{ alignItems: 'flex-start' }}>
-                    <span className="invd-summary-label">Close reason</span>
-                    <span className="invd-summary-val" style={{ textAlign: 'right', maxWidth: '60%' }}>{inv.closed_reason}</span>
+                  <div className="invd-summary-row invd-summary-row-top">
+                    <span className="invd-summary-label">Reason</span>
+                    <span className="invd-summary-val invd-summary-val-wrap">{inv.closed_reason}</span>
                   </div>
                 )}
               </div>

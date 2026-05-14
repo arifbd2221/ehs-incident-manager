@@ -1251,15 +1251,28 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   font-size: 13px;
+}
+.invd-summary-row-top {
+  align-items: flex-start;
 }
 .invd-summary-label {
   color: var(--sds-fg-tertiary);
   font-weight: 500;
+  flex-shrink: 0;
+  min-width: 52px;
 }
 .invd-summary-val {
   color: var(--sds-fg-heading);
   font-weight: 600;
+  text-align: right;
+}
+.invd-summary-val-wrap {
+  max-width: 60%;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.4;
 }
 .invd-summary-val.mono {
   font-family: 'SF Mono', Menlo, Consolas, monospace;
@@ -1269,6 +1282,11 @@
 .invd-summary-val.muted {
   color: var(--sds-fg-tertiary);
   font-weight: 500;
+}
+.invd-lifecycle-action {
+  width: 100%;
+  justify-content: center;
+  margin-top: -2px;
 }
 /* Inline hint shown after card titles to explain "what goes here". */
 .invd-card-hint {
