@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation, addTeamMember } from '../../api/investigations';
+import { getInvestigation, addFiveWhy, suggestNextWhy, closeInvestigation, assignCapa, updateInvestigation, addTeamMember } from '../../api/investigations';
 import { listDocuments } from '../../api/documents';
 import { listFolders } from '../../api/folders';
 import { uploadAttachments, deleteAttachment } from '../../api/incidents';
@@ -103,7 +103,12 @@ export default function InvestigationDetail() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
-  const [newWhy, setNewWhy] = useState({ question: '', answer: '', is_root_cause: false });
+  const [whyAnswer, setWhyAnswer] = useState('');
+  const [whySuggestion, setWhySuggestion] = useState(null);
+  const [whyLoading, setWhyLoading] = useState(false);
+  const [whySaving, setWhySaving] = useState(false);
+  const [whyEditing, setWhyEditing] = useState(false);
+  const [whyEditedQ, setWhyEditedQ] = useState('');
   const [findings, setFindings] = useState('');
   const [editingFindings, setEditingFindings] = useState(false);
   const [savingField, setSavingField] = useState(null); // 'findings' | 'due_date' | 'status'
@@ -161,6 +166,27 @@ export default function InvestigationDetail() {
     if (!docModalOpen) return;
     loadDocLibrary(linkFolderId, docSearch);
   }, [docModalOpen, linkFolderId, docSearch]);
+
+  useEffect(() => {
+    if (!inv || inv.status === 'closed') return;
+    const whys = inv.five_whys || [];
+    if (whys.length > 0 && !whys.some(w => w.is_root_cause) && !whySuggestion && !whyLoading) {
+      suggestNextWhy(inv.id).then(s => {
+        setWhySuggestion(s);
+        setWhyEditedQ(s.next_question);
+      }).catch(() => {
+        const lastWhy = whys[whys.length - 1];
+        const fallbackQ = lastWhy
+          ? `Why did "${lastWhy.answer.length > 60 ? lastWhy.answer.substring(0, 60) + '…' : lastWhy.answer}" happen?`
+          : 'Why did this incident occur?';
+        setWhySuggestion({ next_question: fallbackQ, likely_root_cause: false, root_cause_category: null, ai_unavailable: true, level: whys.length + 1 });
+        setWhyEditedQ(fallbackQ);
+      }).finally(() => setWhyLoading(false));
+      setWhyLoading(true);
+      setWhySuggestion(null);
+      setWhyEditing(false);
+    }
+  }, [inv?.five_whys?.length]);
 
   const navigateLinkFolder = (folder) => {
     if (!folder) { setLinkFolderId(null); setLinkCrumbs([]); return; }
@@ -333,13 +359,31 @@ export default function InvestigationDetail() {
       showToast(err.response?.data?.error || 'Failed to add member.');
     }
   };
-  const handleAddWhy = async () => {
-    if (!newWhy.question.trim() || !newWhy.answer.trim()) return;
+  const existingWhys = inv?.five_whys || [];
+  const nextWhyLevel = existingWhys.length + 1;
+  const hasRootCause = existingWhys.some(w => w.is_root_cause);
+  const isFirstWhy = existingWhys.length === 0;
+
+  const handleSubmitWhy = async (markAsRoot = false) => {
+    const question = isFirstWhy
+      ? 'Why did this incident occur?'
+      : (whyEditing ? whyEditedQ : whySuggestion?.next_question || '');
+    if (!question.trim() || !whyAnswer.trim()) return;
+    setWhySaving(true);
     try {
-      await addFiveWhy(inv.id, newWhy);
-      setNewWhy({ question: '', answer: '', is_root_cause: false });
-      load();
+      const updatedWhys = await addFiveWhy(inv.id, {
+        question: question.trim(),
+        answer: whyAnswer.trim(),
+        is_root_cause: markAsRoot,
+        ai_suggested: !isFirstWhy && !whyEditing,
+        root_cause_category: markAsRoot ? whySuggestion?.root_cause_category : undefined,
+      });
+      setInv(prev => ({ ...prev, five_whys: updatedWhys }));
+      setWhyAnswer('');
+      setWhySuggestion(null);
+      setWhyEditing(false);
     } catch { showToast('Failed to add.'); }
+    finally { setWhySaving(false); }
   };
   // Generic field-saver — surfaces BE errors (silent failure was hiding 403s
   // when a non-elevated worker tried to edit, and made the user think the
@@ -452,27 +496,91 @@ export default function InvestigationDetail() {
                 <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)', marginBottom: 8 }}>No root-cause analysis steps yet. Add the first "Why" below.</p>
               )}
 
-              {inv.status !== 'closed' && (
-                <div className="invd-add-why">
-                  <div className="form-group">
-                    <label className="form-label">Question</label>
-                    <input className="form-input" value={newWhy.question} onChange={e => setNewWhy(w => ({ ...w, question: e.target.value }))} placeholder="Why did this happen?"/>
+              {inv.status !== 'closed' && !hasRootCause && (
+                <div className="invd-add-why invd-why-guided">
+                  <div className="invd-why-question-area">
+                    <label className="form-label">
+                      Why {nextWhyLevel}
+                      {!isFirstWhy && whySuggestion && !whySuggestion.ai_unavailable && (
+                        <span className="invd-why-ai-badge">AI suggested</span>
+                      )}
+                      {whySuggestion?.ai_unavailable && (
+                        <span className="invd-why-ai-badge offline">Generic</span>
+                      )}
+                    </label>
+
+                    {whyLoading ? (
+                      <div className="invd-why-thinking">
+                        <div className="invd-why-thinking-dots"><span/><span/><span/></div>
+                        <span>Analyzing previous answer...</span>
+                      </div>
+                    ) : (
+                      <div className="invd-why-q-display">
+                        {whyEditing ? (
+                          <input
+                            className="form-input"
+                            value={whyEditedQ}
+                            onChange={e => setWhyEditedQ(e.target.value)}
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="invd-why-q-text">
+                            {isFirstWhy ? 'Why did this incident occur?' : whySuggestion?.next_question || ''}
+                          </div>
+                        )}
+                        {!isFirstWhy && whySuggestion && (
+                          <button
+                            className="btn btn-text btn-sm invd-why-edit-q"
+                            onClick={() => {
+                              setWhyEditing(!whyEditing);
+                              if (!whyEditing) setWhyEditedQ(whySuggestion.next_question);
+                            }}
+                          >
+                            <Icon name="edit" size={11}/>
+                            {whyEditing ? 'Use suggestion' : 'Edit question'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+
                   <div className="form-group">
-                    <label className="form-label">Answer</label>
+                    <label className="form-label">Your answer</label>
                     <SmartTextarea
-                      value={newWhy.answer}
-                      onChange={v => setNewWhy(w => ({ ...w, answer: v }))}
+                      value={whyAnswer}
+                      onChange={setWhyAnswer}
                       rows={2}
+                      disabled={whyLoading}
                       examples={['Because the machine guard was removed during maintenance and not replaced.', 'Because the SOP did not include a step for verifying guard replacement.', 'Because the training programme did not cover post-maintenance safety checks.']}
                     />
                   </div>
+
+                  {whySuggestion?.likely_root_cause && whyAnswer.trim() && (
+                    <div className="invd-why-root-prompt">
+                      <div className="invd-why-root-icon">★</div>
+                      <div className="invd-why-root-text">
+                        <strong>This looks like it could be the root cause.</strong>
+                        {whySuggestion.root_cause_category && (
+                          <span className="invd-why-root-cat">
+                            Category: {whySuggestion.root_cause_category.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                      </div>
+                      <button className="btn btn-primary btn-sm" onClick={() => handleSubmitWhy(true)} disabled={whySaving}>
+                        {whySaving ? 'Saving...' : 'Mark as root cause'}
+                      </button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setWhySuggestion(s => ({ ...s, likely_root_cause: false }))}>
+                        Not yet
+                      </button>
+                    </div>
+                  )}
+
                   <div className="invd-add-why-foot">
                     <label>
-                      <input type="checkbox" checked={newWhy.is_root_cause} onChange={e => setNewWhy(w => ({ ...w, is_root_cause: e.target.checked }))}/> Mark as root cause
+                      <input type="checkbox" checked={false} onChange={() => handleSubmitWhy(true)} disabled={!whyAnswer.trim() || whySaving}/> Mark as root cause
                     </label>
-                    <button className="invd-why-add-btn" onClick={handleAddWhy} disabled={!newWhy.question.trim() || !newWhy.answer.trim()}>
-                      <Icon name="plus" size={13}/>Add Why
+                    <button className="invd-why-add-btn" onClick={() => handleSubmitWhy(false)} disabled={!whyAnswer.trim() || whySaving || whyLoading || (!isFirstWhy && !whySuggestion)}>
+                      <Icon name="plus" size={13}/>{whySaving ? 'Saving...' : `Add Why ${nextWhyLevel}`}
                     </button>
                   </div>
                 </div>
