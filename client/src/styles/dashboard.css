@@ -766,7 +766,11 @@
 }
 
 /* ================================================================
- * CUSTOMIZE DRAWER
+ * CUSTOMIZE DRAWER — live-preview variant
+ *
+ * The backdrop is intentionally light: the dashboard behind the drawer
+ * stays clearly visible so toggles and reorders read as live changes,
+ * not "modal-then-apply". Clicks on the backdrop still close the drawer.
  * ================================================================ */
 .cust-backdrop {
   position: fixed; inset: 0; z-index: var(--sds-z-modal-backdrop);
@@ -774,11 +778,17 @@
   display: flex; justify-content: flex-end;
   animation: fadeIn 120ms ease-out;
 }
+.cust-backdrop-live {
+  background: rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(1px);
+}
 .cust-drawer {
-  width: 400px; max-width: 90vw; height: 100%;
+  position: relative;
+  width: 360px; max-width: 90vw; height: 100%;
   background: #fff; display: flex; flex-direction: column;
-  box-shadow: -8px 0 40px rgba(0,0,0,0.12);
-  animation: custSlideIn 300ms cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow: -16px 0 48px rgba(15, 23, 42, 0.14);
+  animation: custSlideIn 340ms cubic-bezier(0.34,1.56,0.64,1);
 }
 @keyframes custSlideIn {
   from { transform: translateX(100%); }
@@ -786,58 +796,236 @@
 }
 .cust-header {
   display: flex; align-items: flex-start; justify-content: space-between;
-  padding: 24px 24px 16px; border-bottom: 1px solid var(--sds-border-default);
+  padding: 20px 20px 14px;
 }
-.cust-title { font-size: 17px; font-weight: 800; color: var(--sds-fg-heading); }
-.cust-sub { font-size: 12px; color: var(--sds-fg-tertiary); margin-top: 2px; }
+.cust-title { font-size: 16px; font-weight: 700; color: var(--sds-fg-heading); }
+.cust-sub { font-size: 12px; color: var(--sds-fg-tertiary); margin-top: 3px; }
+
+/* ============================================================
+ * SEARCH + PRESETS TOOLBAR
+ * ============================================================ */
+.cust-tools {
+  padding: 0 18px 14px;
+  border-bottom: 1px solid var(--sds-border);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.cust-search {
+  position: relative;
+  display: flex; align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: var(--sds-bg-surface-alt);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+.cust-search:focus-within {
+  background: #fff;
+  border-color: var(--sds-brand-primary);
+  box-shadow: 0 0 0 3px var(--sds-brand-primary-light);
+}
+.cust-search > svg:first-child { color: var(--sds-fg-tertiary); flex-shrink: 0; }
+.cust-search input {
+  flex: 1; min-width: 0;
+  border: none; outline: none; background: transparent;
+  padding: 9px 0;
+  font-size: 13px; font-weight: 500;
+  font-family: inherit;
+  color: var(--sds-fg-primary);
+}
+.cust-search input::placeholder { color: var(--sds-fg-tertiary); }
+.cust-search-clear {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px;
+  border: none; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--sds-fg-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 160ms ease, color 160ms ease;
+}
+.cust-search-clear:hover { background: rgba(0, 0, 0, 0.15); color: var(--sds-fg-heading); }
+
+.cust-presets {
+  display: flex; gap: 6px;
+  flex-wrap: wrap;
+}
+.cust-preset {
+  flex: 1; min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--sds-border);
+  background: #fff;
+  border-radius: 8px;
+  font-size: 12px; font-weight: 600;
+  color: var(--sds-fg-secondary);
+  cursor: pointer;
+  transition: all 180ms ease;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.cust-preset:hover {
+  border-color: var(--sds-brand-primary);
+  background: var(--sds-brand-primary-tint);
+  color: var(--sds-brand-primary);
+}
+.cust-preset:active { transform: scale(0.96); }
+
+.cust-no-matches {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 10px;
+  padding: 40px 24px;
+  color: var(--sds-fg-tertiary);
+  text-align: center;
+}
+.cust-no-matches > svg { color: var(--sds-fg-muted); }
+.cust-no-matches-t { font-size: 13px; font-weight: 600; color: var(--sds-fg-heading); }
 
 .cust-list {
-  flex: 1; overflow-y: auto; padding: 12px;
+  flex: 1; overflow-y: auto; padding: 10px 10px 18px;
+  display: flex; flex-direction: column; gap: 14px;
+  /* Prevent the browser from interpreting vertical drag as page scroll. */
+  touch-action: pan-y;
+}
+
+/* Zone sections inside the drawer */
+.cust-section {
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid transparent;
+  transition: border-color 220ms ease, background 220ms ease, box-shadow 220ms ease;
+}
+.cust-section-active {
+  border-color: var(--sds-brand-primary);
+  background: var(--sds-brand-primary-tint);
+  box-shadow: 0 0 0 4px var(--sds-brand-primary-light);
+}
+.cust-section-h {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 6px 10px 0;
+}
+.cust-section-name {
+  font-size: 11px; font-weight: 700;
+  color: var(--sds-fg-secondary);
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.cust-section-meta {
+  display: flex; align-items: center; gap: 6px;
+}
+.cust-section-count {
+  font-size: 10px; font-weight: 600;
+  color: var(--sds-fg-tertiary);
+  padding: 2px 8px; border-radius: 50px;
+  background: var(--sds-bg-surface-alt);
+}
+.cust-section-active .cust-section-count {
+  background: #fff;
+  color: var(--sds-brand-primary);
+}
+.cust-section-desc {
+  font-size: 11px;
+  color: var(--sds-fg-tertiary);
+  padding: 2px 10px 6px;
+}
+.cust-section-rows {
   display: flex; flex-direction: column; gap: 4px;
 }
+
+/* Placeholder shown inside a drawer section when all its widgets have
+ * been dragged out — gives the user a valid drop target to refill it. */
+.cust-section-empty {
+  display: flex; align-items: center; justify-content: center;
+  padding: 18px 12px;
+  border: 1.5px dashed var(--sds-border);
+  border-radius: 10px;
+  font-size: 12px; font-weight: 600;
+  color: var(--sds-fg-tertiary);
+  background: rgba(148, 163, 184, 0.04);
+  transition: border-color 200ms ease, background 200ms ease, color 200ms ease;
+}
+.cust-section-active .cust-section-empty,
+.cust-section-empty-active {
+  border-color: var(--sds-brand-primary);
+  background: rgba(98, 109, 249, 0.08);
+  color: var(--sds-brand-primary);
+}
 .cust-item {
+  position: relative;
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px; border-radius: 10px;
   border: 1px solid transparent;
-  cursor: grab; transition: all 180ms ease;
+  cursor: grab;
   background: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  /* transition is set inline; switched off while a drag is active. */
+  animation: custItemIn 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes custItemIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 .cust-item:hover {
   background: var(--sds-bg-surface-alt);
-  border-color: var(--sds-border-default);
+  border-color: var(--sds-border);
 }
-.cust-item:active { cursor: grabbing; }
-.cust-item.cust-hidden { opacity: 0.45; }
-.cust-item.cust-hidden:hover { opacity: 0.7; }
-.cust-grip { color: var(--sds-fg-muted); cursor: grab; flex-shrink: 0; }
+.cust-item:focus-visible {
+  outline: none;
+  background: var(--sds-bg-surface-alt);
+  border-color: var(--sds-brand-primary);
+  box-shadow: 0 0 0 3px var(--sds-brand-primary-light);
+}
+.cust-item.cust-hidden { opacity: 0.5; }
+.cust-item.cust-hidden:hover { opacity: 0.75; }
+.cust-item.cust-dragging {
+  cursor: grabbing;
+  background: #fff;
+  border-color: var(--sds-brand-primary);
+  box-shadow: 0 18px 36px -10px rgba(15, 23, 42, 0.22),
+              0 4px 12px rgba(15, 23, 42, 0.08);
+}
+.cust-grip { color: var(--sds-fg-muted); flex-shrink: 0; pointer-events: none; }
 .cust-icon {
   width: 28px; height: 28px; border-radius: 7px;
   display: flex; align-items: center; justify-content: center;
   background: var(--sds-brand-primary-tint); color: var(--sds-brand-primary);
   flex-shrink: 0;
+  pointer-events: none;
 }
 .cust-label {
   font-size: 13px; font-weight: 600; color: var(--sds-fg-heading); flex: 1;
+  pointer-events: none;
 }
 .cust-zone {
   font-size: 10px; font-weight: 600; color: var(--sds-fg-tertiary);
   padding: 2px 8px; border-radius: 50px;
   background: var(--sds-bg-surface-alt);
   text-transform: uppercase; letter-spacing: 0.04em;
+  pointer-events: none;
 }
 
-/* Toggle switch */
+/* Toggle switch — press-down scale for tactile feel, plus a pop animation
+ * that fires after toggling so the click feels confirmed. */
 .cust-toggle {
   width: 36px; height: 20px; border-radius: 10px;
   border: none; cursor: pointer; position: relative;
-  background: #d1d5db; transition: background 200ms ease;
+  background: #d1d5db; transition: background 200ms ease, transform 140ms ease;
   flex-shrink: 0; padding: 0;
 }
+.cust-toggle:active { transform: scale(0.92); }
 .cust-toggle.on { background: var(--sds-brand-primary); }
+.cust-toggle-pop { animation: togglePop 320ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes togglePop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.18); }
+  70%  { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
 .cust-toggle-dot {
   position: absolute; top: 2px; left: 2px;
   width: 16px; height: 16px; border-radius: 50%;
-  background: #fff; transition: transform 200ms cubic-bezier(0.34,1.56,0.64,1);
+  background: #fff; transition: transform 220ms cubic-bezier(0.34,1.56,0.64,1);
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
 .cust-toggle.on .cust-toggle-dot { transform: translateX(16px); }
@@ -845,10 +1033,155 @@
 /* Footer */
 .cust-footer {
   display: flex; align-items: center; gap: 8px;
-  padding: 16px 20px; border-top: 1px solid var(--sds-border-default);
+  padding: 14px 18px; border-top: 1px solid var(--sds-border);
 }
 .cust-count {
   font-size: 11px; color: var(--sds-fg-tertiary); font-weight: 600;
+}
+
+/* ================================================================
+ * LIVE-PREVIEW GHOST — applied to widget wrappers on the dashboard
+ * while the customize drawer is open and the widget is toggled off.
+ * Keeps the slot in place (no layout reflow during rapid toggling)
+ * but visually signals the widget will be removed on save.
+ * ================================================================ */
+.dash-slot {
+  transition: opacity 240ms ease, filter 240ms ease;
+}
+.dash-slot-ghost {
+  position: relative;
+  opacity: 0.32;
+  filter: grayscale(0.4);
+}
+.dash-slot-ghost::after {
+  content: 'Hidden';
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  color: var(--sds-fg-tertiary);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(148, 163, 184, 0.06) 0 10px,
+    rgba(148, 163, 184, 0.14) 10px 20px
+  );
+  border: 1.5px dashed var(--sds-border);
+  border-radius: 14px;
+  pointer-events: none;
+  animation: ghostFade 240ms ease;
+}
+@keyframes ghostFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Empty-zone placeholder shown on the dashboard during live preview
+ * when a column has been fully drained by cross-zone drag. */
+.dash-zone-empty {
+  min-height: 220px;
+  border: 2px dashed var(--sds-border);
+  border-radius: 14px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 6px; padding: 24px;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(98, 109, 249, 0.03) 0 10px,
+    rgba(98, 109, 249, 0.07) 10px 20px
+  );
+  color: var(--sds-fg-tertiary);
+  animation: ghostFade 240ms ease;
+}
+.dash-zone-empty > svg { color: var(--sds-brand-primary); opacity: 0.65; }
+.dash-zone-empty-t {
+  font-size: 13px; font-weight: 700;
+  color: var(--sds-fg-heading);
+  margin-top: 4px;
+}
+.dash-zone-empty-s {
+  font-size: 12px; color: var(--sds-fg-tertiary);
+}
+
+/* ================================================================
+ * DISCARD-CHANGES SHEET — overlays the drawer body when the user
+ * attempts to close with unsaved edits. Animates up from below the
+ * drawer footer to reinforce that the action came from "down here".
+ * ================================================================ */
+.cust-discard-sheet {
+  position: absolute; inset: 0; z-index: 5;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 28px 24px; text-align: center;
+  animation: discardSheetIn 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes discardSheetIn {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cust-discard-icon {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(237, 108, 2, 0.12);
+  color: var(--sds-warning);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 14px;
+  animation: discardIconPop 380ms 80ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes discardIconPop {
+  from { transform: scale(0.6); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.cust-discard-title {
+  font-size: 17px; font-weight: 700;
+  color: var(--sds-fg-heading);
+  margin-bottom: 6px;
+}
+.cust-discard-body {
+  font-size: 13px; line-height: 1.5;
+  color: var(--sds-fg-tertiary);
+  margin-bottom: 20px;
+  max-width: 280px;
+}
+.cust-discard-actions {
+  display: flex; gap: 8px;
+}
+
+/* ================================================================
+ * SAVE-SUCCESS TOAST
+ * ================================================================ */
+.dash-saved-toast {
+  position: fixed;
+  left: 50%; bottom: 36px;
+  transform: translateX(-50%);
+  z-index: var(--sds-z-toast);
+  background: #1f2937;
+  color: #fff;
+  padding: 11px 18px 11px 14px;
+  border-radius: 50px;
+  font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 10px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.28),
+              0 4px 12px rgba(15, 23, 42, 0.16);
+  animation: savedToastIn 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes savedToastIn {
+  from { opacity: 0; transform: translate(-50%, 22px) scale(0.92); }
+  to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+.dash-saved-toast-check {
+  color: #4ade80;
+  flex-shrink: 0;
+}
+.dash-saved-toast-check path {
+  stroke-dasharray: 28;
+  stroke-dashoffset: 28;
+  animation: savedCheckDraw 360ms 120ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes savedCheckDraw {
+  to { stroke-dashoffset: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -857,4 +1190,13 @@
   .dash-card { animation: none; }
   .dash-mobile { animation: none; }
   .cust-panel { animation: none; }
+  .cust-drawer { animation: none; }
+  .cust-item { animation: none; transition: none !important; }
+  .cust-toggle-pop { animation: none; }
+  .cust-discard-sheet,
+  .cust-discard-icon { animation: none; }
+  .dash-saved-toast { animation: none; }
+  .dash-saved-toast-check path { animation: none; stroke-dashoffset: 0; }
+  .dash-slot { transition: none; }
+  .dash-slot-ghost::after { animation: none; }
 }
