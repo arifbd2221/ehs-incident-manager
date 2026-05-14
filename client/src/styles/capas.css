@@ -621,7 +621,7 @@
   color: var(--sds-fg-tertiary);
 }
 
-/* Loading */
+/* Loading — composes the shared .skel system from styles.css. */
 .capa-skeleton {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -632,17 +632,7 @@
   flex-direction: column;
   gap: 8px;
 }
-.capa-skeleton-card {
-  height: 140px;
-  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
-  background-size: 400% 100%;
-  border-radius: 12px;
-  animation: capaShimmer 1.8s ease-in-out infinite;
-}
-@keyframes capaShimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
+.capa-skeleton-card { height: 140px; border-radius: 12px; }
 
 /* ---- DETAIL PAGE ---- */
 

@@ -206,8 +206,9 @@ export default function IncidentsList() {
 
       {/* Cards */}
       {loading ? (
-        <div className="inc-skeleton">
-          {[1,2,3,4,5].map(i => <div key={i} className="inc-skeleton-card" style={{ animationDelay: `${i * 80}ms` }}/>)}
+        <div className="inc-skeleton" role="status" aria-live="polite" aria-busy="true">
+          <span className="sr-only">Loading incidents…</span>
+          {[1,2,3,4,5].map(i => <div key={i} className="skel inc-skeleton-card" style={{ animationDelay: `${i * 80}ms` }}/>)}
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState

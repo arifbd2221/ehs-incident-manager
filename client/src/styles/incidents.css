@@ -728,23 +728,14 @@
   cursor: not-allowed;
 }
 
-/* Loading skeleton */
+/* Loading skeleton — composes the shared .skel system from styles.css.
+ * Wrapper handles layout; card shape comes from .skel.skel-card. */
 .inc-skeleton {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-.inc-skeleton-card {
-  height: 100px;
-  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
-  background-size: 400% 100%;
-  border-radius: 14px;
-  animation: shimmer 1.8s ease-in-out infinite;
-}
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
+.inc-skeleton-card { height: 100px; border-radius: 14px; }
 
 /* ---- DETAIL PAGE ---- */
 

@@ -258,8 +258,8 @@ export default function CAPAPage() {
           <span className="sr-only">Loading CAPAs</span>
           {[1,2,3,4].map(i => (
             <div key={i} className="capa-skeleton-col">
-              <div className="capa-skeleton-card" style={{ animationDelay: `${i * 100}ms` }}/>
-              <div className="capa-skeleton-card" style={{ height: 100, animationDelay: `${i * 100 + 50}ms` }}/>
+              <div className="skel capa-skeleton-card" style={{ animationDelay: `${i * 100}ms` }}/>
+              <div className="skel capa-skeleton-card" style={{ height: 100, animationDelay: `${i * 100 + 50}ms` }}/>
             </div>
           ))}
         </div>

@@ -3439,3 +3439,50 @@ body {
     animation: none;
   }
 }
+
+/* ================================================================
+ * SKELETON SYSTEM
+ *
+ * Single shared shimmer keyframe + composable shape classes. Use as:
+ *   <div className="skel skel-card" />
+ *   <div className="skel skel-line" style={{ width: '60%' }} />
+ *   <div className="skel skel-circle" style={{ width: 32, height: 32 }} />
+ *
+ * Variants set sensible defaults; override height/width via inline style
+ * or a page-scoped wrapper class. The shimmer is a translated gradient
+ * pseudo-element so adding content inside .skel is also safe.
+ * ================================================================ */
+.skel {
+  position: relative;
+  overflow: hidden;
+  background: var(--sds-bg-surface-alt);
+  border-radius: var(--sds-radius-sm);
+}
+.skel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: skelShimmer 1.6s ease-in-out infinite;
+}
+.skel-line     { height: 12px; border-radius: var(--sds-radius-xs); }
+.skel-line-sm  { height: 10px; border-radius: var(--sds-radius-xs); }
+.skel-line-lg  { height: 16px; border-radius: var(--sds-radius-xs); }
+.skel-circle   { border-radius: 50%; }
+.skel-card     { height: 100px; border-radius: var(--sds-radius-lg); }
+.skel-card-sm  { height: 56px;  border-radius: var(--sds-radius-md); }
+.skel-card-lg  { height: 140px; border-radius: var(--sds-radius-lg); }
+
+@keyframes skelShimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel::after { animation: none; opacity: 0; }
+}

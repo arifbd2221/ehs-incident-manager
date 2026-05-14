@@ -1174,6 +1174,11 @@
   color: var(--sds-fg-tertiary);
   font-style: italic;
 }
+/* Skeleton rows shown while audit-log data is loading. The td padding
+ * matches a real row so the table doesn't visibly resize when data lands. */
+.al-skel-row td {
+  padding: 12px 8px;
+}
 
 /* Pager */
 .al-pager {

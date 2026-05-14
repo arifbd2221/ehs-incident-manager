@@ -691,7 +691,22 @@ function AuditLogReport() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={7} className="al-loading">Loading…</td></tr>
+                <>
+                  <tr className="sr-only" role="status" aria-live="polite" aria-busy="true">
+                    <td colSpan={7}>Loading audit log…</td>
+                  </tr>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <tr key={`skel-${i}`} className="al-skel-row" aria-hidden="true">
+                      <td><div className="skel skel-line" style={{ width: '70%', animationDelay: `${i * 60}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '85%', animationDelay: `${i * 60 + 20}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '60%', animationDelay: `${i * 60 + 40}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '50%', animationDelay: `${i * 60 + 60}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '75%', animationDelay: `${i * 60 + 80}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '92%', animationDelay: `${i * 60 + 100}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '40%', animationDelay: `${i * 60 + 120}ms` }} /></td>
+                    </tr>
+                  ))}
+                </>
               )}
               {!loading && data.rows.length === 0 && (
                 <tr><td colSpan={7} className="al-empty">No audit-log rows match these filters.</td></tr>
