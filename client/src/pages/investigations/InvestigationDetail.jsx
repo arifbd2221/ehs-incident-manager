@@ -497,21 +497,21 @@ export default function InvestigationDetail() {
               )}
 
               {inv.status !== 'closed' && !hasRootCause && (
-                <div className="invd-add-why invd-why-guided">
+                <div className="invd-add-why invd-why-guided" role="form" aria-label={`Add Why ${nextWhyLevel}`}>
                   <div className="invd-why-question-area">
-                    <label className="form-label">
+                    <label className="form-label" id="why-q-label" htmlFor="why-answer">
                       Why {nextWhyLevel}
                       {!isFirstWhy && whySuggestion && !whySuggestion.ai_unavailable && (
-                        <span className="invd-why-ai-badge">AI suggested</span>
+                        <span className="invd-why-ai-badge" aria-label="AI suggested question">AI suggested</span>
                       )}
                       {whySuggestion?.ai_unavailable && (
-                        <span className="invd-why-ai-badge offline">Generic</span>
+                        <span className="invd-why-ai-badge offline" aria-label="AI unavailable, generic question">Auto-generated</span>
                       )}
                     </label>
 
                     {whyLoading ? (
-                      <div className="invd-why-thinking">
-                        <div className="invd-why-thinking-dots"><span/><span/><span/></div>
+                      <div className="invd-why-thinking" role="status" aria-live="polite">
+                        <div className="invd-why-thinking-dots" aria-hidden="true"><span/><span/><span/></div>
                         <span>Analyzing previous answer...</span>
                       </div>
                     ) : (
@@ -521,10 +521,12 @@ export default function InvestigationDetail() {
                             className="form-input"
                             value={whyEditedQ}
                             onChange={e => setWhyEditedQ(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Escape') { setWhyEditing(false); } }}
+                            aria-label="Edit the suggested question"
                             autoFocus
                           />
                         ) : (
-                          <div className="invd-why-q-text">
+                          <div className="invd-why-q-text" aria-describedby="why-q-label">
                             {isFirstWhy ? 'Why did this incident occur?' : whySuggestion?.next_question || ''}
                           </div>
                         )}
@@ -535,6 +537,7 @@ export default function InvestigationDetail() {
                               setWhyEditing(!whyEditing);
                               if (!whyEditing) setWhyEditedQ(whySuggestion.next_question);
                             }}
+                            aria-label={whyEditing ? 'Use AI suggested question' : 'Edit the question'}
                           >
                             <Icon name="edit" size={11}/>
                             {whyEditing ? 'Use suggestion' : 'Edit question'}
@@ -545,40 +548,51 @@ export default function InvestigationDetail() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Your answer</label>
+                    <label className="form-label" htmlFor="why-answer">Your answer</label>
                     <SmartTextarea
                       value={whyAnswer}
                       onChange={setWhyAnswer}
                       rows={2}
                       disabled={whyLoading}
+                      placeholder={whyLoading ? 'Waiting for AI question...' : ''}
                       examples={['Because the machine guard was removed during maintenance and not replaced.', 'Because the SOP did not include a step for verifying guard replacement.', 'Because the training programme did not cover post-maintenance safety checks.']}
                     />
                   </div>
 
                   {whySuggestion?.likely_root_cause && whyAnswer.trim() && (
-                    <div className="invd-why-root-prompt">
-                      <div className="invd-why-root-icon">★</div>
+                    <div className="invd-why-root-prompt" role="alert">
+                      <div className="invd-why-root-icon" aria-hidden="true">★</div>
                       <div className="invd-why-root-text">
                         <strong>This looks like it could be the root cause.</strong>
                         {whySuggestion.root_cause_category && (
                           <span className="invd-why-root-cat">
                             Category: {whySuggestion.root_cause_category.replace(/_/g, ' ')}
+                            {whySuggestion.root_cause_category === 'human_factors' && ' — skills, attention, fatigue'}
+                            {whySuggestion.root_cause_category === 'equipment_failure' && ' — mechanical, electrical, wear'}
+                            {whySuggestion.root_cause_category === 'procedure_gap' && ' — SOP missing or inadequate'}
+                            {whySuggestion.root_cause_category === 'training_gap' && ' — insufficient training or competency'}
+                            {whySuggestion.root_cause_category === 'management_oversight' && ' — supervision, resource allocation'}
+                            {whySuggestion.root_cause_category === 'design_flaw' && ' — engineering, ergonomic, layout'}
+                            {whySuggestion.root_cause_category === 'environmental' && ' — workplace conditions'}
+                            {whySuggestion.root_cause_category === 'communication' && ' — information flow, handover'}
                           </span>
                         )}
                       </div>
                       <button className="btn btn-primary btn-sm" onClick={() => handleSubmitWhy(true)} disabled={whySaving}>
-                        {whySaving ? 'Saving...' : 'Mark as root cause'}
+                        {whySaving ? 'Saving...' : 'Save as root cause'}
                       </button>
                       <button className="btn btn-secondary btn-sm" onClick={() => setWhySuggestion(s => ({ ...s, likely_root_cause: false }))}>
-                        Not yet
+                        Continue deeper
                       </button>
                     </div>
                   )}
 
                   <div className="invd-add-why-foot">
-                    <label>
-                      <input type="checkbox" checked={false} onChange={() => handleSubmitWhy(true)} disabled={!whyAnswer.trim() || whySaving}/> Mark as root cause
-                    </label>
+                    {!whySuggestion?.likely_root_cause && (
+                      <label>
+                        <input type="checkbox" checked={false} onChange={e => { if (e.target.checked && whyAnswer.trim()) handleSubmitWhy(true); }} disabled={!whyAnswer.trim() || whySaving}/> Mark as root cause
+                      </label>
+                    )}
                     <button className="invd-why-add-btn" onClick={() => handleSubmitWhy(false)} disabled={!whyAnswer.trim() || whySaving || whyLoading || (!isFirstWhy && !whySuggestion)}>
                       <Icon name="plus" size={13}/>{whySaving ? 'Saving...' : `Add Why ${nextWhyLevel}`}
                     </button>

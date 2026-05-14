@@ -892,11 +892,15 @@
   font-weight: 700;
   color: var(--sds-fg-heading);
   margin-bottom: 4px;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .invd-why-a {
   font-size: 13px;
   color: var(--sds-fg-secondary);
   line-height: 1.5;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* Add why form */
@@ -955,12 +959,14 @@
 }
 .invd-add-why-foot label input[type="checkbox"] {
   accent-color: #8b5cf6;
+  width: 18px;
+  height: 18px;
 }
 .invd-why-add-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 12px 20px;
   border-radius: 10px;
   border: none;
   background: linear-gradient(135deg, #8b5cf6, #7c3aed);
@@ -999,16 +1005,24 @@
   background: var(--sds-bg-surface);
   border-radius: var(--sds-radius-lg);
   border: 1.5px solid rgba(139, 92, 246, 0.18);
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .invd-why-edit-q {
   flex-shrink: 0;
-  margin-top: 8px;
+  min-height: 36px;
+  padding: 8px 12px !important;
   font-size: 11px !important;
   gap: 4px;
+}
+.invd-why-edit-q:focus-visible {
+  outline: 2px solid var(--sds-brand-primary);
+  outline-offset: 2px;
 }
 .invd-why-ai-badge {
   display: inline-flex;
   align-items: center;
+  gap: 3px;
   margin-left: 8px;
   padding: 2px 8px;
   border-radius: var(--sds-radius-pill);
@@ -1019,9 +1033,14 @@
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(98, 109, 249, 0.08));
   color: #8b5cf6;
 }
+.invd-why-ai-badge::before { content: '✦ '; }
 .invd-why-ai-badge.offline {
   background: var(--sds-bg-surface-alt);
   color: var(--sds-fg-tertiary);
+}
+.invd-why-ai-badge.offline::before { content: '— '; }
+.invd-why-root-prompt .btn {
+  min-height: 36px;
 }
 .invd-why-thinking {
   display: flex;
@@ -1768,4 +1787,7 @@
   .inv-toast { animation: none; }
   .invd-spin { animation: none; }
   .inv-kflag .kf-dot { animation: none; }
+  .invd-why-thinking { animation: none; }
+  .invd-why-thinking-dots span { animation: none; opacity: 1; transform: none; }
+  .invd-why-root-prompt { animation: none; }
 }
