@@ -1386,6 +1386,55 @@
   .wiz-type-card .wiz-tc-desc { font-size: 10px; }
 }
 
+/* ================================================================
+ * ACCESSIBILITY — keyboard focus rings
+ *
+ * Interactive controls inside the wizard need a visible focus state
+ * for keyboard users. Buttons strip default UA outlines, so we apply
+ * the SDS focus pattern (2px brand ring + 5px tint halo) on
+ * :focus-visible only — pointer clicks do not trigger it.
+ * Reset button native styles where we converted divs/icon-buttons so
+ * the ring lands cleanly.
+ * ================================================================ */
+.wiz-type-card {
+  font: inherit;
+  color: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.wiz-type-card:focus { outline: none; }
+.wiz-type-card:focus-visible,
+.wiz-close:focus-visible,
+.wiz-fi-remove:focus-visible,
+.wiz-step:focus-visible,
+.wiz-back:focus-visible,
+.wiz-continue:focus-visible,
+.wiz-cancel:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+}
+/* Preserve the type-card selected gradient under the focus ring */
+.wiz-type-card.selected:focus-visible {
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+}
+
+/* Inline submission error region above the footer */
+.wiz-submit-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 28px 12px;
+  padding: 10px 12px;
+  border-radius: var(--sds-radius-md);
+  background: rgba(211, 47, 47, 0.08);
+  border: 1px solid rgba(211, 47, 47, 0.25);
+  color: var(--sds-error);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .wiz-backdrop { animation: none; }
   .wiz-sheet { animation: none; }

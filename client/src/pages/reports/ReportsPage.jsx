@@ -119,14 +119,48 @@ export default function ReportsPage() {
 
       {/* Report type selector */}
       {visibleReports.length > 0 ? (
-        <div className="rpt-type-grid">
-          {visibleReports.map(r => (
-            <div key={r.id} className={`rpt-type-card ${r.cls} ${tab === r.id ? 'active' : ''}`} onClick={() => setTab(r.id)}>
-              <div className="rpt-type-badge">{r.badge}</div>
-              <div className="rpt-type-title">{r.title}</div>
-              <div className="rpt-type-desc">{r.desc}</div>
-            </div>
-          ))}
+        <div
+          className="rpt-type-grid"
+          role="tablist"
+          aria-label="Report types"
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+            const tabs = Array.from(e.currentTarget.querySelectorAll('[role="tab"]'));
+            const currentIndex = tabs.indexOf(document.activeElement);
+            if (currentIndex < 0) return;
+            e.preventDefault();
+            let nextIndex = currentIndex;
+            if (e.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+            else if (e.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
+            else if (e.key === 'Home') nextIndex = 0;
+            else if (e.key === 'End') nextIndex = tabs.length - 1;
+            const nextTab = tabs[nextIndex];
+            const id = nextTab.getAttribute('data-tab-id');
+            if (id) {
+              setTab(id);
+              nextTab.focus();
+            }
+          }}
+        >
+          {visibleReports.map(r => {
+            const isActive = tab === r.id;
+            return (
+              <button
+                key={r.id}
+                type="button"
+                role="tab"
+                data-tab-id={r.id}
+                aria-selected={isActive}
+                tabIndex={isActive ? 0 : -1}
+                className={`rpt-type-card ${r.cls} ${isActive ? 'active' : ''}`}
+                onClick={() => setTab(r.id)}
+              >
+                <div className="rpt-type-badge">{r.badge}</div>
+                <div className="rpt-type-title">{r.title}</div>
+                <div className="rpt-type-desc">{r.desc}</div>
+              </button>
+            );
+          })}
         </div>
       ) : (
         <div className="rpt-panel">
@@ -581,7 +615,14 @@ function AuditLogReport() {
                   {chips.map((c, i) => (
                     <span key={i} className="al-chip" style={{ animationDelay: `${i * 40}ms` }}>
                       <span className="al-chip-label">{c.label}:</span> {c.display}
-                      <button type="button" className="al-chip-close" onClick={c.onClear}><Icon name="close" size={10}/></button>
+                      <button
+                        type="button"
+                        className="al-chip-close"
+                        onClick={c.onClear}
+                        aria-label={`Remove filter: ${c.label}`}
+                      >
+                        <Icon name="close" size={10}/>
+                      </button>
                     </span>
                   ))}
                   <button type="button" className="al-chips-clear" onClick={clearAll}>Clear all</button>
@@ -639,13 +680,13 @@ function AuditLogReport() {
           <table className="rpt-table">
             <thead>
               <tr>
-                <th style={{ width: 50 }}>ID</th>
-                <th style={{ width: 145 }}>When</th>
-                <th style={{ width: 110 }}>Entity</th>
-                <th style={{ width: 70 }}>#</th>
-                <th style={{ width: 170 }}>Action</th>
-                <th>Description</th>
-                <th style={{ width: 130 }}>Actor</th>
+                <th scope="col" style={{ width: 50 }}>ID</th>
+                <th scope="col" style={{ width: 145 }}>When</th>
+                <th scope="col" style={{ width: 110 }}>Entity</th>
+                <th scope="col" style={{ width: 70 }}>#</th>
+                <th scope="col" style={{ width: 170 }}>Action</th>
+                <th scope="col">Description</th>
+                <th scope="col" style={{ width: 130 }}>Actor</th>
               </tr>
             </thead>
             <tbody>
@@ -761,12 +802,17 @@ function Osha300Report({ siteId }) {
           <span className="rpt-auto-badge"><span className="auto-dot"/>Auto-updates</span>
         </div>
       </div>
-      <div style={{ overflowX: 'auto' }}>
+      <div
+        style={{ overflowX: 'auto' }}
+        tabIndex={0}
+        role="region"
+        aria-label="OSHA 300 Log table, scroll horizontally to see more"
+      >
         <table className="rpt-table" style={{ minWidth: 1100 }}>
           <thead>
             <tr>
-              <th>Case #</th><th>Employee</th><th>Date</th><th>Where</th><th>Description</th>
-              <th>Death</th><th>Days away</th><th>Restrict.</th><th>Other</th><th>Days away</th><th>Days restr.</th><th>Type</th>
+              <th scope="col">Case #</th><th scope="col">Employee</th><th scope="col">Date</th><th scope="col">Where</th><th scope="col">Description</th>
+              <th scope="col">Death</th><th scope="col">Days away</th><th scope="col">Restrict.</th><th scope="col">Other</th><th scope="col">Days away</th><th scope="col">Days restr.</th><th scope="col">Type</th>
             </tr>
           </thead>
           <tbody>
@@ -780,10 +826,22 @@ function Osha300Report({ siteId }) {
                 <td>{formatDateShort(e.injury_date)}</td>
                 <td>{e.location}</td>
                 <td>{e.description}</td>
-                <td className="cell-check">{e.classification_death ? <span className="check-mark">✓</span> : ''}</td>
-                <td className="cell-check">{e.classification_days_away ? <span className="check-mark">✓</span> : ''}</td>
-                <td className="cell-check">{e.classification_job_transfer ? <span className="check-mark">✓</span> : ''}</td>
-                <td className="cell-check">{e.classification_other ? <span className="check-mark">✓</span> : ''}</td>
+                <td className="cell-check">
+                  {e.classification_death ? <span className="check-mark" aria-hidden="true">✓</span> : ''}
+                  <span className="sr-only">Death: {e.classification_death ? 'Recorded' : 'Not recorded'}</span>
+                </td>
+                <td className="cell-check">
+                  {e.classification_days_away ? <span className="check-mark" aria-hidden="true">✓</span> : ''}
+                  <span className="sr-only">Days away: {e.classification_days_away ? 'Recorded' : 'Not recorded'}</span>
+                </td>
+                <td className="cell-check">
+                  {e.classification_job_transfer ? <span className="check-mark" aria-hidden="true">✓</span> : ''}
+                  <span className="sr-only">Job transfer or restriction: {e.classification_job_transfer ? 'Recorded' : 'Not recorded'}</span>
+                </td>
+                <td className="cell-check">
+                  {e.classification_other ? <span className="check-mark" aria-hidden="true">✓</span> : ''}
+                  <span className="sr-only">Other: {e.classification_other ? 'Recorded' : 'Not recorded'}</span>
+                </td>
                 <td className="cell-num">{e.days_away_count || ''}</td>
                 <td className="cell-num">{e.days_restricted_count || ''}</td>
                 <td>{e.injury_type}</td>
@@ -841,7 +899,7 @@ function Manual300Modal({ siteId, onClose, onSaved }) {
             <div className="modal-title">Manual OSHA 300 Entry</div>
             <div className="modal-sub">Add a recordable case not linked to an incident in the system.</div>
           </div>
-          <button className="icon-btn" onClick={onClose}><Icon name="close" size={18}/></button>
+          <button className="icon-btn" onClick={onClose} aria-label="Close dialog"><Icon name="close" size={18}/></button>
         </div>
         <div className="modal-body">
           {error && <div style={{ color: 'var(--sds-error)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
@@ -1321,10 +1379,15 @@ function RiddorReport({ siteId }) {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div
+          style={{ overflowX: 'auto' }}
+          tabIndex={0}
+          role="region"
+          aria-label="RIDDOR F2508 reports table, scroll horizontally to see more"
+        >
           <table className="rpt-table">
             <thead>
-              <tr><th>RIDDOR ref</th><th>Source</th><th>Date</th><th>Category</th><th>Description</th><th>HSE ref</th><th>Status</th>{canEdit && <th>Actions</th>}</tr>
+              <tr><th scope="col">RIDDOR ref</th><th scope="col">Source</th><th scope="col">Date</th><th scope="col">Category</th><th scope="col">Description</th><th scope="col">HSE ref</th><th scope="col">Status</th>{canEdit && <th scope="col">Actions</th>}</tr>
             </thead>
             <tbody>
               {(data.reports || []).map(r => {
@@ -1394,7 +1457,7 @@ function RiddorReport({ siteId }) {
             </tbody>
           </table>
         </div>
-        {toast && <div className="toast">{toast}</div>}
+        {toast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
 
         {data.stats && (
           <div className="rpt-riddor-stats">
@@ -1505,17 +1568,22 @@ function SafeworkNswReport({ siteId }) {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div
+          style={{ overflowX: 'auto' }}
+          tabIndex={0}
+          role="region"
+          aria-label="SafeWork NSW notifications table, scroll horizontally to see more"
+        >
           <table className="rpt-table">
             <thead>
               <tr>
-                <th>NSW ref</th>
-                <th>Source</th>
-                <th>Event date</th>
-                <th>Site</th>
-                <th>s.35 category</th>
-                <th>Sub-category (verbatim)</th>
-                <th>s.38 status</th>
+                <th scope="col">NSW ref</th>
+                <th scope="col">Source</th>
+                <th scope="col">Event date</th>
+                <th scope="col">Site</th>
+                <th scope="col">s.35 category</th>
+                <th scope="col">Sub-category (verbatim)</th>
+                <th scope="col">s.38 status</th>
               </tr>
             </thead>
             <tbody>

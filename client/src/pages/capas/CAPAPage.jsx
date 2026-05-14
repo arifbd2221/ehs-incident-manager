@@ -172,15 +172,27 @@ export default function CAPAPage() {
           <p className="capa-subtitle">Corrective & preventive actions across all sites. The CAPA owner cannot close their own action — an independent verifier must confirm.</p>
         </div>
         <div className="capa-hero-right">
-          <div className="inv-view-toggle" role="tablist">
-            <button className={`inv-view-btn ${view === 'board' ? 'active' : ''}`} onClick={() => setView('board')}>
+          <div className="inv-view-toggle" role="tablist" aria-label="View mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'board'}
+              className={`inv-view-btn ${view === 'board' ? 'active' : ''}`}
+              onClick={() => setView('board')}
+            >
               <Icon name="dashboard" size={13}/>Board
             </button>
-            <button className={`inv-view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'list'}
+              className={`inv-view-btn ${view === 'list' ? 'active' : ''}`}
+              onClick={() => setView('list')}
+            >
               <Icon name="sort" size={13}/>List
             </button>
           </div>
-          <button className="inv-export-btn"><Icon name="export" size={14}/>Export</button>
+          <button type="button" className="inv-export-btn" aria-label="Export CAPAs" disabled><Icon name="export" size={14}/>Export</button>
           {canCreate && (
             <button className="ncap-new-btn" onClick={() => setShowNew(true)}>
               <Icon name="plus" size={14}/>New CAPA
@@ -226,15 +238,23 @@ export default function CAPAPage() {
       {/* Tabs */}
       <div className="capa-tabs">
         {tabs.map(t => (
-          <button key={t.id} className={`capa-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+          <button
+            key={t.id}
+            type="button"
+            className={`capa-tab ${tab === t.id ? 'active' : ''}`}
+            onClick={() => setTab(t.id)}
+            aria-pressed={tab === t.id}
+          >
             {t.label}
             <span className="tab-ct">{t.count}</span>
+            <span className="sr-only">{tab === t.id ? ' (current filter)' : ''}</span>
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div className="capa-skeleton">
+        <div className="capa-skeleton" role="status" aria-live="polite" aria-busy="true">
+          <span className="sr-only">Loading CAPAs</span>
           {[1,2,3,4].map(i => (
             <div key={i} className="capa-skeleton-col">
               <div className="capa-skeleton-card" style={{ animationDelay: `${i * 100}ms` }}/>
@@ -268,15 +288,25 @@ export default function CAPAPage() {
                   <span className="capa-kcol-count">{cards.length}</span>
                 </div>
                 <div className="capa-kcol-desc">{lane.desc}</div>
-                <div className="capa-kcol-cards">
+                <div className="capa-kcol-cards" aria-label={`${lane.title} column, drop zone`}>
                   {cards.map((c, idx) => (
                     <div
                       key={c.id}
-                      className={`capa-kcard kc-${c.type} ${c.overdue ? 'kc-overdue' : ''} ${dragId === c.id ? 'capa-dragging' : ''}`}
+                      className={`capa-kcard focus-ring kc-${c.type} ${c.overdue ? 'kc-overdue' : ''} ${dragId === c.id ? 'capa-dragging' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`CAPA ${c.capa_number}: ${c.title}. ${lane.title}.`}
+                      aria-grabbed={dragId === c.id}
                       draggable={c.status !== 'closed'}
                       onDragStart={(e) => handleDragStart(e, c)}
                       onDragEnd={handleDragEnd}
                       onClick={() => navigate(`/capas/${c.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/capas/${c.id}`);
+                        }
+                      }}
                       style={{ animationDelay: `${idx * 50}ms`, cursor: c.status === 'closed' ? 'pointer' : 'grab' }}
                     >
                       {c.status !== 'closed' && <div className="capa-kcard-grip"><Icon name="sort" size={12}/></div>}
@@ -293,18 +323,22 @@ export default function CAPAPage() {
                         ) : c.source_type === 'incident' && c.incident_id ? (
                           <>
                             <Icon name="incidents" size={11}/>From{' '}
-                            <a
+                            <button
+                              type="button"
                               className="capa-kcard-source-link"
                               onClick={e => { e.stopPropagation(); navigate(`/incidents/${c.incident_id}`); }}
-                            >{c.incident_number}</a>
+                              onKeyDown={e => { if (e.key === ' ') e.preventDefault(); }}
+                            >{c.incident_number}</button>
                           </>
                         ) : c.investigation_id ? (
                           <>
                             <Icon name="investigation" size={11}/>From{' '}
-                            <a
+                            <button
+                              type="button"
                               className="capa-kcard-source-link"
                               onClick={e => { e.stopPropagation(); navigate(`/investigations/${c.investigation_id}`); }}
-                            >{c.investigation_number}</a>
+                              onKeyDown={e => { if (e.key === ' ') e.preventDefault(); }}
+                            >{c.investigation_number}</button>
                           </>
                         ) : null}
                       </div>
@@ -332,10 +366,13 @@ export default function CAPAPage() {
                         </div>
                       </div>
                       <div className="capa-kcard-foot">
-                        <div className="capa-kcard-people">
-                          <span className="capa-kcard-av av-owner">{c.owner_initials}</span>
-                          <span className="capa-kcard-arrow">→</span>
-                          <span className="capa-kcard-av av-verifier">{c.verifier_initials}</span>
+                        <div
+                          className="capa-kcard-people"
+                          aria-label={`Owner: ${c.owner_name || 'unassigned'}, Verifier: ${c.verifier_name || 'unassigned'}`}
+                        >
+                          <span className="capa-kcard-av av-owner" aria-hidden="true">{c.owner_initials}</span>
+                          <span className="capa-kcard-arrow" aria-hidden="true">→</span>
+                          <span className="capa-kcard-av av-verifier" aria-hidden="true">{c.verifier_initials}</span>
                         </div>
                         {c.overdue
                           ? <span className="capa-kcard-flag kf-overdue"><span className="kf-dot"/>Overdue</span>
@@ -361,7 +398,20 @@ export default function CAPAPage() {
             <span>Own</span><span>Ver</span><span>Progress</span><span>Due</span><span>Status</span>
           </div>
           {rows.map(c => (
-            <div key={c.id} className="capa-list-row" onClick={() => navigate(`/capas/${c.id}`)}>
+            <div
+              key={c.id}
+              className="capa-list-row focus-ring"
+              role="button"
+              tabIndex={0}
+              aria-label={`CAPA ${c.capa_number}: ${c.title}. ${LANE_LABELS[c.status] || c.status}.`}
+              onClick={() => navigate(`/capas/${c.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  navigate(`/capas/${c.id}`);
+                }
+              }}
+            >
               <span className="capa-list-ref">{c.capa_number}</span>
               <span className="capa-list-title">{c.title}</span>
               <span>
@@ -373,19 +423,25 @@ export default function CAPAPage() {
                 {c.source_type === 'proactive' ? (
                   'Proactive'
                 ) : c.source_type === 'incident' && c.incident_id ? (
-                  <a
+                  <button
+                    type="button"
                     className="capa-list-source-link"
                     onClick={e => { e.stopPropagation(); navigate(`/incidents/${c.incident_id}`); }}
-                  >{c.incident_number}</a>
+                    onKeyDown={e => { if (e.key === ' ') e.preventDefault(); e.stopPropagation(); }}
+                  >{c.incident_number}</button>
                 ) : c.investigation_id ? (
-                  <a
+                  <button
+                    type="button"
                     className="capa-list-source-link"
                     onClick={e => { e.stopPropagation(); navigate(`/investigations/${c.investigation_id}`); }}
-                  >{c.investigation_number}</a>
+                    onKeyDown={e => { if (e.key === ' ') e.preventDefault(); e.stopPropagation(); }}
+                  >{c.investigation_number}</button>
                 ) : '—'}
               </span>
-              <span><span className="capa-kcard-av av-owner" style={{ width: 24, height: 24, fontSize: 9 }}>{c.owner_initials}</span></span>
-              <span><span className="capa-kcard-av av-verifier" style={{ width: 24, height: 24, fontSize: 9, marginLeft: 0 }}>{c.verifier_initials}</span></span>
+              <span aria-label={`Owner: ${c.owner_name || 'unassigned'}, Verifier: ${c.verifier_name || 'unassigned'}`}>
+                <span className="capa-kcard-av av-owner" style={{ width: 24, height: 24, fontSize: 9 }} aria-hidden="true">{c.owner_initials}</span>
+              </span>
+              <span><span className="capa-kcard-av av-verifier" style={{ width: 24, height: 24, fontSize: 9, marginLeft: 0 }} aria-hidden="true">{c.verifier_initials}</span></span>
               <span>
                 <div className="capa-progress-track" style={{ height: 4 }}>
                   <div className={`capa-progress-fill ${progressClass(c)}`} style={{ width: `${c.progress || 0}%` }}/>

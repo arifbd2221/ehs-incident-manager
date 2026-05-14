@@ -95,7 +95,7 @@ export default function IncidentsList() {
             <p className="inc-subtitle">Capture, classify, and route all safety events</p>
           </div>
           <div className="inc-hero-actions">
-            <button className="inc-btn-export"><Icon name="export" size={15}/>Export CSV</button>
+            <button className="inc-btn-export" aria-label="Export incidents to CSV"><Icon name="export" size={15}/>Export CSV</button>
             <button className="inc-btn-report" onClick={() => setWizardOpen(true)}><Icon name="plus" size={15}/>Report incident</button>
           </div>
         </div>
@@ -186,7 +186,7 @@ export default function IncidentsList() {
 
         <div className="inc-search">
           <span className="search-icon"><Icon name="search" size={15}/></span>
-          <input placeholder="Search incidents..." value={search} onChange={e => setSearch(e.target.value)}/>
+          <input aria-label="Search incidents" placeholder="Search incidents..." value={search} onChange={e => setSearch(e.target.value)}/>
         </div>
       </div>
 
@@ -196,7 +196,7 @@ export default function IncidentsList() {
           <span className="inc-filter-chip">
             <span className="inc-filter-dot" style={{ background: TYPES.find(t => t.id === typeFilter)?.color }} />
             {activeTypeName}
-            <button className="inc-filter-chip-x" onClick={() => { setTypeFilter(''); setPage(1); }}>
+            <button className="inc-filter-chip-x" aria-label={`Remove ${activeTypeName} filter`} onClick={() => { setTypeFilter(''); setPage(1); }}>
               <Icon name="close" size={10} />
             </button>
           </span>
@@ -219,8 +219,22 @@ export default function IncidentsList() {
           {filtered.map((r, idx) => {
             const t = typeOf(r.type);
             return (
-              <div key={r.id} className="inc-card" onClick={() => navigate(`/incidents/${r.id}`)} style={{ animationDelay: `${idx * 40}ms` }}>
-                <div className={`inc-card-sev sev-${r.severity}`}/>
+              <div
+                key={r.id}
+                className="inc-card focus-ring"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/incidents/${r.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/incidents/${r.id}`);
+                  }
+                }}
+                style={{ animationDelay: `${idx * 40}ms` }}
+              >
+                <div className={`inc-card-sev sev-${r.severity}`} aria-hidden="true"/>
+                <span className="sr-only">Severity {r.severity}</span>
                 <div className="inc-card-body">
                   <div className="inc-card-top">
                     <div className="inc-card-title">{r.title}</div>
@@ -291,8 +305,8 @@ export default function IncidentsList() {
         <div className="inc-pagination">
           <span className="page-info">Showing {filtered.length} of {total} · Page {page}</span>
           <div className="page-btns">
-            <button className="inc-page-btn" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← Previous</button>
-            <button className="inc-page-btn" disabled={incidents.length < 50} onClick={() => setPage(p => p + 1)}>Next →</button>
+            <button className="inc-page-btn" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← Previous</button>
+            <button className="inc-page-btn" aria-label="Next page" disabled={incidents.length < 50} onClick={() => setPage(p => p + 1)}>Next →</button>
           </div>
         </div>
       )}

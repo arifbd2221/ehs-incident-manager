@@ -2995,3 +2995,31 @@
   .afp-modal { max-width: 95vw; }
 }
 
+/* ──────────────────────────────────────────────────────────
+ * Accessibility: keyboard focus rings for incident controls.
+ * Adds visible :focus-visible outlines so keyboard users can
+ * see which control has focus. Mouse users are unaffected.
+ * ────────────────────────────────────────────────────────── */
+.inc-btn-report:focus-visible,
+.inc-btn-export:focus-visible,
+.inc-filter-trigger:focus-visible,
+.inc-page-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary), 0 0 0 5px var(--sds-brand-primary-light);
+}
+
+/* Bump inline edit-trigger padding closer to the 44px tap-target
+ * guideline without altering its visual chrome. */
+.idet-edit-trigger {
+  padding: 8px 12px;
+}
+
+/* Keyboard users need to see the attachment delete affordance too.
+ * Reveal it on focus-within (the host wrap is focused via tabbing into
+ * the button) without changing the hover behaviour above. */
+.idet-attach-thumb:focus-within .idet-attach-del-thumb,
+.idet-attach-del-thumb:focus-visible,
+.idet-attach-file-wrap:focus-within .idet-attach-del-file,
+.idet-attach-del-file:focus-visible {
+  opacity: 1;
+}

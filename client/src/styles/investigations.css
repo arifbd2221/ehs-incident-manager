@@ -1741,8 +1741,8 @@
   top: 50%;
   right: 8px;
   transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   background: #fff;
   color: var(--sds-fg-tertiary);
@@ -1760,8 +1760,24 @@
   color: #dc2626;
   transform: translateY(-50%) scale(1.05);
 }
-.invd-attach-item:hover .invd-attach-del {
+.invd-attach-item:hover .invd-attach-del,
+.invd-attach-item:focus-within .invd-attach-del {
   opacity: 1;
+}
+.invd-attach-del:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 4px var(--sds-brand-primary-light);
+}
+
+/* Keyboard focus rings for clickable cards/rows that gain tabIndex via JSX. */
+.invd-capa-card:focus-visible,
+.invd-doc-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 4px var(--sds-brand-primary-light);
+  border-color: var(--sds-brand-primary);
 }
 
 .invd-attach-empty {

@@ -125,7 +125,7 @@ function FactEdit({ label, value, onSave, allowed, placeholder = '—' }) {
       <span className="idet-fact-val">
         {value || <span className="idet-edit-empty">{placeholder}</span>}
         {allowed && (
-          <button className="idet-edit-trigger" onClick={start} title={`Edit ${label.toLowerCase()}`}>
+          <button className="idet-edit-trigger" onClick={start} title={`Edit ${label.toLowerCase()}`} aria-label={`Edit ${label.toLowerCase()}`}>
             <Icon name="edit" size={11}/>edit
           </button>
         )}
@@ -166,7 +166,7 @@ function DescEdit({ value, fallback, onSave, allowed }) {
     <p className="idet-desc-text">
       {value || fallback}
       {allowed && (
-        <button className="idet-edit-trigger" onClick={start} title="Edit description">
+        <button className="idet-edit-trigger" onClick={start} title="Edit description" aria-label="Edit description">
           <Icon name="edit" size={11}/>edit
         </button>
       )}
@@ -796,15 +796,21 @@ export default function IncidentDetail() {
               <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
                 <span className="st-dot"/>{r.status}
               </span>
-              {showOsha && r.osha_recordable === 1 && <span className="inc-card-status st-triage"><span className="st-dot"/>OSHA</span>}
+              {showOsha && r.osha_recordable === 1 && (
+                <span className="inc-card-status st-triage">
+                  <span className="st-dot" aria-hidden="true"/>OSHA
+                  <span className="sr-only"> recordable</span>
+                </span>
+              )}
               {showRiddor && r.riddor_reportable === 1 && (
                 <span
                   className="inc-card-status"
                   style={{ background: '#fef2f2', color: '#dc2626' }}
                   title={r.riddor_category ? `RIDDOR ${riddorCategoryReg(r.riddor_category)} · ${riddorCategoryLabel(r.riddor_category)}` : 'RIDDOR reportable'}
                 >
-                  <span className="st-dot" style={{ background: '#dc2626' }}/>
+                  <span className="st-dot" style={{ background: '#dc2626' }} aria-hidden="true"/>
                   RIDDOR{r.riddor_category ? ` · ${riddorCategoryLabel(r.riddor_category)}` : ''}
+                  <span className="sr-only"> reportable</span>
                 </span>
               )}
               {(r.pending_deadlines || []).map((d, i) => (
@@ -955,6 +961,7 @@ export default function IncidentDetail() {
                               className="idet-attach-del idet-attach-del-thumb"
                               onClick={(e) => { e.stopPropagation(); handleDeleteAttachment(a); }}
                               title="Remove attachment"
+                              aria-label={`Delete attachment ${a.filename}`}
                             >
                               <Icon name="close" size={12}/>
                             </button>
@@ -987,6 +994,7 @@ export default function IncidentDetail() {
                                 className="idet-attach-del idet-attach-del-file"
                                 onClick={() => handleDeleteAttachment(a)}
                                 title="Remove attachment"
+                                aria-label={`Delete attachment ${a.filename}`}
                               >
                                 <Icon name="close" size={14}/>
                               </button>
@@ -1268,10 +1276,10 @@ export default function IncidentDetail() {
                           </div>
                           {canEdit && (
                             <div className="idet-witness-actions">
-                              <button className="idet-edit-trigger" onClick={() => setApEditTarget(ap)} title="Edit person">
+                              <button className="idet-edit-trigger" onClick={() => setApEditTarget(ap)} title="Edit person" aria-label={`Edit person ${ap.name || ''}`.trim()}>
                                 <Icon name="edit" size={11}/>edit
                               </button>
-                              <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteAffectedPerson(ap)} title="Remove person">
+                              <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteAffectedPerson(ap)} title="Remove person" aria-label={`Remove person ${ap.name || ''}`.trim()}>
                                 <Icon name="close" size={11}/>remove
                               </button>
                             </div>
@@ -1300,6 +1308,8 @@ export default function IncidentDetail() {
                               className="idet-edit-trigger"
                               onClick={() => setExpandedApIdx(expanded ? -1 : idx)}
                               title={expanded ? 'Hide regulatory fields' : 'Show all regulatory fields'}
+                              aria-label={expanded ? 'Hide regulatory fields' : 'Show all regulatory fields'}
+                              aria-expanded={expanded}
                             >
                               <Icon name={expanded ? 'arrow' : 'arrow'} size={11}/>
                               {expanded ? 'Hide details' : 'Show details'}
@@ -1352,10 +1362,10 @@ export default function IncidentDetail() {
                         </div>
                         {canEdit && (
                           <div className="idet-witness-actions">
-                            <button className="idet-edit-trigger" onClick={() => setWitnessModal(w)} title="Edit witness">
+                            <button className="idet-edit-trigger" onClick={() => setWitnessModal(w)} title="Edit witness" aria-label={`Edit witness ${w.name || ''}`.trim()}>
                               <Icon name="edit" size={11}/>edit
                             </button>
-                            <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteWitness(w)} title="Remove witness">
+                            <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteWitness(w)} title="Remove witness" aria-label={`Remove witness ${w.name || ''}`.trim()}>
                               <Icon name="close" size={11}/>remove
                             </button>
                           </div>
@@ -1382,13 +1392,14 @@ export default function IncidentDetail() {
       {/* Lightbox — portal to escape .page transform */}
       {lightbox.open && imageAttachments.length > 0 && createPortal(
         <div className="idet-lightbox" onClick={() => setLightbox({ open: false, index: 0 })}>
-          <button className="idet-lb-close" onClick={() => setLightbox({ open: false, index: 0 })}>
+          <button className="idet-lb-close" aria-label="Close lightbox" onClick={() => setLightbox({ open: false, index: 0 })}>
             <Icon name="close" size={18}/>
           </button>
           {imageAttachments.length > 1 && (
             <>
               <button
                 className="idet-lb-nav idet-lb-prev"
+                aria-label="Previous image"
                 disabled={lightbox.index === 0}
                 onClick={e => { e.stopPropagation(); setLightbox(prev => ({ ...prev, index: prev.index - 1 })); }}
               >
@@ -1396,6 +1407,7 @@ export default function IncidentDetail() {
               </button>
               <button
                 className="idet-lb-nav idet-lb-next"
+                aria-label="Next image"
                 disabled={lightbox.index === imageAttachments.length - 1}
                 onClick={e => { e.stopPropagation(); setLightbox(prev => ({ ...prev, index: prev.index + 1 })); }}
               >

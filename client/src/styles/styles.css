@@ -3333,3 +3333,34 @@ body {
   box-shadow: 0 0 0 2px var(--sds-brand-primary-light);
   outline: none;
 }
+
+/* ================================================================
+ * ACCESSIBILITY UTILITIES
+ *
+ * .sr-only — visually hidden text that screen readers still announce.
+ * Used to pair colour-only signals (severity bars, status pills) with
+ * a textual description, and to label icon-only elements where an
+ * aria-label would be awkward.
+ *
+ * .focus-ring — opt-in keyboard focus indicator. Apply to clickable
+ * non-button elements (cards, rows) that have tabIndex but no native
+ * focus style. Buttons/inputs already have their own.
+ * ================================================================ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+  border-radius: inherit;
+}

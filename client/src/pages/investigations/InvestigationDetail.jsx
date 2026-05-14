@@ -416,7 +416,7 @@ export default function InvestigationDetail() {
     <div className="page invd">
       {/* Breadcrumb */}
       <div className="invd-breadcrumb">
-        <button onClick={() => navigate('/investigations')}>
+        <button onClick={() => navigate('/investigations')} aria-label="Back to investigations">
           <Icon name="arrowL" size={13} /> Investigations
         </button>
         <span className="invd-bc-sep">/</span>
@@ -560,7 +560,7 @@ export default function InvestigationDetail() {
                   </div>
 
                   {whySuggestion?.likely_root_cause && whyAnswer.trim() && (
-                    <div className="invd-why-root-prompt" role="alert">
+                    <div className="invd-why-root-prompt" role="status" aria-live="polite">
                       <div className="invd-why-root-icon" aria-hidden="true">★</div>
                       <div className="invd-why-root-text">
                         <strong>This looks like it could be the root cause.</strong>
@@ -590,7 +590,13 @@ export default function InvestigationDetail() {
                   <div className="invd-add-why-foot">
                     {!whySuggestion?.likely_root_cause && (
                       <label>
-                        <input type="checkbox" checked={false} onChange={e => { if (e.target.checked && whyAnswer.trim()) handleSubmitWhy(true); }} disabled={!whyAnswer.trim() || whySaving}/> Mark as root cause
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          onChange={e => { if (e.target.checked && whyAnswer.trim()) handleSubmitWhy(true); }}
+                          disabled={!whyAnswer.trim() || whySaving}
+                          aria-label="Confirm this as the root cause"
+                        /> Mark as root cause
                       </label>
                     )}
                     <button className="invd-why-add-btn" onClick={() => handleSubmitWhy(false)} disabled={!whyAnswer.trim() || whySaving || whyLoading || (!isFirstWhy && !whySuggestion)}>
@@ -666,6 +672,7 @@ export default function InvestigationDetail() {
                 className="invd-attach-add"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
+                aria-label="Add attachment"
                 style={(inv.attachments || []).length + (inv.linked_documents || []).length === 0 ? { marginLeft: 'auto' } : undefined}
               >
                 {uploading ? (
@@ -690,6 +697,7 @@ export default function InvestigationDetail() {
                     className="invd-attach-add-empty"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
+                    aria-label="Add attachment"
                   >
                     {uploading ? 'Uploading…' : '+ Attach a file'}
                   </button>
@@ -708,6 +716,7 @@ export default function InvestigationDetail() {
                           className="invd-attach-del"
                           onClick={() => handleDeleteAttachment(a)}
                           title="Remove attachment"
+                          aria-label="Delete attachment"
                         >
                           <Icon name="close" size={14}/>
                         </button>
@@ -760,7 +769,17 @@ export default function InvestigationDetail() {
               <div className="invd-card-body">
                 <div className="invd-capa-list">
                   {inv.capas.map(c => (
-                    <div key={c.id} className="invd-capa-card" onClick={() => navigate(`/capas/${c.id}`)}>
+                    <div
+                      key={c.id}
+                      className="invd-capa-card focus-ring"
+                      onClick={() => navigate(`/capas/${c.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); navigate(`/capas/${c.id}`); }
+                        else if (e.key === ' ') { e.preventDefault(); navigate(`/capas/${c.id}`); }
+                      }}
+                    >
                       <div className="invd-capa-top">
                         <span className="invd-capa-ref">{c.capa_number}</span>
                         <span className={`invd-capa-status ${capaStatusClass(c.status)}`}>
@@ -1076,8 +1095,19 @@ export default function InvestigationDetail() {
               ) : (
                 <div className="invd-doc-list">
                   {filteredDocs.map(d => (
-                    <div key={d.id} className="invd-doc-row"
-                      onClick={() => !docLinking && handleLinkDoc(d)}>
+                    <div
+                      key={d.id}
+                      className="invd-doc-row focus-ring"
+                      onClick={() => !docLinking && handleLinkDoc(d)}
+                      role="button"
+                      tabIndex={0}
+                      aria-disabled={docLinking || undefined}
+                      onKeyDown={(e) => {
+                        if (docLinking) return;
+                        if (e.key === 'Enter') { e.preventDefault(); handleLinkDoc(d); }
+                        else if (e.key === ' ') { e.preventDefault(); handleLinkDoc(d); }
+                      }}
+                    >
                       <div className="invd-doc-icon"><Icon name="file" size={16}/></div>
                       <div className="invd-doc-info">
                         <div className="invd-doc-name">{d.name}</div>

@@ -1324,11 +1324,23 @@
 .capa-kcard-source-link,
 .capa-list-source-link,
 .capd-source-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
   color: var(--sds-brand-primary);
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
   transition: color 120ms;
+}
+.capa-kcard-source-link:focus-visible,
+.capa-list-source-link:focus-visible,
+.capd-source-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 4px var(--sds-brand-primary-light);
+  border-radius: 4px;
 }
 .capa-kcard-source-link:hover,
 .capa-list-source-link:hover,
@@ -1413,4 +1425,24 @@
   .capd-toast { animation: none; }
   .capa-skel-line { animation: none; }
   .ncap-chip { animation: none; }
+}
+
+/* ================================================================
+ * A11Y — keyboard focus rings
+ * Applied to interactive elements that don't have a native focus
+ * style or where the native ring is suppressed by custom styling.
+ * ================================================================ */
+.capa-kcard:focus-visible,
+.capa-list-row:focus-visible,
+.capa-tab:focus-visible,
+.capa-hero .inv-view-btn:focus-visible,
+.capa-hero .inv-export-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+  border-radius: inherit;
+}
+.capa-kcard:focus-visible {
+  /* Card has its own border-radius — preserve it explicitly */
+  border-radius: 12px;
 }

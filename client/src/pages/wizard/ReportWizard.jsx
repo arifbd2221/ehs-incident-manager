@@ -135,6 +135,8 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const fileInputRef = useRef(null);
   const [removingIdx, setRemovingIdx] = useState(null);
   const [imageUrls, setImageUrls] = useState({});
+  const [submitError, setSubmitError] = useState('');
+  const typeGroupRef = useRef(null);
 
   // Anonymous reporting toggle (per locked decision #10).
   // Disabled when type is injury/illness — those identify a person and
@@ -335,6 +337,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setSubmitError('');
     try {
       // Bridge: type-specific forms (InjuryForm, IllnessForm) store body_parts
       // inside type_data. The backend reads body_parts_affected from the
@@ -448,37 +451,57 @@ export default function ReportWizard({ onClose, onSubmit }) {
         await uploadAttachments('incident', incident.id, files);
       }
       onSubmit();
-    } catch {
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.message || 'Submission failed — please try again.';
+      setSubmitError(msg);
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="wiz-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className="wiz-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wiz-title"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div className="wiz-shell" onClick={e => e.stopPropagation()}>
         {/* Left sidebar */}
         <div className="wiz-sidebar">
           <div className="wiz-brand">
             <div className="wiz-brand-icon"><Icon name="incidents" size={18} /></div>
             <div>
-              <div className="wiz-brand-text">Report incident</div>
+              <div id="wiz-title" className="wiz-brand-text">Report incident</div>
               <div className="wiz-brand-sub">EHS Module</div>
             </div>
           </div>
 
-          <div className="wiz-steps">
-            {STEPS.map((s, i) => (
-              <div key={i} className={`wiz-step ${i < step ? 'done' : i === step ? 'active' : ''}`}>
-                <div className="wiz-step-num">
-                  {i < step ? <Icon name="check" size={14} /> : i + 1}
-                </div>
-                <div className="wiz-step-text">
-                  <div className="wiz-step-title">{s.title}</div>
-                  <div className="wiz-step-desc">{s.desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ol className="wiz-steps" role="list">
+            {STEPS.map((s, i) => {
+              const isDone = i < step;
+              const isActive = i === step;
+              const status = isDone ? 'Completed' : isActive ? 'Current step' : 'Upcoming';
+              return (
+                <li
+                  key={i}
+                  className={`wiz-step ${isDone ? 'done' : isActive ? 'active' : ''}`}
+                  aria-current={isActive ? 'step' : undefined}
+                >
+                  <div className="wiz-step-num" aria-hidden="true">
+                    {isDone ? <Icon name="check" size={14} /> : i + 1}
+                  </div>
+                  <div className="wiz-step-text">
+                    <div className="wiz-step-title">
+                      {s.title}
+                      <span className="sr-only"> — {status}</span>
+                    </div>
+                    <div className="wiz-step-desc">{s.desc}</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
 
           <div className="wiz-preview">
             <div className="wiz-preview-h">Live preview</div>
@@ -526,7 +549,14 @@ export default function ReportWizard({ onClose, onSubmit }) {
               <div className="wiz-h-title">{STEPS[step].title}</div>
               <div className="wiz-h-sub">Step {step + 1} of {STEPS.length}</div>
             </div>
-            <button className="wiz-close" onClick={onClose}><Icon name="close" size={16} /></button>
+            <button
+              type="button"
+              className="wiz-close"
+              onClick={onClose}
+              aria-label="Close wizard"
+            >
+              <Icon name="close" size={16} />
+            </button>
           </div>
 
           <div className="wiz-body">
@@ -576,20 +606,62 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     Incident type
                     {aiSuggestedFields.has('type') && <span className="wiz-ai-pill" style={{ marginLeft: 8 }}>✨ AI</span>}
                   </div>
-                  <div className="wiz-type-grid">
-                    {TYPES.map(t => (
-                      <div key={t.id}
-                        className={`wiz-type-card ${type === t.id ? 'selected' : ''}`}
-                        onClick={() => { setType(t.id); setTypeData({}); clearAiBadge('type'); }}
-                      >
-                        <div className="wiz-tc-icon" style={{ background: `${t.color}18` }}>
-                          <Icon name={TYPE_ICONS[t.id] || 'warning'} size={20} color={t.color} />
-                        </div>
-                        <div className="wiz-tc-name">{t.name}</div>
-                        <div className="wiz-tc-desc">{t.desc}</div>
-                        <div className="wiz-tc-check"><Icon name="check" size={11} /></div>
-                      </div>
-                    ))}
+                  <div
+                    ref={typeGroupRef}
+                    className="wiz-type-grid"
+                    role="radiogroup"
+                    aria-label="Incident type"
+                    onKeyDown={(e) => {
+                      const keys = ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'];
+                      if (!keys.includes(e.key)) return;
+                      e.preventDefault();
+                      const idx = TYPES.findIndex(t => t.id === type);
+                      let next = idx;
+                      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % TYPES.length;
+                      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + TYPES.length) % TYPES.length;
+                      else if (e.key === 'Home') next = 0;
+                      else if (e.key === 'End') next = TYPES.length - 1;
+                      const nextType = TYPES[next];
+                      setType(nextType.id);
+                      setTypeData({});
+                      clearAiBadge('type');
+                      // Move focus to newly selected card
+                      requestAnimationFrame(() => {
+                        const el = typeGroupRef.current?.querySelector(`[data-type-id="${nextType.id}"]`);
+                        el?.focus();
+                      });
+                    }}
+                  >
+                    {TYPES.map(t => {
+                      const selected = type === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          tabIndex={selected ? 0 : -1}
+                          data-type-id={t.id}
+                          className={`wiz-type-card ${selected ? 'selected' : ''}`}
+                          onClick={() => { setType(t.id); setTypeData({}); clearAiBadge('type'); }}
+                          onKeyDown={(e) => {
+                            if (e.key === ' ' || e.key === 'Spacebar') {
+                              e.preventDefault();
+                              setType(t.id);
+                              setTypeData({});
+                              clearAiBadge('type');
+                            }
+                          }}
+                        >
+                          <div className="wiz-tc-icon" style={{ background: `${t.color}18` }}>
+                            <Icon name={TYPE_ICONS[t.id] || 'warning'} size={20} color={t.color} />
+                          </div>
+                          <div className="wiz-tc-name">{t.name}</div>
+                          <div className="wiz-tc-desc">{t.desc}</div>
+                          <div className="wiz-tc-check" aria-hidden="true"><Icon name="check" size={11} /></div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -600,12 +672,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
                   </div>
                   <div className="field-row-3">
                     <div className="field">
-                      <label className="label">Date &amp; time <span className="req">*</span></label>
+                      <label className="label">Date &amp; time <span className="req" aria-label="required">*</span></label>
                       <DatePicker value={datetime} onChange={setDatetime} showTime placeholder="Select date & time" />
                     </div>
                     <div className="field">
                       <label className="label">
-                        Site <span className="req">*</span>
+                        Site <span className="req" aria-label="required">*</span>
                         {aiSuggestedFields.has('site') && <span className="wiz-ai-pill" style={{ marginLeft: 6 }}>✨ AI</span>}
                       </label>
                       <ComboBox options={siteOpts} value={siteId} onChange={v => { setSiteId(v); clearAiBadge('site'); }} placeholder="Search sites…" />
@@ -729,7 +801,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
                               </div>
                             </div>
                             {isOversized && <span className="wiz-fi-warn">Too large</span>}
-                            <button className="wiz-fi-remove" onClick={(e) => { e.stopPropagation(); removeFile(i); }}>
+                            <button
+                              type="button"
+                              className="wiz-fi-remove"
+                              aria-label={`Remove file ${f.name}`}
+                              onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                            >
                               <Icon name="close" size={12} />
                             </button>
                           </div>
@@ -997,27 +1074,54 @@ export default function ReportWizard({ onClose, onSubmit }) {
             </div>
           </div>
 
+          {/* Live status region for submission + errors */}
+          <div className="sr-only" role="status" aria-live="polite">
+            {submitting ? 'Submitting incident report, please wait.' : ''}
+          </div>
+          {submitError && (
+            <div className="wiz-submit-error" role="alert" aria-live="assertive">
+              <Icon name="warning" size={14} /> {submitError}
+            </div>
+          )}
+
           {/* Footer */}
           <div className="wiz-footer">
-            <button className="btn btn-text" onClick={onClose} style={{ color: 'var(--sds-fg-tertiary)' }}>Cancel</button>
+            <button type="button" className="btn btn-text wiz-cancel" onClick={onClose} style={{ color: 'var(--sds-fg-tertiary)' }}>Cancel</button>
             <div className="wiz-f-tip">
               {step === 0 && 'Fill in the basics — you can always add more detail later.'}
               {step === 1 && 'Click cells in the risk matrix to set likelihood vs. consequence.'}
               {step === 2 && 'Review everything before submitting. This action cannot be undone.'}
             </div>
             {step > 0 && (
-              <button className="btn btn-tertiary" onClick={() => { setStepDir('back'); setStep(s => s - 1); }}>
+              <button type="button" className="btn btn-tertiary wiz-back" onClick={() => { setStepDir('back'); setStep(s => s - 1); }}>
                 <Icon name="arrowL" size={14} />Back
               </button>
             )}
             {step < 2 && (
-              <button className="btn btn-primary" disabled={!canContinue} onClick={() => { setStepDir('forward'); setStep(s => s + 1); }}>
-                Continue<Icon name="arrow" size={14} />
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primary wiz-continue"
+                  disabled={!canContinue}
+                  aria-describedby={!canContinue ? 'wiz-continue-hint' : undefined}
+                  onClick={() => { setStepDir('forward'); setStep(s => s + 1); }}
+                >
+                  Continue<Icon name="arrow" size={14} />
+                </button>
+                <span id="wiz-continue-hint" className="sr-only">
+                  {canContinue ? '' : 'Continue is disabled until required fields are filled'}
+                </span>
+              </>
             )}
             {step === 2 && (
-              <button className="btn btn-primary btn-lg" disabled={submitting} onClick={handleSubmit}
-                style={{ background: submitting ? '#94a3b8' : 'linear-gradient(135deg, var(--sds-brand-primary), #8b5cf6)' }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-lg wiz-continue"
+                disabled={submitting}
+                aria-busy={submitting || undefined}
+                onClick={handleSubmit}
+                style={{ background: submitting ? '#94a3b8' : 'linear-gradient(135deg, var(--sds-brand-primary), #8b5cf6)' }}
+              >
                 <Icon name="check" size={16} />{submitting ? 'Submitting...' : 'Submit & route'}
               </button>
             )}

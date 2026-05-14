@@ -74,6 +74,25 @@
   cursor: pointer;
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  /* Native <button> resets — preserve the original card visuals. */
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  display: block;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.rpt-type-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+}
+/* Keep the active+focus state distinct from default active. */
+.rpt-type-card.active:focus-visible {
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light),
+              0 8px 24px rgba(98, 109, 249, 0.12);
 }
 .rpt-type-card:hover {
   transform: translateY(-2px);
@@ -631,6 +650,12 @@
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(98, 109, 249, 0.35);
 }
+.rpt-300a-cert-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light),
+              0 2px 10px rgba(98, 109, 249, 0.25);
+}
 .rpt-300a-cert-stamp {
   display: flex;
   align-items: center;
@@ -915,6 +940,11 @@
   transition: background 120ms ease;
 }
 .al-chip-close:hover { background: rgba(98, 109, 249, 0.15); }
+.al-chip-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+}
 .al-chips-clear {
   font-size: 12px;
   color: var(--sds-fg-tertiary);
@@ -926,6 +956,12 @@
   margin-left: 4px;
 }
 .al-chips-clear:hover { color: var(--sds-error); }
+.al-chips-clear:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+  border-radius: var(--sds-radius-xs);
+}
 
 /* ── Zone D: Advanced Filters (collapsible) ── */
 .al-advanced-wrap {

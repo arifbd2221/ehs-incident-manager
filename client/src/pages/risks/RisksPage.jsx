@@ -133,16 +133,26 @@ export default function RisksPage() {
           <p className="rsk-subtitle">Identify, assess, and control workplace hazards proactively</p>
         </div>
         <div className="rsk-hero-right">
-          <div className="rsk-view-toggle">
-            <button className={`rsk-view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
+          <div className="rsk-view-toggle" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={`rsk-view-btn ${view === 'list' ? 'active' : ''}`}
+              onClick={() => setView('list')}
+              aria-pressed={view === 'list'}
+            >
               <Icon name="sort" size={13} /> List
             </button>
-            <button className={`rsk-view-btn ${view === 'matrix' ? 'active' : ''}`} onClick={() => setView('matrix')}>
+            <button
+              type="button"
+              className={`rsk-view-btn ${view === 'matrix' ? 'active' : ''}`}
+              onClick={() => setView('matrix')}
+              aria-pressed={view === 'matrix'}
+            >
               <Icon name="dashboard" size={13} /> Matrix
             </button>
           </div>
           {canCreate && (
-            <button className="rsk-new-btn" onClick={() => setShowNew(true)}>
+            <button type="button" className="rsk-new-btn" onClick={() => setShowNew(true)}>
               <Icon name="plus" size={15} /> Register Risk
             </button>
           )}
@@ -193,9 +203,11 @@ export default function RisksPage() {
       <div className="rsk-tabs">
         {TABS.map(t => (
           <button
+            type="button"
             key={t.id}
             className={`rsk-tab ${tab === t.id ? 'active' : ''}`}
             onClick={() => { setTab(t.id); setPage(1); }}
+            aria-pressed={tab === t.id}
           >
             {t.label}
             <span className="tab-ct">{tabCount(stats, t.id)}</span>
@@ -206,10 +218,12 @@ export default function RisksPage() {
       {/* Controls */}
       <div className="rsk-controls">
         <div className="rsk-search">
-          <span className="rsk-search-icon"><Icon name="search" size={15} /></span>
+          <span className="rsk-search-icon" aria-hidden="true"><Icon name="search" size={15} /></span>
           <input
             className="input"
+            type="search"
             placeholder="Search risks..."
+            aria-label="Search risks"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
@@ -218,9 +232,10 @@ export default function RisksPage() {
 
       {/* Content */}
       {loading ? (
-        <div className="rsk-loading">
-          <div className="rsk-spinner" />
-          <span style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>Loading risks...</span>
+        <div className="rsk-loading" role="status" aria-live="polite">
+          <div className="rsk-spinner" aria-hidden="true" />
+          <span className="sr-only">Loading risks...</span>
+          <span aria-hidden="true" style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>Loading risks...</span>
         </div>
       ) : view === 'list' ? (
         risks.length === 0 ? (
@@ -248,7 +263,20 @@ export default function RisksPage() {
               </thead>
               <tbody>
                 {risks.map(r => (
-                  <tr key={r.id} onClick={() => navigate(`/risks/${r.id}`)}>
+                  <tr
+                    key={r.id}
+                    className="rsk-row"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open risk ${r.risk_number}: ${r.title}`}
+                    onClick={() => navigate(`/risks/${r.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        if (e.key === ' ') e.preventDefault();
+                        navigate(`/risks/${r.id}`);
+                      }
+                    }}
+                  >
                     <td className="id">{r.risk_number}</td>
                     <td className="rsk-title-cell">{r.title}</td>
                     <td><span className="rsk-cat">{CAT_LABELS[r.category] || r.category}</span></td>
@@ -263,10 +291,26 @@ export default function RisksPage() {
             </table>
             {totalPages > 1 && (
               <div className="rsk-pagination">
-                <span>Page {page} of {totalPages} ({total} risks)</span>
+                <span aria-live="polite">Page {page} of {totalPages} ({total} risks)</span>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</button>
-                  <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
+                  <button
+                    type="button"
+                    className="rsk-pag-btn"
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => p - 1)}
+                    aria-label="Previous page"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="rsk-pag-btn"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(p => p + 1)}
+                    aria-label="Next page"
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
             )}
@@ -277,11 +321,21 @@ export default function RisksPage() {
         <div className="rsk-matrix-wrap">
           <div className="rsk-matrix-header">
             <div className="rsk-matrix-title">Risk Matrix Heatmap</div>
-            <div className="rsk-matrix-toggle">
-              <button className={matrixMode === 'inherent' ? 'active' : ''} onClick={() => setMatrixMode('inherent')}>
+            <div className="rsk-matrix-toggle" role="group" aria-label="Risk score mode">
+              <button
+                type="button"
+                className={`rsk-toggle-btn ${matrixMode === 'inherent' ? 'active' : ''}`}
+                onClick={() => setMatrixMode('inherent')}
+                aria-pressed={matrixMode === 'inherent'}
+              >
                 Inherent
               </button>
-              <button className={matrixMode === 'residual' ? 'active' : ''} onClick={() => setMatrixMode('residual')}>
+              <button
+                type="button"
+                className={`rsk-toggle-btn ${matrixMode === 'residual' ? 'active' : ''}`}
+                onClick={() => setMatrixMode('residual')}
+                aria-pressed={matrixMode === 'residual'}
+              >
                 Residual
               </button>
             </div>
@@ -290,22 +344,24 @@ export default function RisksPage() {
             <div className="rsk-matrix-ylabel">
               {LIKELIHOOD_LABELS.map((l, i) => <span key={i}>{l}</span>)}
             </div>
-            <div className="rsk-matrix-grid">
-              {LIKELIHOOD_LABELS.map((_, li) =>
-                CONSEQUENCE_LABELS.map((_, ci) => {
+            <div className="rsk-matrix-grid" role="grid" aria-label="Risk matrix">
+              {LIKELIHOOD_LABELS.map((likelihoodLabel, li) =>
+                CONSEQUENCE_LABELS.map((consequenceLabel, ci) => {
                   const level = SEV_GRID[li][ci];
                   const count = getMatrixCount(li, ci);
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={`${li}-${ci}`}
-                      className={`rsk-matrix-cell rsk-cell-${level} ${count === 0 ? 'rsk-cell-empty' : ''}`}
+                      className={`rsk-matrix-cell rsk-cell rsk-cell-${level} ${count === 0 ? 'rsk-cell-empty' : ''}`}
+                      aria-label={`Likelihood ${likelihoodLabel}, Consequence ${consequenceLabel}, ${LEVEL_NAMES[level]} risk, ${count} risks`}
                       onClick={() => {
                         setView('list');
                       }}
                     >
-                      <div className="rsk-cell-count">{count}</div>
-                      <div className="rsk-cell-label">{LEVEL_NAMES[level]}</div>
-                    </div>
+                      <div className="rsk-cell-count" aria-hidden="true">{count}</div>
+                      <div className="rsk-cell-label" aria-hidden="true">{LEVEL_NAMES[level]}</div>
+                    </button>
                   );
                 })
               )}
