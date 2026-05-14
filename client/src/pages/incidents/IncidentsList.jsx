@@ -28,6 +28,10 @@ export default function IncidentsList() {
   // typeFilter='', search='') are omitted from the URL to keep it clean.
   const [incidents, setIncidents] = useState([]);
   const [total, setTotal] = useState(0);
+  // Per-status aggregates from the server — honour every active filter
+  // EXCEPT status, so tab/stat counts stay accurate while the user views
+  // a single status. Without this, counts read 0 for every non-active tab.
+  const [statusCounts, setStatusCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(() => searchParams.get('tab') || 'all');
   const [typeFilter, setTypeFilter] = useState(() => searchParams.get('type') || '');
@@ -55,7 +59,11 @@ export default function IncidentsList() {
     if (tab === 'closed') params.status = 'Closed';
     if (typeFilter) params.type = typeFilter;
     getIncidents(params)
-      .then(data => { setIncidents(data.incidents || []); setTotal(data.total || 0); })
+      .then(data => {
+        setIncidents(data.incidents || []);
+        setTotal(data.total || 0);
+        setStatusCounts(data.status_counts || {});
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
@@ -82,17 +90,28 @@ export default function IncidentsList() {
     );
   }, [incidents, search]);
 
-  const stats = useMemo(() => {
-    const open = incidents.filter(r => r.status === 'New').length;
-    const investigating = incidents.filter(r => r.status === 'Investigating').length;
-    const closed = incidents.filter(r => r.status === 'Closed').length;
-    return { open, investigating, closed };
-  }, [incidents]);
+  // Derived from server-side aggregates (status_counts), NOT from the
+  // currently-loaded page — otherwise switching tabs would zero out the
+  // other tabs' badges because the response is status-scoped.
+  const stats = useMemo(() => ({
+    open: statusCounts.New || 0,
+    investigating: statusCounts.Investigating || 0,
+    closed: statusCounts.Closed || 0,
+  }), [statusCounts]);
+
+  // Total across every status with the current non-status filters applied
+  // — used for the "All" tab badge and the hero "Total" stat. The list
+  // response's `total` only reflects the active status, so summing
+  // status_counts is the right source here.
+  const grandTotal = useMemo(
+    () => Object.values(statusCounts).reduce((a, b) => a + b, 0),
+    [statusCounts],
+  );
 
   const activeTypeName = TYPES.find(t => t.id === typeFilter)?.name;
 
   const tabs = [
-    { id: 'all', label: 'All', count: total },
+    { id: 'all', label: 'All', count: grandTotal },
     { id: 'open', label: 'Open', count: stats.open },
     { id: 'inprogress', label: 'In Progress', count: stats.investigating },
     { id: 'closed', label: 'Closed', count: stats.closed },
@@ -119,7 +138,7 @@ export default function IncidentsList() {
           <div className="inc-stat" style={{ '--is-color': 'var(--sds-brand-primary)' }}>
             <div className="inc-stat-icon"><Icon name="incidents" size={16} /></div>
             <div>
-              <div className="inc-stat-val">{total}</div>
+              <div className="inc-stat-val">{grandTotal}</div>
               <div className="inc-stat-lbl">Total</div>
             </div>
           </div>

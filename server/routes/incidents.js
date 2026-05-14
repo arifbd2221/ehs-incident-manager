@@ -258,20 +258,47 @@ router.get('/', (req, res) => {
   const { type, severity, status, site_id, track, search, page = 1, limit = 50 } = req.query;
   const orgId = req.user.org_id;
 
+  // `where`/`params` drive the paginated list AND the matching `total` —
+  // both honour every filter including status.
+  // `countWhere`/`countParams` drive the per-status aggregate counts the
+  // list-page tabs and hero stats need — they honour every filter EXCEPT
+  // status, so the user can see how many incidents are in each lane while
+  // they sit on (say) the "In progress" tab.
   let where = ['i.org_id = ?'];
   let params = [orgId];
+  let countWhere = ['i.org_id = ?'];
+  let countParams = [orgId];
+  const addBoth = (cond, ...vals) => {
+    where.push(cond); params.push(...vals);
+    countWhere.push(cond); countParams.push(...vals);
+  };
 
-  if (type) { where.push('i.type = ?'); params.push(type); }
-  if (severity) { where.push('i.severity = ?'); params.push(Number(severity)); }
+  if (type) addBoth('i.type = ?', type);
+  if (severity) addBoth('i.severity = ?', Number(severity));
+  // Status is the one filter we deliberately leave out of countWhere.
   if (status) { where.push('i.status = ?'); params.push(status); }
-  if (site_id) { where.push('i.site_id = ?'); params.push(Number(site_id)); }
-  if (track) { where.push('i.track = ?'); params.push(track); }
-  if (search) { where.push("(i.title LIKE ? OR i.incident_number LIKE ? OR i.description LIKE ?)"); params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+  if (site_id) addBoth('i.site_id = ?', Number(site_id));
+  if (track) addBoth('i.track = ?', track);
+  if (search) addBoth(
+    "(i.title LIKE ? OR i.incident_number LIKE ? OR i.description LIKE ?)",
+    `%${search}%`, `%${search}%`, `%${search}%`,
+  );
 
   const whereClause = where.join(' AND ');
+  const countWhereClause = countWhere.join(' AND ');
   const offset = (Number(page) - 1) * Number(limit);
 
   const total = db.prepare(`SELECT COUNT(*) as count FROM incidents i WHERE ${whereClause}`).get(...params).count;
+
+  // Per-status aggregate (respects org + type/severity/site/track/search,
+  // ignores status). The list page renders these as the tab badges and
+  // the hero stat cards; without them, every count except the active
+  // tab's would read 0 because the list response is status-scoped.
+  const statusCountsRows = db.prepare(
+    `SELECT status, COUNT(*) as count FROM incidents i WHERE ${countWhereClause} GROUP BY status`,
+  ).all(...countParams);
+  const status_counts = {};
+  for (const row of statusCountsRows) status_counts[row.status] = row.count;
 
   const incidents = db.prepare(`
     SELECT i.*, s.name as site_name, u.name as reporter_name, u.initials as reporter_initials,
@@ -314,7 +341,7 @@ router.get('/', (req, res) => {
     inc.most_urgent_deadline = mostUrgent(deadlines);
   }
 
-  res.json({ incidents, total, page: Number(page), limit: Number(limit) });
+  res.json({ incidents, total, status_counts, page: Number(page), limit: Number(limit) });
 });
 
 router.get('/:id', (req, res) => {
