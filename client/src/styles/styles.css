@@ -714,10 +714,18 @@ body {
 
 /* Page content */
 .page {
+  /* `.main` is a flex column (display: flex; flex-direction: column).
+   * In that context, max-width alone isn't enough — when a child has
+   * variable intrinsic content width (e.g. cards with long titles)
+   * the page can render at different widths between routes. Pinning
+   * width: 100% + max-width + auto margins makes the box deterministic:
+   * always full container width up to 1400px, always centered. */
   padding: 24px 32px 64px;
+  width: 100%;
   max-width: 1400px;
   margin-left: auto;
   margin-right: auto;
+  align-self: stretch;
   animation: pageEnter 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 @keyframes pageEnter {
@@ -3333,3 +3341,174 @@ body {
   box-shadow: 0 0 0 2px var(--sds-brand-primary-light);
   outline: none;
 }
+
+/* ================================================================
+ * ACCESSIBILITY UTILITIES
+ *
+ * .sr-only — visually hidden text that screen readers still announce.
+ * Used to pair colour-only signals (severity bars, status pills) with
+ * a textual description, and to label icon-only elements where an
+ * aria-label would be awkward.
+ *
+ * .focus-ring — opt-in keyboard focus indicator. Apply to clickable
+ * non-button elements (cards, rows) that have tabIndex but no native
+ * focus style. Buttons/inputs already have their own.
+ * ================================================================ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+  border-radius: inherit;
+}
+
+/* ================================================================
+ * EMPTY STATE — shared illustrated empty-state surface
+ *
+ * Used via <EmptyState illustration={...} title="…" body="…"
+ * action={<button .../>} /> from components/shared/EmptyState.jsx.
+ *
+ * The accent classes set --ill-accent, which the SVG fills against.
+ * `currentColor` on SVG strokes inherits from .empty-state-illustration.
+ * ================================================================ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  gap: 10px;
+  color: var(--sds-fg-tertiary);
+  --ill-accent: var(--sds-brand-primary);
+}
+.empty-state-compact {
+  padding: 28px 16px;
+  gap: 8px;
+}
+.empty-state-accent-success { --ill-accent: var(--sds-success); }
+.empty-state-accent-warning { --ill-accent: var(--sds-warning); }
+.empty-state-accent-info    { --ill-accent: var(--sds-info); }
+
+.empty-state-illustration {
+  color: var(--sds-fg-muted);
+  margin-bottom: 4px;
+  animation: emptyStateIllustrationIn 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.empty-state-compact .empty-state-illustration {
+  transform: scale(0.78);
+  transform-origin: bottom center;
+  margin-bottom: -4px;
+}
+.empty-state-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sds-fg-heading);
+  letter-spacing: -0.005em;
+  animation: emptyStateTextIn 360ms 100ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.empty-state-compact .empty-state-title { font-size: 14px; }
+.empty-state-body {
+  font-size: 13px;
+  color: var(--sds-fg-tertiary);
+  max-width: 320px;
+  line-height: 1.5;
+  animation: emptyStateTextIn 360ms 160ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.empty-state-compact .empty-state-body { font-size: 12px; max-width: 260px; }
+.empty-state-action {
+  margin-top: 6px;
+  animation: emptyStateTextIn 360ms 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes emptyStateIllustrationIn {
+  from { opacity: 0; transform: scale(0.86) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes emptyStateTextIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .empty-state-illustration,
+  .empty-state-title,
+  .empty-state-body,
+  .empty-state-action {
+    animation: none;
+  }
+}
+
+/* ================================================================
+ * SKELETON SYSTEM
+ *
+ * Single shared shimmer keyframe + composable shape classes. Use as:
+ *   <div className="skel skel-card" />
+ *   <div className="skel skel-line" style={{ width: '60%' }} />
+ *   <div className="skel skel-circle" style={{ width: 32, height: 32 }} />
+ *
+ * Variants set sensible defaults; override height/width via inline style
+ * or a page-scoped wrapper class. The shimmer is a translated gradient
+ * pseudo-element so adding content inside .skel is also safe.
+ * ================================================================ */
+.skel {
+  position: relative;
+  overflow: hidden;
+  background: var(--sds-bg-surface-alt);
+  border-radius: var(--sds-radius-sm);
+}
+.skel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: skelShimmer 1.6s ease-in-out infinite;
+}
+.skel-line     { height: 12px; border-radius: var(--sds-radius-xs); }
+.skel-line-sm  { height: 10px; border-radius: var(--sds-radius-xs); }
+.skel-line-lg  { height: 16px; border-radius: var(--sds-radius-xs); }
+.skel-circle   { border-radius: 50%; }
+.skel-card     { height: 100px; border-radius: var(--sds-radius-lg); }
+.skel-card-sm  { height: 56px;  border-radius: var(--sds-radius-md); }
+.skel-card-lg  { height: 140px; border-radius: var(--sds-radius-lg); }
+
+@keyframes skelShimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel::after { animation: none; opacity: 0; }
+}
+
+/* ================================================================
+ * DIALOG — small accents for the shared Confirm/Prompt/Alert modals
+ * in components/shared/Dialog.jsx. Modal layout itself reuses the
+ * existing .modal / .modal-backdrop / .modal-body / .modal-f system.
+ * ================================================================ */
+.dlg-alert-icon {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dlg-alert-icon-info    { background: var(--sds-brand-primary-tint); color: var(--sds-brand-primary); }
+.dlg-alert-icon-error   { background: rgba(211,47,47,0.12);          color: var(--sds-error); }
+.dlg-alert-icon-warning { background: rgba(237,108,2,0.12);          color: var(--sds-warning); }
+.dlg-alert-icon-success { background: rgba(46,125,50,0.12);          color: var(--sds-success); }

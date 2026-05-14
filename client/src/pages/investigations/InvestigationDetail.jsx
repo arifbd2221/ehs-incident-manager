@@ -10,6 +10,8 @@ import { createLink, deleteLink } from '../../api/links';
 import { useAuth } from '../../context/AuthContext';
 import { frameworkVisibility } from '../../utils/frameworks';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyWhysIllustration } from '../../components/shared/EmptyState';
+import { useConfirm } from '../../components/shared/Dialog';
 import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import DatePicker from '../../components/shared/DatePicker';
@@ -96,6 +98,7 @@ export default function InvestigationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
   const { showOsha, showRiddor } = frameworkVisibility(user);
   const canEdit = ELEVATED.has(user?.role);
   const canManageLead = LEAD_ROLES.has(user?.role);
@@ -167,26 +170,46 @@ export default function InvestigationDetail() {
     loadDocLibrary(linkFolderId, docSearch);
   }, [docModalOpen, linkFolderId, docSearch]);
 
+  // Derived flag — computed up-front so the effect below can list it as a
+  // dependency without a Temporal Dead Zone clash (later usages below still
+  // reference the same value via the existing `hasRootCause` const).
+  const whyHasRoot = (inv?.five_whys || []).some(w => w.is_root_cause);
+
   useEffect(() => {
     if (!inv || inv.status === 'closed') return;
     const whys = inv.five_whys || [];
-    if (whys.length > 0 && !whys.some(w => w.is_root_cause) && !whySuggestion && !whyLoading) {
-      suggestNextWhy(inv.id).then(s => {
+    if (whys.length === 0 || whyHasRoot || whySuggestion || whyLoading) return;
+
+    // Sequence: flip loading + clear stale state FIRST, then fire the request.
+    // On a fast network the old order let the resolution beat setState(true),
+    // so the spinner either skipped or flashed after results landed.
+    let cancelled = false;
+    setWhyLoading(true);
+    setWhySuggestion(null);
+    setWhyEditing(false);
+
+    suggestNextWhy(inv.id)
+      .then(s => {
+        if (cancelled) return;
         setWhySuggestion(s);
         setWhyEditedQ(s.next_question);
-      }).catch(() => {
+      })
+      .catch(() => {
+        if (cancelled) return;
         const lastWhy = whys[whys.length - 1];
         const fallbackQ = lastWhy
           ? `Why did "${lastWhy.answer.length > 60 ? lastWhy.answer.substring(0, 60) + '…' : lastWhy.answer}" happen?`
           : 'Why did this incident occur?';
         setWhySuggestion({ next_question: fallbackQ, likely_root_cause: false, root_cause_category: null, ai_unavailable: true, level: whys.length + 1 });
         setWhyEditedQ(fallbackQ);
-      }).finally(() => setWhyLoading(false));
-      setWhyLoading(true);
-      setWhySuggestion(null);
-      setWhyEditing(false);
-    }
-  }, [inv?.five_whys?.length]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setWhyLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [inv?.id, inv?.five_whys?.length, whyHasRoot]);
 
   const navigateLinkFolder = (folder) => {
     if (!folder) { setLinkFolderId(null); setLinkCrumbs([]); return; }
@@ -226,12 +249,18 @@ export default function InvestigationDetail() {
   };
 
   const handleUnlinkDoc = async (linkedDoc) => {
-    if (!window.confirm(`Unlink "${linkedDoc.name}" from this investigation?`)) return;
+    const ok = await confirmDialog({
+      title: `Unlink "${linkedDoc.name}"?`,
+      body: 'The document stays in the library — only its link to this investigation is removed.',
+      confirmLabel: 'Unlink',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteLink(linkedDoc.link_id);
       load();
     } catch (e) {
-      alert(e.response?.data?.error || 'Unlink failed');
+      showToast(e.response?.data?.error || 'Unlink failed');
     }
   };
 
@@ -245,7 +274,7 @@ export default function InvestigationDetail() {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert(e.response?.data?.error || 'Download failed');
+      showToast(e.response?.data?.error || 'Download failed');
     }
   };
 
@@ -266,7 +295,13 @@ export default function InvestigationDetail() {
   };
 
   const handleDeleteAttachment = async (attachment) => {
-    if (!window.confirm(`Remove "${attachment.filename}"? This is logged in the activity timeline.`)) return;
+    const ok = await confirmDialog({
+      title: `Remove "${attachment.filename}"?`,
+      body: 'The file will be deleted from this investigation. The activity timeline keeps a record of the removal.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteAttachment(attachment.id);
       showToast('Attachment removed.');
@@ -330,7 +365,13 @@ export default function InvestigationDetail() {
     }
   };
   const handleUnassign = async () => {
-    if (!window.confirm('Remove the lead investigator? Their team membership stays — only the lead role is cleared.')) return;
+    const ok = await confirmDialog({
+      title: 'Remove the lead investigator?',
+      body: 'Their team membership stays — only the lead role is cleared. You can assign a new lead afterwards.',
+      confirmLabel: 'Remove lead',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await updateInvestigation(inv.id, { lead_investigator: null });
       showToast('Lead unassigned.');
@@ -409,14 +450,14 @@ export default function InvestigationDetail() {
 
   const statusLabel = inv.status === 'closed' ? 'Closed' : inv.status === 'capa' ? 'Awaiting CAPA' : inv.status === 'progress' ? 'In progress' : 'Pending';
   const statusClass = `ln-${inv.status}`;
-  const statusColors = { pending: '#7E7E8C', progress: '#626DF9', capa: '#ED6C02', closed: '#2E7D32' };
-  const heroColor = statusColors[inv.status] || '#8b5cf6';
+  const statusColors = { pending: 'var(--sds-gray-500)', progress: 'var(--sds-brand-primary)', capa: 'var(--sds-warning)', closed: 'var(--sds-success)' };
+  const heroColor = statusColors[inv.status] || 'var(--sds-brand-primary)';
 
   return (
     <div className="page invd">
       {/* Breadcrumb */}
       <div className="invd-breadcrumb">
-        <button onClick={() => navigate('/investigations')}>
+        <button onClick={() => navigate('/investigations')} aria-label="Back to investigations">
           <Icon name="arrowL" size={13} /> Investigations
         </button>
         <span className="invd-bc-sep">/</span>
@@ -493,7 +534,12 @@ export default function InvestigationDetail() {
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)', marginBottom: 8 }}>No root-cause analysis steps yet. Add the first "Why" below.</p>
+                <EmptyState
+                  compact
+                  illustration={<EmptyWhysIllustration />}
+                  title="Begin your root cause analysis"
+                  body={'Ask the first "Why" below. Each answer leads to the next question — keep going until you hit the underlying cause.'}
+                />
               )}
 
               {inv.status !== 'closed' && !hasRootCause && (
@@ -560,7 +606,7 @@ export default function InvestigationDetail() {
                   </div>
 
                   {whySuggestion?.likely_root_cause && whyAnswer.trim() && (
-                    <div className="invd-why-root-prompt" role="alert">
+                    <div className="invd-why-root-prompt" role="status" aria-live="polite">
                       <div className="invd-why-root-icon" aria-hidden="true">★</div>
                       <div className="invd-why-root-text">
                         <strong>This looks like it could be the root cause.</strong>
@@ -589,9 +635,16 @@ export default function InvestigationDetail() {
 
                   <div className="invd-add-why-foot">
                     {!whySuggestion?.likely_root_cause && (
-                      <label>
-                        <input type="checkbox" checked={false} onChange={e => { if (e.target.checked && whyAnswer.trim()) handleSubmitWhy(true); }} disabled={!whyAnswer.trim() || whySaving}/> Mark as root cause
-                      </label>
+                      <button
+                        type="button"
+                        className="invd-why-mark-root"
+                        onClick={() => handleSubmitWhy(true)}
+                        disabled={!whyAnswer.trim() || whySaving || whyLoading}
+                        aria-label="Save this answer as the root cause"
+                      >
+                        <Icon name="shield" size={12}/>
+                        Mark as root cause
+                      </button>
                     )}
                     <button className="invd-why-add-btn" onClick={() => handleSubmitWhy(false)} disabled={!whyAnswer.trim() || whySaving || whyLoading || (!isFirstWhy && !whySuggestion)}>
                       <Icon name="plus" size={13}/>{whySaving ? 'Saving...' : `Add Why ${nextWhyLevel}`}
@@ -666,6 +719,7 @@ export default function InvestigationDetail() {
                 className="invd-attach-add"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
+                aria-label="Add attachment"
                 style={(inv.attachments || []).length + (inv.linked_documents || []).length === 0 ? { marginLeft: 'auto' } : undefined}
               >
                 {uploading ? (
@@ -690,6 +744,7 @@ export default function InvestigationDetail() {
                     className="invd-attach-add-empty"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
+                    aria-label="Add attachment"
                   >
                     {uploading ? 'Uploading…' : '+ Attach a file'}
                   </button>
@@ -708,6 +763,7 @@ export default function InvestigationDetail() {
                           className="invd-attach-del"
                           onClick={() => handleDeleteAttachment(a)}
                           title="Remove attachment"
+                          aria-label="Delete attachment"
                         >
                           <Icon name="close" size={14}/>
                         </button>
@@ -718,7 +774,7 @@ export default function InvestigationDetail() {
                     <div key={`doc-${d.id}`} className="invd-evidence-item invd-evidence-doc"
                       onClick={() => handleDownloadDoc(d)}
                       style={{ cursor: 'pointer' }}>
-                      <div className="invd-evidence-icon" style={{ background: 'rgba(98,109,249,0.1)', color: '#626DF9' }}>
+                      <div className="invd-evidence-icon" style={{ background: 'var(--sds-brand-primary-light)', color: 'var(--sds-brand-primary)' }}>
                         <Icon name="file" size={16}/>
                       </div>
                       <div className="invd-evidence-info">
@@ -760,7 +816,17 @@ export default function InvestigationDetail() {
               <div className="invd-card-body">
                 <div className="invd-capa-list">
                   {inv.capas.map(c => (
-                    <div key={c.id} className="invd-capa-card" onClick={() => navigate(`/capas/${c.id}`)}>
+                    <div
+                      key={c.id}
+                      className="invd-capa-card focus-ring"
+                      onClick={() => navigate(`/capas/${c.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); navigate(`/capas/${c.id}`); }
+                        else if (e.key === ' ') { e.preventDefault(); navigate(`/capas/${c.id}`); }
+                      }}
+                    >
                       <div className="invd-capa-top">
                         <span className="invd-capa-ref">{c.capa_number}</span>
                         <span className={`invd-capa-status ${capaStatusClass(c.status)}`}>
@@ -895,7 +961,7 @@ export default function InvestigationDetail() {
                 {showOsha && (
                   <div className="invd-summary-row">
                     <span className="invd-summary-label">OSHA recordable</span>
-                    <span className={`inv-kflag ${inv.osha_recordable ? 'kf-capa' : ''}`} style={!inv.osha_recordable ? { background: '#f3f4f6', color: '#6b7280' } : {}}>
+                    <span className={`inv-kflag ${inv.osha_recordable ? 'kf-capa' : ''}`} style={!inv.osha_recordable ? { background: 'var(--sds-gray-100)', color: 'var(--sds-fg-tertiary)' } : {}}>
                       <span className="kf-dot"/>{inv.osha_recordable ? 'Yes' : 'No'}
                     </span>
                   </div>
@@ -1076,8 +1142,19 @@ export default function InvestigationDetail() {
               ) : (
                 <div className="invd-doc-list">
                   {filteredDocs.map(d => (
-                    <div key={d.id} className="invd-doc-row"
-                      onClick={() => !docLinking && handleLinkDoc(d)}>
+                    <div
+                      key={d.id}
+                      className="invd-doc-row focus-ring"
+                      onClick={() => !docLinking && handleLinkDoc(d)}
+                      role="button"
+                      tabIndex={0}
+                      aria-disabled={docLinking || undefined}
+                      onKeyDown={(e) => {
+                        if (docLinking) return;
+                        if (e.key === 'Enter') { e.preventDefault(); handleLinkDoc(d); }
+                        else if (e.key === ' ') { e.preventDefault(); handleLinkDoc(d); }
+                      }}
+                    >
                       <div className="invd-doc-icon"><Icon name="file" size={16}/></div>
                       <div className="invd-doc-info">
                         <div className="invd-doc-name">{d.name}</div>

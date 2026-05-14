@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getUsers, getSites, createUser, updateUser, resetUserPassword, importUsers, userImportTemplateUrl } from '../../api/users';
 import Icon from '../../components/shared/Icon';
+import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import ComboBox from '../../components/shared/ComboBox';
 import ImportModal from '../../components/shared/ImportModal';
 import { TeamIllustration } from '../../components/shared/OnboardingIllustrations';
@@ -296,6 +297,8 @@ function PasswordResetModal({ member, onClose, onSaved }) {
 
 export default function Members() {
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
   const isAdmin = user?.role === 'admin';
 
   const [users, setUsers] = useState([]);
@@ -336,14 +339,27 @@ export default function Members() {
   const onPwSaved = () => { flashToast('Password reset'); closePwModal(); };
 
   const toggleActive = async (u) => {
-    const verb = u.is_active ? 'Deactivate' : 'Reactivate';
-    if (!window.confirm(`${verb} ${u.name}?`)) return;
+    const deactivating = u.is_active;
+    const verb = deactivating ? 'Deactivate' : 'Reactivate';
+    const ok = await confirmDialog({
+      title: `${verb} ${u.name}?`,
+      body: deactivating
+        ? 'They will lose access immediately but their history, assignments, and audit trail are preserved. You can reactivate them later.'
+        : 'They will regain access with their existing role and site assignment. Their history is unchanged.',
+      confirmLabel: verb,
+      danger: deactivating,
+    });
+    if (!ok) return;
     try {
       await updateUser(u.id, { is_active: !u.is_active });
-      flashToast(u.is_active ? 'Member deactivated' : 'Member reactivated');
+      flashToast(deactivating ? 'Member deactivated' : 'Member reactivated');
       refresh();
     } catch (err) {
-      alert(err.response?.data?.error || `${verb} failed`);
+      await alertDialog({
+        title: `Couldn't ${verb.toLowerCase()} member`,
+        body: err.response?.data?.error || `${verb} failed`,
+        tone: 'error',
+      });
     }
   };
 

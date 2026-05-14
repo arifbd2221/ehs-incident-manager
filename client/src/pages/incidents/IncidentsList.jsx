@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getIncidents } from '../../api/incidents';
 import { useApp } from '../../context/AppContext';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyIncidentsIllustration } from '../../components/shared/EmptyState';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import DeadlineBadge from '../../components/incidents/DeadlineBadge';
 import { formatDate, timeAgo } from '../../utils/time';
@@ -21,15 +22,34 @@ const statusKey = (s) => {
 export default function IncidentsList() {
   const navigate = useNavigate();
   const { setWizardOpen, refreshKey } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // URL is the source of truth for filters/search so refresh, deep-link, and
+  // back-from-detail all preserve the user's view. Empty defaults (tab=all,
+  // typeFilter='', search='') are omitted from the URL to keep it clean.
   const [incidents, setIncidents] = useState([]);
   const [total, setTotal] = useState(0);
+  // Per-status aggregates from the server — honour every active filter
+  // EXCEPT status, so tab/stat counts stay accurate while the user views
+  // a single status. Without this, counts read 0 for every non-active tab.
+  const [statusCounts, setStatusCounts] = useState({});
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'all');
+  const [typeFilter, setTypeFilter] = useState(() => searchParams.get('type') || '');
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
   const [page, setPage] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef(null);
+
+  // Sync filter state -> URL. `replace: true` so each keystroke in search
+  // doesn't bloat history. Page is intentionally NOT in the URL (resets when
+  // filters change anyway).
+  useEffect(() => {
+    const next = {};
+    if (tab && tab !== 'all') next.tab = tab;
+    if (typeFilter) next.type = typeFilter;
+    if (search.trim()) next.q = search;
+    setSearchParams(next, { replace: true });
+  }, [tab, typeFilter, search, setSearchParams]);
 
   const fetchIncidents = () => {
     setLoading(true);
@@ -39,7 +59,11 @@ export default function IncidentsList() {
     if (tab === 'closed') params.status = 'Closed';
     if (typeFilter) params.type = typeFilter;
     getIncidents(params)
-      .then(data => { setIncidents(data.incidents || []); setTotal(data.total || 0); })
+      .then(data => {
+        setIncidents(data.incidents || []);
+        setTotal(data.total || 0);
+        setStatusCounts(data.status_counts || {});
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
@@ -66,17 +90,28 @@ export default function IncidentsList() {
     );
   }, [incidents, search]);
 
-  const stats = useMemo(() => {
-    const open = incidents.filter(r => r.status === 'New').length;
-    const investigating = incidents.filter(r => r.status === 'Investigating').length;
-    const closed = incidents.filter(r => r.status === 'Closed').length;
-    return { open, investigating, closed };
-  }, [incidents]);
+  // Derived from server-side aggregates (status_counts), NOT from the
+  // currently-loaded page — otherwise switching tabs would zero out the
+  // other tabs' badges because the response is status-scoped.
+  const stats = useMemo(() => ({
+    open: statusCounts.New || 0,
+    investigating: statusCounts.Investigating || 0,
+    closed: statusCounts.Closed || 0,
+  }), [statusCounts]);
+
+  // Total across every status with the current non-status filters applied
+  // — used for the "All" tab badge and the hero "Total" stat. The list
+  // response's `total` only reflects the active status, so summing
+  // status_counts is the right source here.
+  const grandTotal = useMemo(
+    () => Object.values(statusCounts).reduce((a, b) => a + b, 0),
+    [statusCounts],
+  );
 
   const activeTypeName = TYPES.find(t => t.id === typeFilter)?.name;
 
   const tabs = [
-    { id: 'all', label: 'All', count: total },
+    { id: 'all', label: 'All', count: grandTotal },
     { id: 'open', label: 'Open', count: stats.open },
     { id: 'inprogress', label: 'In Progress', count: stats.investigating },
     { id: 'closed', label: 'Closed', count: stats.closed },
@@ -95,33 +130,33 @@ export default function IncidentsList() {
             <p className="inc-subtitle">Capture, classify, and route all safety events</p>
           </div>
           <div className="inc-hero-actions">
-            <button className="inc-btn-export"><Icon name="export" size={15}/>Export CSV</button>
+            <button className="inc-btn-export" aria-label="Export incidents to CSV"><Icon name="export" size={15}/>Export CSV</button>
             <button className="inc-btn-report" onClick={() => setWizardOpen(true)}><Icon name="plus" size={15}/>Report incident</button>
           </div>
         </div>
         <div className="inc-stats">
-          <div className="inc-stat" style={{ '--is-color': '#626DF9' }}>
+          <div className="inc-stat" style={{ '--is-color': 'var(--sds-brand-primary)' }}>
             <div className="inc-stat-icon"><Icon name="incidents" size={16} /></div>
             <div>
-              <div className="inc-stat-val">{total}</div>
+              <div className="inc-stat-val">{grandTotal}</div>
               <div className="inc-stat-lbl">Total</div>
             </div>
           </div>
-          <div className="inc-stat" style={{ '--is-color': '#16a34a' }}>
+          <div className="inc-stat" style={{ '--is-color': 'var(--sds-success)' }}>
             <div className="inc-stat-icon"><Icon name="pulse" size={16} /></div>
             <div>
               <div className="inc-stat-val">{stats.open}</div>
               <div className="inc-stat-lbl">Open</div>
             </div>
           </div>
-          <div className="inc-stat" style={{ '--is-color': '#2563eb' }}>
+          <div className="inc-stat" style={{ '--is-color': 'var(--sds-info-blue)' }}>
             <div className="inc-stat-icon"><Icon name="investigation" size={16} /></div>
             <div>
               <div className="inc-stat-val">{stats.investigating}</div>
               <div className="inc-stat-lbl">Investigating</div>
             </div>
           </div>
-          <div className="inc-stat" style={{ '--is-color': '#6b7280' }}>
+          <div className="inc-stat" style={{ '--is-color': 'var(--sds-fg-tertiary)' }}>
             <div className="inc-stat-icon"><Icon name="check" size={16} /></div>
             <div>
               <div className="inc-stat-val">{stats.closed}</div>
@@ -186,7 +221,7 @@ export default function IncidentsList() {
 
         <div className="inc-search">
           <span className="search-icon"><Icon name="search" size={15}/></span>
-          <input placeholder="Search incidents..." value={search} onChange={e => setSearch(e.target.value)}/>
+          <input aria-label="Search incidents" placeholder="Search incidents..." value={search} onChange={e => setSearch(e.target.value)}/>
         </div>
       </div>
 
@@ -196,7 +231,7 @@ export default function IncidentsList() {
           <span className="inc-filter-chip">
             <span className="inc-filter-dot" style={{ background: TYPES.find(t => t.id === typeFilter)?.color }} />
             {activeTypeName}
-            <button className="inc-filter-chip-x" onClick={() => { setTypeFilter(''); setPage(1); }}>
+            <button className="inc-filter-chip-x" aria-label={`Remove ${activeTypeName} filter`} onClick={() => { setTypeFilter(''); setPage(1); }}>
               <Icon name="close" size={10} />
             </button>
           </span>
@@ -205,22 +240,40 @@ export default function IncidentsList() {
 
       {/* Cards */}
       {loading ? (
-        <div className="inc-skeleton">
-          {[1,2,3,4,5].map(i => <div key={i} className="inc-skeleton-card" style={{ animationDelay: `${i * 80}ms` }}/>)}
+        <div className="inc-skeleton" role="status" aria-live="polite" aria-busy="true">
+          <span className="sr-only">Loading incidents…</span>
+          {[1,2,3,4,5].map(i => <div key={i} className="skel inc-skeleton-card" style={{ animationDelay: `${i * 80}ms` }}/>)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="inc-empty">
-          <div className="inc-empty-icon"><Icon name="incidents" size={26}/></div>
-          <h3>No incidents found</h3>
-          <p>{search ? 'Try adjusting your search or filters' : 'Report an incident to get started'}</p>
-        </div>
+        <EmptyState
+          illustration={<EmptyIncidentsIllustration />}
+          accent={search ? 'info' : 'success'}
+          title={search ? 'No matching incidents' : 'No incidents recorded'}
+          body={search
+            ? 'Try a different search term or clear active filters to see all incidents.'
+            : 'When an incident is reported it will show up here. The dashboard greets you with quick-report shortcuts.'}
+        />
       ) : (
         <div className="inc-cards">
           {filtered.map((r, idx) => {
             const t = typeOf(r.type);
             return (
-              <div key={r.id} className="inc-card" onClick={() => navigate(`/incidents/${r.id}`)} style={{ animationDelay: `${idx * 40}ms` }}>
-                <div className={`inc-card-sev sev-${r.severity}`}/>
+              <div
+                key={r.id}
+                className="inc-card focus-ring"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/incidents/${r.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/incidents/${r.id}`);
+                  }
+                }}
+                style={{ animationDelay: `${idx * 40}ms` }}
+              >
+                <div className={`inc-card-sev sev-${r.severity}`} aria-hidden="true"/>
+                <span className="sr-only">Severity {r.severity}</span>
                 <div className="inc-card-body">
                   <div className="inc-card-top">
                     <div className="inc-card-title">{r.title}</div>
@@ -288,13 +341,24 @@ export default function IncidentsList() {
 
       {/* Pagination */}
       {!loading && filtered.length > 0 && (
-        <div className="inc-pagination">
-          <span className="page-info">Showing {filtered.length} of {total} · Page {page}</span>
-          <div className="page-btns">
-            <button className="inc-page-btn" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← Previous</button>
-            <button className="inc-page-btn" disabled={incidents.length < 50} onClick={() => setPage(p => p + 1)}>Next →</button>
-          </div>
-        </div>
+        (() => {
+          // `total` is the server-side filtered count (status/type-scoped) so
+          // ceil(total/50) gives the real last page. The previous check
+          // (incidents.length < 50) misfired whenever the last page happened
+          // to hold exactly 50 rows OR when a filter trimmed mid-page.
+          const limit = 50;
+          const lastPage = Math.max(1, Math.ceil((total || 0) / limit));
+          const atLastPage = page >= lastPage;
+          return (
+            <div className="inc-pagination">
+              <span className="page-info">Showing {filtered.length} of {total} · Page {page}</span>
+              <div className="page-btns">
+                <button className="inc-page-btn" aria-label="Previous page" disabled={loading || page <= 1} onClick={() => setPage(p => p - 1)}>← Previous</button>
+                <button className="inc-page-btn" aria-label="Next page" disabled={loading || atLastPage} onClick={() => setPage(p => p + 1)}>Next →</button>
+              </div>
+            </div>
+          );
+        })()
       )}
     </div>
   );

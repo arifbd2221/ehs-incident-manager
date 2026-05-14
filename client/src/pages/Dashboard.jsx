@@ -6,6 +6,7 @@ import { listActiveStopWorks, acknowledgeStopWork } from '../api/stop_work';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import Icon from '../components/shared/Icon';
+import { useAlert } from '../components/shared/Dialog';
 import { TYPES, typeOf } from '../components/shared/Badges';
 import { timeAgo, formatDate } from '../utils/time';
 import { frameworkVisibility } from '../utils/frameworks';
@@ -586,6 +587,7 @@ function CustomizeDrawer({ widgets, baselineWidgets, onChange, onSave, onClose, 
  * ================================================================ */
 export default function Dashboard() {
   const navigate = useNavigate();
+  const alertDialog = useAlert();
   const { user, saveDashLayout } = useAuth();
   const { showOsha, showRiddor } = frameworkVisibility(user);
   const { setWizardOpen, refreshKey } = useApp();
@@ -645,7 +647,11 @@ export default function Dashboard() {
       }
       loadStopWorks();
     } catch (e) {
-      alert(e.response?.data?.error || 'Acknowledge failed');
+      await alertDialog({
+        title: "Couldn't acknowledge stop work",
+        body: e.response?.data?.error || 'Acknowledge failed',
+        tone: 'error',
+      });
     }
     setAckingId(null);
   };

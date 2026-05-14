@@ -19,6 +19,7 @@ import ScheduleModal from '../../components/maintenance/ScheduleModal';
 import CompleteModal from '../../components/maintenance/CompleteModal';
 import EscalateModal from '../../components/maintenance/EscalateModal';
 import ScheduleDetailModal from '../../components/maintenance/ScheduleDetailModal';
+import { useConfirm, useAlert } from '../../components/shared/Dialog';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
@@ -70,6 +71,8 @@ export default function MaintenancePage() {
   const { refreshKey, activeSiteId } = useApp();
   const canEdit = ELEVATED.has(user?.role);
   const [searchParams, setSearchParams] = useSearchParams();
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
 
   const [sites, setSites] = useState([]);
   const [siteFilter, setSiteFilter] = useState('');
@@ -155,9 +158,21 @@ export default function MaintenancePage() {
   };
 
   const handleArchive = async (schedule) => {
-    if (!window.confirm(`Archive "${schedule.title}"? Existing completion history stays in the audit log.`)) return;
+    const ok = await confirmDialog({
+      title: `Archive "${schedule.title}"?`,
+      body: 'Existing completion history stays in the audit log. The schedule will be hidden from active views but can be restored later.',
+      confirmLabel: 'Archive',
+      danger: true,
+    });
+    if (!ok) return;
     try { await deleteSchedule(schedule.id); load(); refreshCounts(); }
-    catch (e) { alert(e.response?.data?.error || 'Archive failed'); }
+    catch (e) {
+      await alertDialog({
+        title: 'Archive failed',
+        body: e.response?.data?.error || 'Could not archive this schedule.',
+        tone: 'error',
+      });
+    }
   };
 
   const handleAfterAction = () => {

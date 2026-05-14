@@ -10,6 +10,7 @@ import { getSites } from '../../api/auth';
 import api from '../../api/client';
 import Icon from '../../components/shared/Icon';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
+import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import '../../styles/documents.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -77,6 +78,8 @@ export default function DocumentsList() {
   const { user } = useAuth();
   const { refreshKey } = useApp();
   const canEdit = ELEVATED.has(user?.role);
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
 
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -337,9 +340,13 @@ export default function DocumentsList() {
   };
 
   // --- Folder CRUD ---
-  const openCreateFolder = () => {
+  const openCreateFolder = async () => {
     if (!siteFilter) {
-      alert('Pick a site first — folders are site-scoped.');
+      await alertDialog({
+        title: 'Pick a site to continue',
+        body: 'Folders are site-scoped — choose a site from the dropdown first.',
+        tone: 'info',
+      });
       return;
     }
     setFolderModal('create');
@@ -447,18 +454,40 @@ export default function DocumentsList() {
       }
       refresh();
     } catch (err) {
-      alert(err.response?.data?.error || 'Move failed');
+      await alertDialog({
+        title: "Couldn't move document",
+        body: err.response?.data?.error || 'Move failed',
+        tone: 'error',
+      });
     }
   };
 
   const handleArchive = async (doc) => {
-    if (!window.confirm(`Archive "${doc.name}"?`)) return;
+    const ok = await confirmDialog({
+      title: `Archive document "${doc.name}"?`,
+      body: 'The document will be hidden from active views but its version history is preserved. You can restore it later from the Archived tab.',
+      confirmLabel: 'Archive document',
+      danger: true,
+    });
+    if (!ok) return;
     try { await deleteDocument(doc.id); refresh(); }
-    catch (err) { alert(err.response?.data?.error || 'Archive failed'); }
+    catch (err) {
+      await alertDialog({
+        title: "Couldn't archive document",
+        body: err.response?.data?.error || 'Archive failed',
+        tone: 'error',
+      });
+    }
   };
   const handleRestore = async (doc) => {
     try { await updateDocument(doc.id, { active: 1 }); refresh(); }
-    catch (err) { alert(err.response?.data?.error || 'Restore failed'); }
+    catch (err) {
+      await alertDialog({
+        title: "Couldn't restore document",
+        body: err.response?.data?.error || 'Restore failed',
+        tone: 'error',
+      });
+    }
   };
   const handleDownload = async (doc) => {
     try {
@@ -473,7 +502,11 @@ export default function DocumentsList() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert(err.response?.data?.error || 'Download failed');
+      await alertDialog({
+        title: "Couldn't download document",
+        body: err.response?.data?.error || 'Download failed',
+        tone: 'error',
+      });
     }
   };
 
@@ -504,7 +537,11 @@ export default function DocumentsList() {
       const blob = new Blob([res.data], { type: doc.mime_type || 'application/octet-stream' });
       setPreviewUrl(URL.createObjectURL(blob));
     } catch (err) {
-      alert(err.response?.data?.error || 'Preview failed');
+      await alertDialog({
+        title: "Couldn't load preview",
+        body: err.response?.data?.error || 'Preview failed',
+        tone: 'error',
+      });
       setPreviewDoc(null);
     } finally {
       setPreviewLoading(false);
@@ -549,7 +586,11 @@ export default function DocumentsList() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert(err.response?.data?.error || 'Download failed');
+      await alertDialog({
+        title: "Couldn't download version",
+        body: err.response?.data?.error || 'Download failed',
+        tone: 'error',
+      });
     }
   };
 
