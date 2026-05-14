@@ -10,6 +10,7 @@ import { createLink, deleteLink } from '../../api/links';
 import { useAuth } from '../../context/AuthContext';
 import { frameworkVisibility } from '../../utils/frameworks';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyWhysIllustration } from '../../components/shared/EmptyState';
 import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import DatePicker from '../../components/shared/DatePicker';
@@ -493,7 +494,12 @@ export default function InvestigationDetail() {
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)', marginBottom: 8 }}>No root-cause analysis steps yet. Add the first "Why" below.</p>
+                <EmptyState
+                  compact
+                  illustration={<EmptyWhysIllustration />}
+                  title="Begin your root cause analysis"
+                  body={'Ask the first "Why" below. Each answer leads to the next question — keep going until you hit the underlying cause.'}
+                />
               )}
 
               {inv.status !== 'closed' && !hasRootCause && (

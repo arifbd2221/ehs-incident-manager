@@ -13,6 +13,7 @@ import {
   setSafeworkNswPcbu,
 } from '../../api/safework_nsw';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyAttachmentsIllustration, EmptyWitnessesIllustration } from '../../components/shared/EmptyState';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
 import DeadlineBadge from '../../components/incidents/DeadlineBadge';
@@ -1006,16 +1007,22 @@ export default function IncidentDetail() {
                   )}
                 </>
               ) : (
-                <div className="idet-attach-empty">
-                  <p>No attachments yet.</p>
-                  <button
-                    className="idet-attach-add-empty"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
-                  >
-                    {uploading ? 'Uploading…' : 'Attach a file'}
-                  </button>
-                </div>
+                <EmptyState
+                  compact
+                  illustration={<EmptyAttachmentsIllustration />}
+                  title="No attachments yet"
+                  body="Photos, statements, sketches, and reports give the investigator the fastest path to root cause."
+                  action={
+                    <button
+                      className="idet-attach-add-empty"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      aria-label="Attach a file"
+                    >
+                      {uploading ? 'Uploading…' : 'Attach a file'}
+                    </button>
+                  }
+                />
               )}
             </div>
           </div>
@@ -1348,9 +1355,14 @@ export default function IncidentDetail() {
             </div>
             <div className="idet-card-body">
               {(r.witnesses || []).length === 0 ? (
-                <div className="idet-witness-empty">
-                  No witnesses recorded yet.{canEdit ? ' Add a statement when one is collected.' : ''}
-                </div>
+                <EmptyState
+                  compact
+                  illustration={<EmptyWitnessesIllustration />}
+                  title="No witnesses recorded"
+                  body={canEdit
+                    ? 'Add a statement when one is collected. Witness accounts are the strongest evidence for an incident timeline.'
+                    : 'Witness statements have not been recorded for this incident.'}
+                />
               ) : (
                 <div className="idet-witnesses">
                   {r.witnesses.map(w => (

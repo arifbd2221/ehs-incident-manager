@@ -5,6 +5,7 @@ import { getCapas, updateCapa, completeCapa, verifyCapa, rejectCapa } from '../.
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyCAPAsIllustration } from '../../components/shared/EmptyState';
 import NewCapaModal from '../../components/modals/NewCapaModal';
 import { formatDateShort } from '../../utils/time';
 import '../../styles/capas.css';
@@ -263,11 +264,14 @@ export default function CAPAPage() {
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <div className="capa-empty">
-          <div className="capa-empty-icon"><Icon name="capa" size={26}/></div>
-          <h3>No CAPAs found</h3>
-          <p>{tab !== 'all' ? 'Try adjusting your filter' : 'Assign a CAPA from an investigation to get started'}</p>
-        </div>
+        <EmptyState
+          illustration={<EmptyCAPAsIllustration />}
+          accent={tab !== 'all' ? 'info' : 'success'}
+          title={tab !== 'all' ? 'No CAPAs in this view' : 'No corrective actions yet'}
+          body={tab !== 'all'
+            ? 'Switch tabs or clear your filter to see all CAPAs.'
+            : 'CAPAs are assigned from an investigation. Once one is created it will appear here.'}
+        />
       ) : view === 'board' ? (
         <div className="capa-kanban">
           {CAPA_LANES.map(lane => {

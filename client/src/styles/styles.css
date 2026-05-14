@@ -3364,3 +3364,78 @@ body {
               0 0 0 5px var(--sds-brand-primary-light);
   border-radius: inherit;
 }
+
+/* ================================================================
+ * EMPTY STATE — shared illustrated empty-state surface
+ *
+ * Used via <EmptyState illustration={...} title="…" body="…"
+ * action={<button .../>} /> from components/shared/EmptyState.jsx.
+ *
+ * The accent classes set --ill-accent, which the SVG fills against.
+ * `currentColor` on SVG strokes inherits from .empty-state-illustration.
+ * ================================================================ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  gap: 10px;
+  color: var(--sds-fg-tertiary);
+  --ill-accent: var(--sds-brand-primary);
+}
+.empty-state-compact {
+  padding: 28px 16px;
+  gap: 8px;
+}
+.empty-state-accent-success { --ill-accent: var(--sds-success); }
+.empty-state-accent-warning { --ill-accent: var(--sds-warning); }
+.empty-state-accent-info    { --ill-accent: var(--sds-info); }
+
+.empty-state-illustration {
+  color: var(--sds-fg-muted);
+  margin-bottom: 4px;
+  animation: emptyStateIllustrationIn 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.empty-state-compact .empty-state-illustration {
+  transform: scale(0.78);
+  transform-origin: bottom center;
+  margin-bottom: -4px;
+}
+.empty-state-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sds-fg-heading);
+  letter-spacing: -0.005em;
+  animation: emptyStateTextIn 360ms 100ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.empty-state-compact .empty-state-title { font-size: 14px; }
+.empty-state-body {
+  font-size: 13px;
+  color: var(--sds-fg-tertiary);
+  max-width: 320px;
+  line-height: 1.5;
+  animation: emptyStateTextIn 360ms 160ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.empty-state-compact .empty-state-body { font-size: 12px; max-width: 260px; }
+.empty-state-action {
+  margin-top: 6px;
+  animation: emptyStateTextIn 360ms 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes emptyStateIllustrationIn {
+  from { opacity: 0; transform: scale(0.86) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes emptyStateTextIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .empty-state-illustration,
+  .empty-state-title,
+  .empty-state-body,
+  .empty-state-action {
+    animation: none;
+  }
+}

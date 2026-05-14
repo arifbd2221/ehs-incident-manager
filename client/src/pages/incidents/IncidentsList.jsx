@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getIncidents } from '../../api/incidents';
 import { useApp } from '../../context/AppContext';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyIncidentsIllustration } from '../../components/shared/EmptyState';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import DeadlineBadge from '../../components/incidents/DeadlineBadge';
 import { formatDate, timeAgo } from '../../utils/time';
@@ -209,11 +210,14 @@ export default function IncidentsList() {
           {[1,2,3,4,5].map(i => <div key={i} className="inc-skeleton-card" style={{ animationDelay: `${i * 80}ms` }}/>)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="inc-empty">
-          <div className="inc-empty-icon"><Icon name="incidents" size={26}/></div>
-          <h3>No incidents found</h3>
-          <p>{search ? 'Try adjusting your search or filters' : 'Report an incident to get started'}</p>
-        </div>
+        <EmptyState
+          illustration={<EmptyIncidentsIllustration />}
+          accent={search ? 'info' : 'success'}
+          title={search ? 'No matching incidents' : 'No incidents recorded'}
+          body={search
+            ? 'Try a different search term or clear active filters to see all incidents.'
+            : 'When an incident is reported it will show up here. The dashboard greets you with quick-report shortcuts.'}
+        />
       ) : (
         <div className="inc-cards">
           {filtered.map((r, idx) => {
