@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import { frameworkVisibility } from '../../utils/frameworks';
 import Icon from '../../components/shared/Icon';
 import EmptyState, { EmptyWhysIllustration } from '../../components/shared/EmptyState';
+import { useConfirm } from '../../components/shared/Dialog';
 import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import DatePicker from '../../components/shared/DatePicker';
@@ -97,6 +98,7 @@ export default function InvestigationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
   const { showOsha, showRiddor } = frameworkVisibility(user);
   const canEdit = ELEVATED.has(user?.role);
   const canManageLead = LEAD_ROLES.has(user?.role);
@@ -227,12 +229,18 @@ export default function InvestigationDetail() {
   };
 
   const handleUnlinkDoc = async (linkedDoc) => {
-    if (!window.confirm(`Unlink "${linkedDoc.name}" from this investigation?`)) return;
+    const ok = await confirmDialog({
+      title: `Unlink "${linkedDoc.name}"?`,
+      body: 'The document stays in the library — only its link to this investigation is removed.',
+      confirmLabel: 'Unlink',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteLink(linkedDoc.link_id);
       load();
     } catch (e) {
-      alert(e.response?.data?.error || 'Unlink failed');
+      showToast(e.response?.data?.error || 'Unlink failed');
     }
   };
 
@@ -246,7 +254,7 @@ export default function InvestigationDetail() {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert(e.response?.data?.error || 'Download failed');
+      showToast(e.response?.data?.error || 'Download failed');
     }
   };
 
@@ -267,7 +275,13 @@ export default function InvestigationDetail() {
   };
 
   const handleDeleteAttachment = async (attachment) => {
-    if (!window.confirm(`Remove "${attachment.filename}"? This is logged in the activity timeline.`)) return;
+    const ok = await confirmDialog({
+      title: `Remove "${attachment.filename}"?`,
+      body: 'The file will be deleted from this investigation. The activity timeline keeps a record of the removal.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteAttachment(attachment.id);
       showToast('Attachment removed.');
@@ -331,7 +345,13 @@ export default function InvestigationDetail() {
     }
   };
   const handleUnassign = async () => {
-    if (!window.confirm('Remove the lead investigator? Their team membership stays — only the lead role is cleared.')) return;
+    const ok = await confirmDialog({
+      title: 'Remove the lead investigator?',
+      body: 'Their team membership stays — only the lead role is cleared. You can assign a new lead afterwards.',
+      confirmLabel: 'Remove lead',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await updateInvestigation(inv.id, { lead_investigator: null });
       showToast('Lead unassigned.');

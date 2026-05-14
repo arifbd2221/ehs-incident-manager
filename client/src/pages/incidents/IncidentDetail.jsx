@@ -14,6 +14,7 @@ import {
 } from '../../api/safework_nsw';
 import Icon from '../../components/shared/Icon';
 import EmptyState, { EmptyAttachmentsIllustration, EmptyWitnessesIllustration } from '../../components/shared/EmptyState';
+import { useConfirm, usePrompt } from '../../components/shared/Dialog';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
 import DeadlineBadge from '../../components/incidents/DeadlineBadge';
@@ -189,6 +190,7 @@ const RIDDOR_PHONE_CATEGORIES = new Set([
 function RiddorActionsCard({ incident, canAct, onChange }) {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
+  const promptDialog = usePrompt();
   const rows = incident.riddor_reports || [];
 
   const doPhone = async (rid) => {
@@ -198,7 +200,14 @@ function RiddorActionsCard({ incident, canAct, onChange }) {
     finally { setBusyId(null); }
   };
   const doWritten = async (rid) => {
-    const hseRef = window.prompt('HSE reference number from F2508 receipt (optional):', '') || '';
+    const hseRef = await promptDialog({
+      title: 'Log F2508 submission',
+      body: 'Record the HSE reference number from the F2508 receipt. You can leave this blank if not yet assigned.',
+      label: 'HSE reference number',
+      placeholder: 'Optional — e.g. HSE/123456',
+      confirmLabel: 'Log submission',
+    });
+    if (hseRef === null) return; // user cancelled
     setBusyId(rid); setError(null);
     try { await logRiddorWrittenSubmitted(rid, hseRef.trim() ? { hse_ref: hseRef.trim() } : {}); onChange?.(); }
     catch (e) { setError(e?.response?.data?.error || 'Failed to log submission.'); }
@@ -321,6 +330,7 @@ export default function IncidentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
   const { showOsha, showRiddor, showNsw } = frameworkVisibility(user);
   const canVerify = ELEVATED_ROLES.has(user?.role);
   const canVerifyRecordability = RECORDABILITY_VERIFY_ROLES.has(user?.role);
@@ -642,7 +652,13 @@ export default function IncidentDetail() {
   };
 
   const handleDeleteAffectedPerson = async (ap) => {
-    if (!window.confirm(`Remove ${ap.name || 'this person'} from the incident? Audit trail keeps the record.`)) return;
+    const ok = await confirmDialog({
+      title: `Remove ${ap.name || 'this person'}?`,
+      body: 'They will be removed from the incident. The audit trail keeps the record of who was originally listed.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteAffectedPerson(r.id, ap.id);
       showToast(ap.name ? `${ap.name} removed.` : 'Person removed.');
@@ -653,7 +669,13 @@ export default function IncidentDetail() {
   };
 
   const handleDeleteWitness = async (witness) => {
-    if (!window.confirm(`Remove witness ${witness.name}? This is logged for audit.`)) return;
+    const ok = await confirmDialog({
+      title: `Remove witness ${witness.name}?`,
+      body: 'The witness statement will be removed from this incident. This action is logged for audit.',
+      confirmLabel: 'Remove witness',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteWitness(r.id, witness.id);
       showToast('Witness removed.');

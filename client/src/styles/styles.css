@@ -3486,3 +3486,21 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .skel::after { animation: none; opacity: 0; }
 }
+
+/* ================================================================
+ * DIALOG — small accents for the shared Confirm/Prompt/Alert modals
+ * in components/shared/Dialog.jsx. Modal layout itself reuses the
+ * existing .modal / .modal-backdrop / .modal-body / .modal-f system.
+ * ================================================================ */
+.dlg-alert-icon {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dlg-alert-icon-info    { background: var(--sds-brand-primary-tint); color: var(--sds-brand-primary); }
+.dlg-alert-icon-error   { background: rgba(211,47,47,0.12);          color: var(--sds-error); }
+.dlg-alert-icon-warning { background: rgba(237,108,2,0.12);          color: var(--sds-warning); }
+.dlg-alert-icon-success { background: rgba(46,125,50,0.12);          color: var(--sds-success); }

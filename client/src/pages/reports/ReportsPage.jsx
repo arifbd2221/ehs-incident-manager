@@ -6,6 +6,7 @@ import { getSites, getUsers } from '../../api/users';
 import { getIncidents } from '../../api/incidents';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import { useAlert, usePrompt } from '../../components/shared/Dialog';
 import ComboBox from '../../components/shared/ComboBox';
 import DatePicker from '../../components/shared/DatePicker';
 import CertifyOsha300AModal from '../../components/modals/CertifyOsha300AModal';
@@ -744,6 +745,7 @@ function AuditLogReport() {
 
 function Osha300Report({ siteId }) {
   const { user } = useAuth();
+  const alertDialog = useAlert();
   const canAdd = ELEVATED_ROLES.has(user?.role);
   const [data, setData] = useState(null);
   const [showManual, setShowManual] = useState(false);
@@ -788,7 +790,11 @@ function Osha300Report({ siteId }) {
     } catch (e) {
       // Surface failure but keep the UI usable.
       console.error('OSHA 300 PDF download failed:', e);
-      alert(e.message || 'Download failed');
+      alertDialog({
+        title: 'Download failed',
+        body: e.message || 'The PDF could not be generated. Please try again or contact support.',
+        tone: 'error',
+      });
     } finally {
       setDownloading(false);
     }
@@ -1327,6 +1333,7 @@ const RIDDOR_ACTION_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 
 function RiddorReport({ siteId }) {
   const { user } = useAuth();
+  const promptDialog = usePrompt();
   const canEdit = RIDDOR_ACTION_ROLES.has(user?.role);
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(null);     // riddor row id while a POST is in-flight
@@ -1361,7 +1368,14 @@ function RiddorReport({ siteId }) {
   };
 
   const doWritten = async (rid) => {
-    const hseRef = window.prompt('HSE reference number from F2508 receipt (optional):', '') || '';
+    const hseRef = await promptDialog({
+      title: 'Log F2508 submission',
+      body: 'Record the HSE reference number from the F2508 receipt. You can leave this blank if not yet assigned.',
+      label: 'HSE reference number',
+      placeholder: 'Optional — e.g. HSE/123456',
+      confirmLabel: 'Log submission',
+    });
+    if (hseRef === null) return; // user cancelled
     setBusy(rid);
     try {
       await logRiddorWrittenSubmitted(rid, hseRef.trim() ? { hse_ref: hseRef.trim() } : {});
