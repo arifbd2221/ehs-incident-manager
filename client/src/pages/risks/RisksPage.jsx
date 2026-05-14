@@ -349,12 +349,15 @@ export default function RisksPage() {
                 CONSEQUENCE_LABELS.map((consequenceLabel, ci) => {
                   const level = SEV_GRID[li][ci];
                   const count = getMatrixCount(li, ci);
+                  // Diagonal wave reveal: cells with the same (li+ci) sum
+                  // appear together, sweeping from top-left to bottom-right.
                   return (
                     <button
                       type="button"
                       key={`${li}-${ci}`}
                       className={`rsk-matrix-cell rsk-cell rsk-cell-${level} ${count === 0 ? 'rsk-cell-empty' : ''}`}
                       aria-label={`Likelihood ${likelihoodLabel}, Consequence ${consequenceLabel}, ${LEVEL_NAMES[level]} risk, ${count} risks`}
+                      style={{ animationDelay: `${(li + ci) * 40}ms` }}
                       onClick={() => {
                         setView('list');
                       }}

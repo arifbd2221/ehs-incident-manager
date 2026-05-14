@@ -621,6 +621,22 @@
   color: var(--sds-fg-tertiary);
 }
 
+/* View Transitions API — kanban cards animate between lanes when their
+ * status changes. Each card carries viewTransitionName="capa-{id}" via
+ * inline style; the browser handles the FLIP interpolation. We just
+ * tune the timing so it matches the rest of the app's spring rhythm. */
+::view-transition-group(*) {
+  animation-duration: 360ms;
+  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
 /* Loading — composes the shared .skel system from styles.css. */
 .capa-skeleton {
   display: grid;

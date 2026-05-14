@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getCapas, updateCapa, completeCapa, verifyCapa, rejectCapa } from '../../api/capas';
 import { useApp } from '../../context/AppContext';
@@ -87,6 +87,17 @@ export default function CAPAPage() {
   };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
+  // Wraps a state updater in the View Transitions API when available so
+  // kanban cards animate between lanes (FLIP) instead of snapping. Falls
+  // back to a plain update on unsupported browsers — current behaviour.
+  const transitionUpdate = (updater) => {
+    if (typeof document !== 'undefined' && typeof document.startViewTransition === 'function') {
+      document.startViewTransition(() => { flushSync(updater); });
+    } else {
+      updater();
+    }
+  };
+
   const handleDragStart = (e, capa) => {
     if (capa.status === 'closed') { e.preventDefault(); return; }
     dragSourceCol.current = capa.status;
@@ -130,23 +141,23 @@ export default function CAPAPage() {
 
     try {
       if (from === 'pending' && targetLane === 'progress') {
-        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c));
+        transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c)));
         await updateCapa(capaId, { status: 'progress' });
         showToast('CAPA started');
       } else if (from === 'progress' && targetLane === 'pending') {
-        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'pending' } : c));
+        transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'pending' } : c)));
         await updateCapa(capaId, { status: 'pending' });
         showToast('Moved back to pending');
       } else if (from === 'progress' && targetLane === 'verify') {
-        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'verify', progress: 100 } : c));
+        transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'verify', progress: 100 } : c)));
         await completeCapa(capaId, {});
         showToast('Submitted for verification');
       } else if (from === 'verify' && targetLane === 'progress') {
-        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c));
+        transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c)));
         await rejectCapa(capaId, { notes: 'Needs more work' });
         showToast('Rejected — sent back to progress');
       } else if (from === 'verify' && targetLane === 'closed') {
-        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'closed' } : c));
+        transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'closed' } : c)));
         await verifyCapa(capaId, { result: 'effective' });
         showToast('CAPA verified & closed');
       }
@@ -311,7 +322,11 @@ export default function CAPAPage() {
                           navigate(`/capas/${c.id}`);
                         }
                       }}
-                      style={{ animationDelay: `${idx * 50}ms`, cursor: c.status === 'closed' ? 'pointer' : 'grab' }}
+                      style={{
+                        animationDelay: `${idx * 50}ms`,
+                        cursor: c.status === 'closed' ? 'pointer' : 'grab',
+                        viewTransitionName: `capa-${c.id}`,
+                      }}
                     >
                       {c.status !== 'closed' && <div className="capa-kcard-grip"><Icon name="sort" size={12}/></div>}
                       <div className="capa-kcard-top">
