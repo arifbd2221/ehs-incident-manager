@@ -247,8 +247,8 @@ export default function MaintenancePage() {
 
       {/* Tabs + filters */}
       <div className="card card-pad" style={{ marginBottom: 0, padding: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid var(--sds-border)' }}>
-          <div style={{ display: 'flex', gap: 4 }}>
+        <div className="mnt-filter-bar">
+          <div className="mnt-status-tabs">
             {TABS.map(t => {
               const badge = tabBadge(t.id);
               return (
@@ -265,17 +265,15 @@ export default function MaintenancePage() {
               );
             })}
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <select
+            className="mnt-type-select"
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+          >
             {TYPE_FILTERS.map(t => (
-              <button
-                key={t.id}
-                className={`btn btn-sm ${typeFilter === t.id ? 'btn-primary' : 'btn-tertiary'}`}
-                onClick={() => setTypeFilter(t.id)}
-              >
-                {t.label}
-              </button>
+              <option key={t.id} value={t.id}>{t.label}</option>
             ))}
-          </div>
+          </select>
         </div>
 
         {loading ? (
