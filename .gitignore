@@ -15,3 +15,6 @@ client/dist/
 *.pptx
 create_pitch_deck.py
 client/public/demo_incident.mp4
+ehs-design-system-plugin/
+production-roadmap.html
+server/ehs.db
