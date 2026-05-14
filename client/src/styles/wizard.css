@@ -5,7 +5,11 @@
 .wiz-overlay {
   position: fixed;
   inset: 0;
-  z-index: 600;
+  /* Sits below the Dialog modal stack (--sds-z-modal-backdrop 400 /
+   * --sds-z-modal 500) so a confirm dialog opened from inside the wizard
+   * (e.g. the discard-changes prompt on Cancel/X) renders ON TOP and is
+   * actually clickable. Still above the sidebar (100) and topbar (200). */
+  z-index: 300;
   background: rgba(15, 15, 20, 0.6);
   backdrop-filter: blur(4px);
   display: flex;
