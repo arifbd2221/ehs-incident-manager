@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import Icon from '../../components/shared/Icon';
@@ -72,6 +72,7 @@ export default function RisksPage() {
 
   const [matrixData, setMatrixData] = useState(null);
   const [matrixMode, setMatrixMode] = useState('inherent');
+  const [matrixFilter, setMatrixFilter] = useState(null);
 
   const limit = 50;
 
@@ -124,6 +125,20 @@ export default function RisksPage() {
     return cell?.count || 0;
   };
 
+  // Filter pipeline: server already applies tab/search → matrix cell filter
+  // is layered on top of that result client-side. Matrix filter uses the
+  // currently-selected matrixMode (inherent vs residual) so chip context
+  // matches the matrix the user just clicked.
+  const filteredRisks = useMemo(() => {
+    if (!matrixFilter) return risks;
+    const likeKey = matrixMode === 'inherent' ? 'inherent_likelihood' : 'residual_likelihood';
+    const consKey = matrixMode === 'inherent' ? 'inherent_consequence' : 'residual_consequence';
+    return risks.filter(r =>
+      r[likeKey] === matrixFilter.likelihood &&
+      r[consKey] === matrixFilter.consequence
+    );
+  }, [risks, matrixFilter, matrixMode]);
+
   return (
     <div className="page">
       {/* Hero */}
@@ -145,7 +160,7 @@ export default function RisksPage() {
             <button
               type="button"
               className={`rsk-view-btn ${view === 'matrix' ? 'active' : ''}`}
-              onClick={() => setView('matrix')}
+              onClick={() => { setView('matrix'); setMatrixFilter(null); }}
               aria-pressed={view === 'matrix'}
             >
               <Icon name="dashboard" size={13} /> Matrix
@@ -238,12 +253,35 @@ export default function RisksPage() {
           <span aria-hidden="true" style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>Loading risks...</span>
         </div>
       ) : view === 'list' ? (
-        risks.length === 0 ? (
+        <>
+          {matrixFilter && (
+            <div className="rsk-matrix-chip" role="status" aria-live="polite">
+              <span>
+                {LIKELIHOOD_LABELS[matrixFilter.likelihood]} likelihood
+                {' × '}
+                {CONSEQUENCE_LABELS[matrixFilter.consequence]} consequence
+                <span className="rsk-matrix-chip-mode"> ({matrixMode})</span>
+              </span>
+              <button
+                type="button"
+                className="rsk-matrix-chip-clear"
+                onClick={() => setMatrixFilter(null)}
+                aria-label="Clear matrix filter"
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+          )}
+          {filteredRisks.length === 0 ? (
           <div className="rsk-empty-state">
             <div className="rsk-empty-icon"><Icon name="fire" size={26} /></div>
             <div className="rsk-empty-title">No risks found</div>
             <div className="rsk-empty-sub">
-              {tab === 'all' ? 'Register your first risk to get started' : `No ${tab} risks`}
+              {matrixFilter
+                ? 'No risks match the selected matrix cell'
+                : tab === 'all'
+                  ? 'Register your first risk to get started'
+                  : `No ${tab} risks`}
             </div>
           </div>
         ) : (
@@ -262,7 +300,7 @@ export default function RisksPage() {
                 </tr>
               </thead>
               <tbody>
-                {risks.map(r => (
+                {filteredRisks.map(r => (
                   <tr
                     key={r.id}
                     className="rsk-row"
@@ -315,7 +353,8 @@ export default function RisksPage() {
               </div>
             )}
           </div>
-        )
+        )}
+        </>
       ) : (
         /* Matrix heatmap */
         <div className="rsk-matrix-wrap">
@@ -359,6 +398,7 @@ export default function RisksPage() {
                       aria-label={`Likelihood ${likelihoodLabel}, Consequence ${consequenceLabel}, ${LEVEL_NAMES[level]} risk, ${count} risks`}
                       style={{ animationDelay: `${(li + ci) * 40}ms` }}
                       onClick={() => {
+                        setMatrixFilter({ likelihood: li, consequence: ci });
                         setView('list');
                       }}
                     >

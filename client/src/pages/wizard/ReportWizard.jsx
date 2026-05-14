@@ -9,6 +9,7 @@ import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import DatePicker from '../../components/shared/DatePicker';
 import { TYPES, typeOf } from '../../components/shared/Badges';
+import { useConfirm } from '../../components/shared/Dialog';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { frameworkVisibility, jurisdictionForContext } from '../../utils/frameworks';
@@ -28,6 +29,14 @@ const STEPS = [
   { title: 'Details & risk', desc: 'Type-specific data & risk classification' },
   { title: 'Review & submit', desc: 'Confirm details and route the incident' },
 ];
+
+// Phase 7: localStorage key for autosaved in-progress drafts.
+// The wizard writes a snapshot here on every form-state change so that
+// a refresh / accidental Esc / accidental backdrop click does not blow
+// away the user's work. File objects aren't JSON-serializable, so we
+// persist only their metadata (name, size, type) — on restore we warn
+// the user that attachments need re-adding.
+const DRAFT_KEY = 'ehs:wizard:draft';
 
 const TYPE_FORMS = {
   injury: InjuryForm, illness: IllnessForm, nearmiss: NearMissForm,
@@ -135,6 +144,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const { user } = useAuth();
   const { voiceSheetData, setVoiceSheetData, activeSiteId } = useApp();
   const { showOsha, showRiddor } = frameworkVisibility(user);
+  const confirm = useConfirm();
   const [step, setStep] = useState(0);
   const [type, setType] = useState('injury');
   const [title, setTitle] = useState('');
@@ -156,6 +166,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const [imageUrls, setImageUrls] = useState({});
   const [submitError, setSubmitError] = useState('');
   const typeGroupRef = useRef(null);
+
+  // Phase 7: gate autosave-on-change until the restore decision has been
+  // made. Without this gate, the first render would immediately overwrite
+  // any existing draft with empty initial state before the user could
+  // choose to restore it.
+  const restoreSettledRef = useRef(false);
 
   // Anonymous reporting toggle (per locked decision #10).
   // Disabled when type is injury/illness — those identify a person and
@@ -233,6 +249,135 @@ export default function ReportWizard({ onClose, onSubmit }) {
     }
   }, [voiceSheetData, handleVoiceExtracted, setVoiceSheetData]);
 
+  // Phase 7 — Restore in-progress draft on mount.
+  // Runs exactly once; reads any snapshot the previous session wrote to
+  // localStorage and asks the user whether to rehydrate. We do NOT block
+  // initial render — the prompt is async, so the wizard appears with
+  // default state while we wait. Once the user decides, we either
+  // hydrate state-by-state or wipe the stored draft.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let snapshot = null;
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) snapshot = JSON.parse(raw);
+      } catch {
+        // Corrupt JSON — nuke and continue.
+        localStorage.removeItem(DRAFT_KEY);
+      }
+      // A snapshot is "interesting" only if it actually contains data the
+      // user typed. Otherwise we silently skip the prompt to avoid
+      // pestering users who just opened+closed the wizard.
+      const hasContent = snapshot && (
+        snapshot.title?.trim() ||
+        snapshot.description?.trim() ||
+        snapshot.area?.trim() ||
+        (snapshot.typeData && Object.keys(snapshot.typeData).length > 0) ||
+        (snapshot.fileMeta && snapshot.fileMeta.length > 0)
+      );
+      if (!hasContent) {
+        if (snapshot) localStorage.removeItem(DRAFT_KEY);
+        restoreSettledRef.current = true;
+        return;
+      }
+      const fileNote = snapshot.fileMeta?.length
+        ? ` Note: ${snapshot.fileMeta.length} attached file${snapshot.fileMeta.length > 1 ? 's' : ''} can't be restored and will need to be re-added.`
+        : '';
+      const ok = await confirm({
+        title: 'Restore your in-progress report?',
+        body: `We saved a draft from your last session. Continue where you left off, or start fresh.${fileNote}`,
+        confirmLabel: 'Restore draft',
+        cancelLabel: 'Start fresh',
+      });
+      if (cancelled) return;
+      if (ok) {
+        // Hydrate. Each field is set only if present so we don't trample
+        // sensible defaults (e.g. datetime).
+        if (typeof snapshot.step === 'number') setStep(snapshot.step);
+        if (snapshot.type) setType(snapshot.type);
+        if (snapshot.title != null) setTitle(snapshot.title);
+        if (snapshot.siteId != null) setSiteId(snapshot.siteId);
+        if (snapshot.assetId != null) setAssetId(snapshot.assetId);
+        if (snapshot.area != null) setArea(snapshot.area);
+        if (snapshot.datetime) setDatetime(snapshot.datetime);
+        if (snapshot.description != null) setDescription(snapshot.description);
+        if (typeof snapshot.likelihood === 'number') setLikelihood(snapshot.likelihood);
+        if (typeof snapshot.consequence === 'number') setConsequence(snapshot.consequence);
+        if (snapshot.typeData && typeof snapshot.typeData === 'object') setTypeData(snapshot.typeData);
+        if (typeof snapshot.isAnonymous === 'boolean') setIsAnonymous(snapshot.isAnonymous);
+      } else {
+        localStorage.removeItem(DRAFT_KEY);
+      }
+      restoreSettledRef.current = true;
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Phase 7 — Autosave on every form-state change.
+  // Skipped until restore has settled so we don't overwrite a real draft
+  // with empty defaults. File objects are not JSON-serializable, so we
+  // persist file *metadata* only (name/size/type) — on restore the user
+  // is told their attachments need re-adding.
+  useEffect(() => {
+    if (!restoreSettledRef.current) return;
+    try {
+      const snapshot = {
+        step,
+        type,
+        title,
+        siteId,
+        assetId,
+        area,
+        datetime,
+        description,
+        likelihood,
+        consequence,
+        typeData,
+        isAnonymous,
+        fileMeta: files.map(f => ({ name: f.name, size: f.size, type: f.type })),
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(snapshot));
+    } catch {
+      // Quota / private-mode failure — silent. Worst case the user loses
+      // autosave; the wizard continues to function.
+    }
+  }, [step, type, title, siteId, assetId, area, datetime, description, likelihood, consequence, typeData, isAnonymous, files]);
+
+  // Phase 7 — Dirty-check guarded close.
+  // Esc, backdrop click, the X button, and the Cancel button all route
+  // through this. If the user has typed *anything*, we make them
+  // confirm before dismissing — and we reassure them that the autosave
+  // will bring it back next time unless they explicitly Discard.
+  const isDirty = (
+    title.trim().length > 0 ||
+    description.trim().length > 0 ||
+    area.trim().length > 0 ||
+    files.length > 0 ||
+    Object.keys(typeData || {}).length > 0
+  );
+
+  const requestClose = useCallback(async () => {
+    if (!isDirty) {
+      localStorage.removeItem(DRAFT_KEY);
+      onClose();
+      return;
+    }
+    const ok = await confirm({
+      title: 'Discard your in-progress report?',
+      body: 'Your draft is autosaved and will be restored next time you open the wizard. To discard it permanently, choose "Discard".',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      danger: true,
+    });
+    if (ok) {
+      localStorage.removeItem(DRAFT_KEY);
+      onClose();
+    }
+  }, [isDirty, confirm, onClose]);
+
   // After site-change effect reloads assets, apply the AI-suggested asset
   // (if any) once the option is actually present in the dropdown.
   useEffect(() => {
@@ -289,10 +434,10 @@ export default function ReportWizard({ onClose, onSubmit }) {
   }, [siteId, assetId, area, type, typeData]);
 
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    const handler = (e) => { if (e.key === 'Escape') requestClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
+  }, [requestClose]);
 
   useEffect(() => {
     const urls = {};
@@ -469,6 +614,10 @@ export default function ReportWizard({ onClose, onSubmit }) {
       if (files.length > 0 && incident?.id) {
         await uploadAttachments('incident', incident.id, files);
       }
+      // Phase 7 — wipe the autosaved draft once the incident is safely
+      // persisted on the server. We do this before onSubmit() in case
+      // the parent unmounts us synchronously.
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
       onSubmit();
     } catch (err) {
       const msg = err?.response?.data?.error || err?.message || 'Submission failed — please try again.';
@@ -477,13 +626,18 @@ export default function ReportWizard({ onClose, onSubmit }) {
     }
   };
 
-  return (
+  // Phase 7 — render via createPortal(document.body). The .page parent
+  // applies a CSS transform during its pageEnter animation, which breaks
+  // position: fixed on descendants (CLAUDE.md modal rule). Portaling
+  // also keeps focus management, Esc, and backdrop click working
+  // because the dialog is no longer trapped inside an animated subtree.
+  return createPortal(
     <div
       className="wiz-overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby="wiz-title"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={e => { if (e.target === e.currentTarget) requestClose(); }}
     >
       <div className="wiz-shell" onClick={e => e.stopPropagation()}>
         {/* Left sidebar */}
@@ -571,7 +725,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
             <button
               type="button"
               className="wiz-close"
-              onClick={onClose}
+              onClick={requestClose}
               aria-label="Close wizard"
             >
               <Icon name="close" size={16} />
@@ -1105,7 +1259,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
 
           {/* Footer */}
           <div className="wiz-footer">
-            <button type="button" className="btn btn-text wiz-cancel" onClick={onClose} style={{ color: 'var(--sds-fg-tertiary)' }}>Cancel</button>
+            <button type="button" className="btn btn-text wiz-cancel" onClick={requestClose} style={{ color: 'var(--sds-fg-tertiary)' }}>Cancel</button>
             <div className="wiz-f-tip">
               {step === 0 && 'Fill in the basics — you can always add more detail later.'}
               {step === 1 && 'Click cells in the risk matrix to set likelihood vs. consequence.'}
@@ -1148,6 +1302,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
         </div>
       </div>
 
-    </div>
+    </div>,
+    document.body
   );
 }

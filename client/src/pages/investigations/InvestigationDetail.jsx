@@ -170,26 +170,46 @@ export default function InvestigationDetail() {
     loadDocLibrary(linkFolderId, docSearch);
   }, [docModalOpen, linkFolderId, docSearch]);
 
+  // Derived flag — computed up-front so the effect below can list it as a
+  // dependency without a Temporal Dead Zone clash (later usages below still
+  // reference the same value via the existing `hasRootCause` const).
+  const whyHasRoot = (inv?.five_whys || []).some(w => w.is_root_cause);
+
   useEffect(() => {
     if (!inv || inv.status === 'closed') return;
     const whys = inv.five_whys || [];
-    if (whys.length > 0 && !whys.some(w => w.is_root_cause) && !whySuggestion && !whyLoading) {
-      suggestNextWhy(inv.id).then(s => {
+    if (whys.length === 0 || whyHasRoot || whySuggestion || whyLoading) return;
+
+    // Sequence: flip loading + clear stale state FIRST, then fire the request.
+    // On a fast network the old order let the resolution beat setState(true),
+    // so the spinner either skipped or flashed after results landed.
+    let cancelled = false;
+    setWhyLoading(true);
+    setWhySuggestion(null);
+    setWhyEditing(false);
+
+    suggestNextWhy(inv.id)
+      .then(s => {
+        if (cancelled) return;
         setWhySuggestion(s);
         setWhyEditedQ(s.next_question);
-      }).catch(() => {
+      })
+      .catch(() => {
+        if (cancelled) return;
         const lastWhy = whys[whys.length - 1];
         const fallbackQ = lastWhy
           ? `Why did "${lastWhy.answer.length > 60 ? lastWhy.answer.substring(0, 60) + '…' : lastWhy.answer}" happen?`
           : 'Why did this incident occur?';
         setWhySuggestion({ next_question: fallbackQ, likely_root_cause: false, root_cause_category: null, ai_unavailable: true, level: whys.length + 1 });
         setWhyEditedQ(fallbackQ);
-      }).finally(() => setWhyLoading(false));
-      setWhyLoading(true);
-      setWhySuggestion(null);
-      setWhyEditing(false);
-    }
-  }, [inv?.five_whys?.length]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setWhyLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [inv?.id, inv?.five_whys?.length, whyHasRoot]);
 
   const navigateLinkFolder = (folder) => {
     if (!folder) { setLinkFolderId(null); setLinkCrumbs([]); return; }
@@ -615,15 +635,16 @@ export default function InvestigationDetail() {
 
                   <div className="invd-add-why-foot">
                     {!whySuggestion?.likely_root_cause && (
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={false}
-                          onChange={e => { if (e.target.checked && whyAnswer.trim()) handleSubmitWhy(true); }}
-                          disabled={!whyAnswer.trim() || whySaving}
-                          aria-label="Confirm this as the root cause"
-                        /> Mark as root cause
-                      </label>
+                      <button
+                        type="button"
+                        className="invd-why-mark-root"
+                        onClick={() => handleSubmitWhy(true)}
+                        disabled={!whyAnswer.trim() || whySaving || whyLoading}
+                        aria-label="Save this answer as the root cause"
+                      >
+                        <Icon name="shield" size={12}/>
+                        Mark as root cause
+                      </button>
                     )}
                     <button className="invd-why-add-btn" onClick={() => handleSubmitWhy(false)} disabled={!whyAnswer.trim() || whySaving || whyLoading || (!isFirstWhy && !whySuggestion)}>
                       <Icon name="plus" size={13}/>{whySaving ? 'Saving...' : `Add Why ${nextWhyLevel}`}

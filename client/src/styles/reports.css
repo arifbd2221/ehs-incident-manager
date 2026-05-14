@@ -251,6 +251,22 @@
   border-bottom: 2px solid var(--sds-gray-100);
   white-space: nowrap;
 }
+/* Sticky header — keeps column labels visible while scrolling long tables.
+   Requires the scroll container (e.g. .rpt-table-wrap / .rpt-table-scroll)
+   to have overflow:auto, not overflow:hidden. Solid background avoids
+   bleed-through from rows scrolling underneath. */
+.rpt-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--sds-bg-surface-alt);
+}
+/* Right-align numeric columns (header + body) for visual consistency.
+   Pair with className="num" on <th> where the <td> uses .cell-num. */
+.rpt-table th.num,
+.rpt-table td.cell-num {
+  text-align: right;
+}
 .rpt-table td {
   padding: 12px 14px;
   font-size: 13px;
@@ -1169,11 +1185,23 @@
 }
 
 /* Table refinements */
-.rpt-table-wrap { overflow-x: auto; }
+/* Scroll containers for wide / tall tables. Both axes so .rpt-table thead
+   can sticky-stick. max-height keeps the column headers visible without
+   forcing the page itself to scroll — the table scrolls inside its panel. */
+.rpt-table-wrap,
+.rpt-table-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 320px);
+}
 .al-mono {
   font-family: 'SF Mono', Menlo, monospace;
   font-size: 11px;
   color: var(--sds-fg-secondary);
+  font-variant-numeric: tabular-nums;
+}
+/* Tabular figures on reference IDs so columns align row-to-row. */
+.rpt-table .cell-ref {
+  font-variant-numeric: tabular-nums;
 }
 .al-loading, .al-empty {
   text-align: center;

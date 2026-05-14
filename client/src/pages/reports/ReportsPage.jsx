@@ -824,7 +824,7 @@ function Osha300Report({ siteId }) {
         </div>
       </div>
       <div
-        style={{ overflowX: 'auto' }}
+        className="rpt-table-scroll"
         tabIndex={0}
         role="region"
         aria-label="OSHA 300 Log table, scroll horizontally to see more"
@@ -833,7 +833,7 @@ function Osha300Report({ siteId }) {
           <thead>
             <tr>
               <th scope="col">Case #</th><th scope="col">Employee</th><th scope="col">Date</th><th scope="col">Where</th><th scope="col">Description</th>
-              <th scope="col">Death</th><th scope="col">Days away</th><th scope="col">Restrict.</th><th scope="col">Other</th><th scope="col">Days away</th><th scope="col">Days restr.</th><th scope="col">Type</th>
+              <th scope="col">Death</th><th scope="col">Days away</th><th scope="col">Restrict.</th><th scope="col">Other</th><th scope="col" className="num">Days away</th><th scope="col" className="num">Days restr.</th><th scope="col">Type</th>
             </tr>
           </thead>
           <tbody>
@@ -1409,7 +1409,7 @@ function RiddorReport({ siteId }) {
         </div>
 
         <div
-          style={{ overflowX: 'auto' }}
+          className="rpt-table-scroll"
           tabIndex={0}
           role="region"
           aria-label="RIDDOR F2508 reports table, scroll horizontally to see more"
@@ -1598,7 +1598,7 @@ function SafeworkNswReport({ siteId }) {
         </div>
 
         <div
-          style={{ overflowX: 'auto' }}
+          className="rpt-table-scroll"
           tabIndex={0}
           role="region"
           aria-label="SafeWork NSW notifications table, scroll horizontally to see more"

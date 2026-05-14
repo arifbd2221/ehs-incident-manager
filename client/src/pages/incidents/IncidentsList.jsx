@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getIncidents } from '../../api/incidents';
 import { useApp } from '../../context/AppContext';
 import Icon from '../../components/shared/Icon';
@@ -22,15 +22,30 @@ const statusKey = (s) => {
 export default function IncidentsList() {
   const navigate = useNavigate();
   const { setWizardOpen, refreshKey } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // URL is the source of truth for filters/search so refresh, deep-link, and
+  // back-from-detail all preserve the user's view. Empty defaults (tab=all,
+  // typeFilter='', search='') are omitted from the URL to keep it clean.
   const [incidents, setIncidents] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'all');
+  const [typeFilter, setTypeFilter] = useState(() => searchParams.get('type') || '');
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
   const [page, setPage] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef(null);
+
+  // Sync filter state -> URL. `replace: true` so each keystroke in search
+  // doesn't bloat history. Page is intentionally NOT in the URL (resets when
+  // filters change anyway).
+  useEffect(() => {
+    const next = {};
+    if (tab && tab !== 'all') next.tab = tab;
+    if (typeFilter) next.type = typeFilter;
+    if (search.trim()) next.q = search;
+    setSearchParams(next, { replace: true });
+  }, [tab, typeFilter, search, setSearchParams]);
 
   const fetchIncidents = () => {
     setLoading(true);
@@ -307,13 +322,24 @@ export default function IncidentsList() {
 
       {/* Pagination */}
       {!loading && filtered.length > 0 && (
-        <div className="inc-pagination">
-          <span className="page-info">Showing {filtered.length} of {total} · Page {page}</span>
-          <div className="page-btns">
-            <button className="inc-page-btn" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← Previous</button>
-            <button className="inc-page-btn" aria-label="Next page" disabled={incidents.length < 50} onClick={() => setPage(p => p + 1)}>Next →</button>
-          </div>
-        </div>
+        (() => {
+          // `total` is the server-side filtered count (status/type-scoped) so
+          // ceil(total/50) gives the real last page. The previous check
+          // (incidents.length < 50) misfired whenever the last page happened
+          // to hold exactly 50 rows OR when a filter trimmed mid-page.
+          const limit = 50;
+          const lastPage = Math.max(1, Math.ceil((total || 0) / limit));
+          const atLastPage = page >= lastPage;
+          return (
+            <div className="inc-pagination">
+              <span className="page-info">Showing {filtered.length} of {total} · Page {page}</span>
+              <div className="page-btns">
+                <button className="inc-page-btn" aria-label="Previous page" disabled={loading || page <= 1} onClick={() => setPage(p => p - 1)}>← Previous</button>
+                <button className="inc-page-btn" aria-label="Next page" disabled={loading || atLastPage} onClick={() => setPage(p => p + 1)}>Next →</button>
+              </div>
+            </div>
+          );
+        })()
       )}
     </div>
   );

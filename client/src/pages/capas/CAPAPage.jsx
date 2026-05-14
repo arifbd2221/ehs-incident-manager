@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import EmptyState, { EmptyCAPAsIllustration } from '../../components/shared/EmptyState';
+import { usePrompt } from '../../components/shared/Dialog';
 import NewCapaModal from '../../components/modals/NewCapaModal';
 import { formatDateShort } from '../../utils/time';
 import '../../styles/capas.css';
@@ -33,6 +34,7 @@ export default function CAPAPage() {
   const { refreshKey } = useApp();
   const { user } = useAuth();
   const canCreate = ELEVATED_ROLES.has(user?.role);
+  const promptDialog = usePrompt();
   const [showNew, setShowNew] = useState(false);
   const [capas, setCapas] = useState([]);
   const [stats, setStats] = useState({});
@@ -153,8 +155,21 @@ export default function CAPAPage() {
         await completeCapa(capaId, {});
         showToast('Submitted for verification');
       } else if (from === 'verify' && targetLane === 'progress') {
+        const note = await promptDialog({
+          title: 'Reject this CAPA?',
+          body: 'The CAPA will return to "In progress" and the owner will be notified. Please explain what needs more work — this becomes part of the audit trail.',
+          label: 'Reason for rejection',
+          placeholder: 'e.g. The verification evidence does not show the issue is resolved',
+          required: true,
+          confirmLabel: 'Reject and send back',
+          cancelLabel: 'Cancel',
+        });
+        if (note === null) {
+          setDragId(null);
+          return;
+        }
         transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c)));
-        await rejectCapa(capaId, { notes: 'Needs more work' });
+        await rejectCapa(capaId, { notes: note });
         showToast('Rejected — sent back to progress');
       } else if (from === 'verify' && targetLane === 'closed') {
         transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'closed' } : c)));

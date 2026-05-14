@@ -962,6 +962,44 @@
   width: 18px;
   height: 18px;
 }
+/* "Mark as root cause" pill — explicit action button, not a checkbox.
+   Deliberately quieter than the primary "Add Why N" CTA so the default
+   path (keep drilling deeper) stays visually dominant. */
+.invd-why-mark-root {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--sds-radius-pill);
+  border: 1px solid var(--sds-border);
+  background: var(--sds-bg-surface-alt);
+  color: var(--sds-fg-secondary);
+  font-family: var(--sds-font-family);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.invd-why-mark-root:hover:not(:disabled) {
+  background: var(--sds-brand-primary-tint);
+  border-color: var(--sds-brand-primary);
+  color: var(--sds-brand-primary);
+}
+.invd-why-mark-root:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.invd-why-mark-root:focus-visible {
+  outline: none;
+  border-color: var(--sds-brand-primary);
+  box-shadow: 0 0 0 2px var(--sds-brand-primary-light);
+}
+.invd-why-mark-root:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .invd-why-add-btn {
   display: inline-flex;
   align-items: center;

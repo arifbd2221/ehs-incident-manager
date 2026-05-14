@@ -230,6 +230,47 @@
   z-index: 1;
 }
 
+/* ── Matrix-cell filter chip ─────────────────────────────────── */
+.rsk-matrix-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sds-space-sm);
+  padding: 6px 6px 6px 12px;
+  margin-bottom: var(--sds-space-md);
+  background: var(--sds-brand-primary-tint);
+  border: 1px solid var(--sds-brand-primary-light);
+  border-radius: var(--sds-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sds-brand-primary);
+  animation: rskFadeUp 250ms ease both;
+}
+.rsk-matrix-chip-mode {
+  font-weight: 500;
+  color: var(--sds-fg-secondary);
+  text-transform: capitalize;
+}
+.rsk-matrix-chip-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--sds-brand-primary);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.rsk-matrix-chip-clear:hover {
+  background: var(--sds-brand-primary-light);
+}
+.rsk-matrix-chip-clear:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary);
+}
+
 /* ── List table ──────────────────────────────────────────────── */
 .rsk-list {
   background: var(--sds-bg-surface);

@@ -339,6 +339,11 @@ export default function IncidentDetail() {
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
+  // Phase 7: single-flight hero action. Holds the in-flight action name
+  // ('assign' | 'escalate' | 'close' | 'reopen' | 'forceClose' | 'requestClosure')
+  // or null. Disables the rest of the action bar to prevent double-fire on
+  // slow networks and surfaces a "working" label on the originating button.
+  const [submitting, setSubmitting] = useState(null);
   const [witnessModal, setWitnessModal] = useState(null); // null | 'add' | witness object
   const [toast, setToast] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, index: 0 });
@@ -437,23 +442,28 @@ export default function IncidentDetail() {
   };
 
   const handleAssign = async (form) => {
+    setSubmitting('assign');
     try {
       const updated = await assignIncident(r.id, form);
       setIncident({ ...incident, ...updated, witnesses: incident.witnesses, attachments: incident.attachments, activity: incident.activity });
       showToast('Incident assigned for triage.');
       load();
     } catch { showToast('Failed to assign.'); }
+    finally { setSubmitting(null); }
   };
 
   const handleEscalate = async (form) => {
+    setSubmitting('escalate');
     try {
       await escalateIncident(r.id, form);
       showToast('Escalated to investigation.');
       load();
     } catch { showToast('Failed to escalate.'); }
+    finally { setSubmitting(null); }
   };
 
   const handleClose = async (form) => {
+    setSubmitting('close');
     try {
       const updated = await closeIncident(r.id, form);
       setIncident({ ...incident, ...updated, witnesses: incident.witnesses, attachments: incident.attachments, activity: incident.activity });
@@ -461,15 +471,18 @@ export default function IncidentDetail() {
       setModal(null);
       load();
     } catch (err) { showToast(err.response?.data?.error || 'Failed to close.'); }
+    finally { setSubmitting(null); }
   };
 
   const handleRequestClosure = async (form) => {
+    setSubmitting('requestClosure');
     try {
       await requestClosure(r.id, form);
       showToast('Closure request submitted for approval.');
       setModal(null);
       load();
     } catch (err) { showToast(err.response?.data?.error || 'Failed to submit closure request.'); }
+    finally { setSubmitting(null); }
   };
 
   const handleApproveClosure = async (requestId, form) => {
@@ -491,21 +504,25 @@ export default function IncidentDetail() {
   };
 
   const handleReopen = async (form) => {
+    setSubmitting('reopen');
     try {
       await reopenIncident(r.id, form);
       showToast('Incident reopened.');
       setModal(null);
       load();
     } catch (err) { showToast(err.response?.data?.error || 'Failed to reopen.'); }
+    finally { setSubmitting(null); }
   };
 
   const handleForceClose = async (form) => {
+    setSubmitting('forceClose');
     try {
       await forceCloseIncident(r.id, form);
       showToast('Incident force-closed.');
       setModal(null);
       load();
     } catch (err) { showToast(err.response?.data?.error || 'Failed to force-close.'); }
+    finally { setSubmitting(null); }
   };
 
   // WI-03: OSHA 301 PDF download. Per 29 CFR 1904.29(b)(2) Form 301 is
@@ -686,13 +703,14 @@ export default function IncidentDetail() {
   };
 
   const handleSeverityOverride = async (form) => {
+    setSubmitting('severity');
     try {
       await updateIncident(r.id, form);
       showToast(`Severity overridden to ${form.severity === 1 ? 'S1 Critical' : form.severity === 2 ? 'S2 Major' : form.severity === 3 ? 'S3 Moderate' : form.severity === 4 ? 'S4 Minor' : 'S5 Insignificant'}.`);
       load();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to override severity.');
-    }
+    } finally { setSubmitting(null); }
   };
 
   const handleUpload = async (e) => {
@@ -772,41 +790,90 @@ export default function IncidentDetail() {
               <span className="idet-date">Reported {formatDate(r.created_at)}</span>
             </div>
             <div className="idet-header-actions">
-            {recommendedAction === 'closed' ? (
+            {/* Phase 7: single-flight semantics. While ANY mutation is in
+                flight (`submitting` truthy), every other hero button is
+                disabled; the originating button swaps to spinner + working
+                label so the user can see why nothing else is clickable. The
+                "Close incident" button can route through three handlers
+                (close / requestClosure / forceClose) via ClosureChecklistModal,
+                so we treat all three as the close button's in-flight state. */}
+            {(() => {
+              const busy = !!submitting;
+              const closing = submitting === 'close' || submitting === 'requestClosure' || submitting === 'forceClose';
+              const Spin = () => <span className="idet-attach-spinner" aria-hidden="true"/>;
+              return (
+            recommendedAction === 'closed' ? (
               <>
                 <button className="idet-act-btn" disabled>Closed</button>
                 {['ehs_manager', 'admin'].includes(user?.role) && (
-                  <button className="idet-act-btn" onClick={() => setModal('reopen')}>
-                    <Icon name="edit" size={15}/>Reopen
+                  <button
+                    className="idet-act-btn"
+                    onClick={() => setModal('reopen')}
+                    disabled={busy && submitting !== 'reopen' ? true : submitting === 'reopen'}
+                  >
+                    {submitting === 'reopen'
+                      ? <><Spin/>Reopening…</>
+                      : <><Icon name="edit" size={15}/>Reopen</>}
                   </button>
                 )}
               </>
             ) : (
               <>
                 {ELEVATED_ROLES.has(user?.role) && (
-                  <button className="idet-act-btn" onClick={() => setModal('severity')} title="Override auto-classified severity (logged for audit)">
-                    <Icon name="warning" size={15}/>Override severity
+                  <button
+                    className="idet-act-btn"
+                    onClick={() => setModal('severity')}
+                    title="Override auto-classified severity (logged for audit)"
+                    disabled={busy && submitting !== 'severity' ? true : submitting === 'severity'}
+                  >
+                    {submitting === 'severity'
+                      ? <><Spin/>Saving…</>
+                      : <><Icon name="warning" size={15}/>Override severity</>}
                   </button>
                 )}
                 {recommendedAction === 'investigating' ? (
-                  <button className="idet-act-btn primary" onClick={() => navigate('/investigations')}>
+                  <button
+                    className="idet-act-btn primary"
+                    onClick={() => navigate('/investigations')}
+                    disabled={busy}
+                  >
                     <Icon name="investigation" size={15}/>Open investigation
                   </button>
                 ) : ELEVATED_ROLES.has(user?.role) && (
                   <>
-                    <button className="idet-act-btn" onClick={() => setModal('close')}>
-                      {r.track === 'C' ? 'Close — no action' : 'Close incident'}
+                    <button
+                      className="idet-act-btn"
+                      onClick={() => setModal('close')}
+                      disabled={busy && !closing ? true : closing}
+                    >
+                      {closing
+                        ? <><Spin/>Closing…</>
+                        : (r.track === 'C' ? 'Close — no action' : 'Close incident')}
                     </button>
-                    <button className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`} onClick={() => setModal('assign')}>
-                      <Icon name="person" size={15}/>Assign
+                    <button
+                      className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`}
+                      onClick={() => setModal('assign')}
+                      disabled={busy && submitting !== 'assign' ? true : submitting === 'assign'}
+                    >
+                      {submitting === 'assign'
+                        ? <><Spin/>Assigning…</>
+                        : <><Icon name="person" size={15}/>Assign</>}
                     </button>
-                    <button className={`idet-act-btn ${recommendedAction === 'escalate' ? 'primary' : ''}`} onClick={() => setModal('escalate')}>
-                      <Icon name="investigation" size={15}/>Escalate
+                    <button
+                      className={`idet-act-btn ${recommendedAction === 'escalate' ? 'primary' : ''}`}
+                      onClick={() => setModal('escalate')}
+                      disabled={busy && submitting !== 'escalate' ? true : submitting === 'escalate'}
+                    >
+                      {submitting === 'escalate'
+                        ? <><Spin/>Escalating…</>
+                        : <><Icon name="investigation" size={15}/>Escalate</>}
                     </button>
                   </>
                 )}
               </>
-            )}
+            )
+              );
+            })()}
           </div>
           </div>
 
