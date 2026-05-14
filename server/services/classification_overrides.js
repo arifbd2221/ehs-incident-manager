@@ -62,7 +62,9 @@ export function listForIncident(orgId, incidentId) {
   `).all(orgId, incidentId);
 }
 
-export function listPendingForOrg(orgId) {
+export function listPendingForOrg(orgId, siteId = null) {
+  const siteClause = siteId ? ' AND i.site_id = ?' : '';
+  const params = siteId ? [orgId, siteId] : [orgId];
   return db.prepare(`
     SELECT cor.*,
            req_u.name AS requested_by_name,
@@ -70,9 +72,9 @@ export function listPendingForOrg(orgId) {
     FROM classification_override_requests cor
     LEFT JOIN users req_u ON req_u.id = cor.requested_by
     LEFT JOIN incidents i ON i.id = cor.incident_id
-    WHERE cor.org_id = ? AND cor.status = 'pending'
+    WHERE cor.org_id = ? AND cor.status = 'pending'${siteClause}
     ORDER BY cor.requested_at ASC
-  `).all(orgId);
+  `).all(...params);
 }
 
 export function getById(orgId, requestId) {
