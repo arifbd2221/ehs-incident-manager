@@ -319,11 +319,11 @@ function RiddorActionsCard({ incident, canAct, onChange }) {
 const fileTypeInfo = (a) => {
   const name = a.filename || '';
   const mime = a.mime_type || '';
-  if (mime.startsWith('image/')) return { type: 'image', color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', label: 'Image' };
-  if (mime === 'application/pdf' || name.endsWith('.pdf')) return { type: 'pdf', color: '#ef4444', bg: 'rgba(239,68,68,0.08)', label: 'PDF' };
-  if (mime.includes('word') || /\.docx?$/.test(name)) return { type: 'doc', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', label: 'Document' };
-  if (mime.includes('sheet') || mime.includes('excel') || /\.xlsx?$/.test(name)) return { type: 'sheet', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', label: 'Spreadsheet' };
-  return { type: 'text', color: '#6b7280', bg: 'rgba(107,114,128,0.08)', label: 'File' };
+  if (mime.startsWith('image/')) return { type: 'image', color: 'var(--sds-info-blue)', bg: 'rgba(59,130,246,0.08)', label: 'Image' };
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return { type: 'pdf', color: 'var(--sds-error)', bg: 'rgba(239,68,68,0.08)', label: 'PDF' };
+  if (mime.includes('word') || /\.docx?$/.test(name)) return { type: 'doc', color: 'var(--sds-warning)', bg: 'rgba(245,158,11,0.08)', label: 'Document' };
+  if (mime.includes('sheet') || mime.includes('excel') || /\.xlsx?$/.test(name)) return { type: 'sheet', color: 'var(--sds-success)', bg: 'rgba(34,197,94,0.08)', label: 'Spreadsheet' };
+  return { type: 'text', color: 'var(--sds-fg-tertiary)', bg: 'rgba(107,114,128,0.08)', label: 'File' };
 };
 
 export default function IncidentDetail() {
@@ -747,8 +747,8 @@ export default function IncidentDetail() {
 
   const alertType = recommendedAction === 'closed' ? 'alert-closed' : recommendedAction === 'investigating' ? 'alert-investigating' : 'alert-triage';
 
-  const sevColors = { 1: '#dc2626', 2: '#ea580c', 3: '#f59e0b', 4: '#22c55e', 5: '#8b5cf6' };
-  const heroColor = sevColors[r.severity] || '#626DF9';
+  const sevColors = { 1: 'var(--sds-error)', 2: 'var(--sds-warning)', 3: 'var(--sds-warning)', 4: 'var(--sds-success)', 5: 'var(--sds-brand-primary)' };
+  const heroColor = sevColors[r.severity] || 'var(--sds-brand-primary)';
 
   return (
     <div className="page idet">
@@ -828,10 +828,10 @@ export default function IncidentDetail() {
               {showRiddor && r.riddor_reportable === 1 && (
                 <span
                   className="inc-card-status"
-                  style={{ background: '#fef2f2', color: '#dc2626' }}
+                  style={{ background: 'var(--sds-error-bg)', color: 'var(--sds-error)' }}
                   title={r.riddor_category ? `RIDDOR ${riddorCategoryReg(r.riddor_category)} · ${riddorCategoryLabel(r.riddor_category)}` : 'RIDDOR reportable'}
                 >
-                  <span className="st-dot" style={{ background: '#dc2626' }} aria-hidden="true"/>
+                  <span className="st-dot" style={{ background: 'var(--sds-error)' }} aria-hidden="true"/>
                   RIDDOR{r.riddor_category ? ` · ${riddorCategoryLabel(r.riddor_category)}` : ''}
                   <span className="sr-only"> reportable</span>
                 </span>
@@ -1631,7 +1631,7 @@ function SafeworkNswCardRows({ notification, lookups, canVerify, onAction, onDow
       <div className="idet-triage-row">
         <span className="idet-triage-label">SafeWork NSW</span>
         <span className="inc-card-status st-capa">
-          <span className="st-dot" style={{ background: '#dc2626' }}/>
+          <span className="st-dot" style={{ background: 'var(--sds-error)' }}/>
           {n.nsw_number}
         </span>
       </div>

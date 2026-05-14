@@ -46,27 +46,42 @@ const TRACK_DESC = {
   C: 'Log & close — recorded for trend analysis, no investigation needed',
 };
 
+// Severity colour map for the gauge SVG + inline text colour. The design
+// system has no per-severity tokens, so we route to the closest semantic
+// tokens (error → S1, warning → S2/S3, success → S4, brand-primary → S5).
+// Values are applied via `style` (not SVG attributes) so the CSS parser
+// resolves the var() references.
 const SEV_COLORS = {
-  5: '#6b7280', 4: '#16a34a', 3: '#ca8a04', 2: '#ea580c', 1: '#dc2626',
+  5: 'var(--sds-brand-primary)',
+  4: 'var(--sds-success)',
+  3: 'var(--sds-warning)',
+  2: 'var(--sds-warning)',
+  1: 'var(--sds-error)',
 };
 
 function SevGauge({ sev }) {
   const pct = ((5 - sev) / 4) * 100;
-  const color = SEV_COLORS[sev] || '#6b7280';
+  const color = SEV_COLORS[sev] || 'var(--sds-fg-tertiary)';
   const r = 44;
   const circ = 2 * Math.PI * r;
   const dashLen = (pct / 100) * circ * 0.75;
 
   return (
+    // CSS `var(...)` is not valid inside SVG stroke/fill *attributes* —
+    // it must be applied through `style`. We set `stroke` via inline
+    // style (which CSS does resolve) and the centre text colour the same
+    // way. The track stroke uses a separate var.
     <div className="wiz-gauge">
       <svg width="110" height="110" viewBox="0 0 110 110">
-        <circle cx="55" cy="55" r={r} fill="none" stroke="#f1f5f9" strokeWidth="8"
+        <circle cx="55" cy="55" r={r} fill="none" strokeWidth="8"
           strokeDasharray={`${circ * 0.75} ${circ * 0.25}`}
-          strokeLinecap="round" transform="rotate(135 55 55)" />
-        <circle cx="55" cy="55" r={r} fill="none" stroke={color} strokeWidth="8"
+          strokeLinecap="round" transform="rotate(135 55 55)"
+          style={{ stroke: 'var(--sds-bg-surface-alt)' }} />
+        <circle cx="55" cy="55" r={r} fill="none" strokeWidth="8"
           strokeDasharray={`${dashLen} ${circ - dashLen}`}
           strokeLinecap="round" transform="rotate(135 55 55)"
-          className="wiz-gauge-fill" style={{ '--gauge-dash': dashLen, '--gauge-circ': circ }} />
+          className="wiz-gauge-fill"
+          style={{ '--gauge-dash': dashLen, '--gauge-circ': circ, stroke: color }} />
       </svg>
       <div className="wiz-gauge-center">
         <div className="wiz-gauge-val" style={{ color }}>S{sev}</div>
@@ -102,14 +117,18 @@ const EXAMPLE_DESCRIPTIONS = [
 ];
 
 
+// File-type colours map to semantic tokens — info-blue for images, error
+// for PDFs (matches the "red" cultural cue), warning for documents,
+// success for spreadsheets, fg-tertiary for fallback. Values are passed
+// inline (icon stroke, bg tint), so we use raw CSS variable strings.
 const fileTypeInfo = (file) => {
   const name = file.name || file.filename || '';
   const mime = file.type || file.mime_type || '';
-  if (mime.startsWith('image/')) return { type: 'image', color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', label: 'Image' };
-  if (mime === 'application/pdf' || name.endsWith('.pdf')) return { type: 'pdf', color: '#ef4444', bg: 'rgba(239,68,68,0.08)', label: 'PDF' };
-  if (mime.includes('word') || /\.docx?$/.test(name)) return { type: 'doc', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', label: 'Document' };
-  if (mime.includes('sheet') || mime.includes('excel') || /\.xlsx?$/.test(name)) return { type: 'sheet', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', label: 'Spreadsheet' };
-  return { type: 'text', color: '#6b7280', bg: 'rgba(107,114,128,0.08)', label: 'File' };
+  if (mime.startsWith('image/')) return { type: 'image', color: 'var(--sds-info)', bg: 'rgba(13,180,240,0.08)', label: 'Image' };
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return { type: 'pdf', color: 'var(--sds-error)', bg: 'rgba(211,47,47,0.08)', label: 'PDF' };
+  if (mime.includes('word') || /\.docx?$/.test(name)) return { type: 'doc', color: 'var(--sds-warning)', bg: 'rgba(237,108,2,0.08)', label: 'Document' };
+  if (mime.includes('sheet') || mime.includes('excel') || /\.xlsx?$/.test(name)) return { type: 'sheet', color: 'var(--sds-success)', bg: 'rgba(46,125,50,0.08)', label: 'Spreadsheet' };
+  return { type: 'text', color: 'var(--sds-fg-tertiary)', bg: 'rgba(102,106,114,0.08)', label: 'File' };
 };
 
 export default function ReportWizard({ onClose, onSubmit }) {
@@ -951,7 +970,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                         <span className="val">{assets.find(a => String(a.id) === String(assetId))?.name || '—'}</span>
                       </div>
                     )}
-                    <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 8, paddingTop: 8 }}>
+                    <div style={{ borderTop: '1px solid var(--sds-bg-surface-alt)', marginTop: 8, paddingTop: 8 }}>
                       <div className="wiz-review-row">
                         <span className="lbl">Severity</span>
                         <span className="val">
@@ -966,7 +985,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                       </div>
                     </div>
                     {(showOsha || showRiddor) && (
-                      <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 8, paddingTop: 8 }}>
+                      <div style={{ borderTop: '1px solid var(--sds-bg-surface-alt)', marginTop: 8, paddingTop: 8 }}>
                         {showOsha && (
                           <div className="wiz-review-row">
                             <span className="lbl">OSHA recordable</span>
@@ -1024,9 +1043,9 @@ export default function ReportWizard({ onClose, onSubmit }) {
                       </div>
                       {showRiddor && type === 'dangerous' && (
                         <div className="wiz-next-item">
-                          <div className="wiz-next-dot" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}><Icon name="phone" size={14} /></div>
+                          <div className="wiz-next-dot" style={{ background: 'rgba(211,47,47,0.1)', color: 'var(--sds-error)' }}><Icon name="phone" size={14} /></div>
                           <div className="wiz-next-body">
-                            <div className="wiz-nb-when" style={{ color: '#ef4444' }}>Immediately</div>
+                            <div className="wiz-nb-when" style={{ color: 'var(--sds-error)' }}>Immediately</div>
                             <div className="wiz-nb-what">RIDDOR — phone HSE without delay, written report within 10 days</div>
                           </div>
                         </div>
@@ -1034,14 +1053,14 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     </div>
 
                     {description && (
-                      <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                      <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid var(--sds-bg-surface-alt)' }}>
                         <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sds-fg-tertiary)', marginBottom: 6 }}>Description</div>
                         <div style={{ fontSize: 12, color: 'var(--sds-fg-secondary)', lineHeight: 1.55 }}>{description}</div>
                       </div>
                     )}
 
                     {files.length > 0 && (
-                      <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                      <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid var(--sds-bg-surface-alt)' }}>
                         <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sds-fg-tertiary)', marginBottom: 8 }}>Attachments · {files.length} file{files.length > 1 ? 's' : ''}</div>
                         {Object.keys(imageUrls).length > 0 && (
                           <div className="wiz-review-thumbs">
@@ -1120,7 +1139,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                 disabled={submitting}
                 aria-busy={submitting || undefined}
                 onClick={handleSubmit}
-                style={{ background: submitting ? '#94a3b8' : 'linear-gradient(135deg, var(--sds-brand-primary), #8b5cf6)' }}
+                style={{ background: submitting ? 'var(--sds-gray-400)' : 'linear-gradient(135deg, var(--sds-brand-primary), var(--sds-brand-primary))' }}
               >
                 <Icon name="check" size={16} />{submitting ? 'Submitting...' : 'Submit & route'}
               </button>

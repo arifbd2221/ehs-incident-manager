@@ -430,8 +430,8 @@ export default function InvestigationDetail() {
 
   const statusLabel = inv.status === 'closed' ? 'Closed' : inv.status === 'capa' ? 'Awaiting CAPA' : inv.status === 'progress' ? 'In progress' : 'Pending';
   const statusClass = `ln-${inv.status}`;
-  const statusColors = { pending: '#7E7E8C', progress: '#626DF9', capa: '#ED6C02', closed: '#2E7D32' };
-  const heroColor = statusColors[inv.status] || '#8b5cf6';
+  const statusColors = { pending: 'var(--sds-gray-500)', progress: 'var(--sds-brand-primary)', capa: 'var(--sds-warning)', closed: 'var(--sds-success)' };
+  const heroColor = statusColors[inv.status] || 'var(--sds-brand-primary)';
 
   return (
     <div className="page invd">
@@ -753,7 +753,7 @@ export default function InvestigationDetail() {
                     <div key={`doc-${d.id}`} className="invd-evidence-item invd-evidence-doc"
                       onClick={() => handleDownloadDoc(d)}
                       style={{ cursor: 'pointer' }}>
-                      <div className="invd-evidence-icon" style={{ background: 'rgba(98,109,249,0.1)', color: '#626DF9' }}>
+                      <div className="invd-evidence-icon" style={{ background: 'var(--sds-brand-primary-light)', color: 'var(--sds-brand-primary)' }}>
                         <Icon name="file" size={16}/>
                       </div>
                       <div className="invd-evidence-info">
@@ -940,7 +940,7 @@ export default function InvestigationDetail() {
                 {showOsha && (
                   <div className="invd-summary-row">
                     <span className="invd-summary-label">OSHA recordable</span>
-                    <span className={`inv-kflag ${inv.osha_recordable ? 'kf-capa' : ''}`} style={!inv.osha_recordable ? { background: '#f3f4f6', color: '#6b7280' } : {}}>
+                    <span className={`inv-kflag ${inv.osha_recordable ? 'kf-capa' : ''}`} style={!inv.osha_recordable ? { background: 'var(--sds-gray-100)', color: 'var(--sds-fg-tertiary)' } : {}}>
                       <span className="kf-dot"/>{inv.osha_recordable ? 'Yes' : 'No'}
                     </span>
                   </div>

@@ -13,10 +13,10 @@ import '../../styles/capas.css';
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 const CAPA_LANES = [
-  { id: 'pending', title: 'Pending', color: '#7E7E8C', desc: 'Assigned, not started yet' },
-  { id: 'progress', title: 'In progress', color: '#626DF9', desc: 'Owner working on it' },
-  { id: 'verify', title: 'Pending verification', color: '#ED6C02', desc: 'Owner says complete · verifier required' },
-  { id: 'closed', title: 'Verified · Closed', color: '#2E7D32', desc: 'Verifier confirmed effectiveness' },
+  { id: 'pending', title: 'Pending', color: 'var(--sds-gray-500)', desc: 'Assigned, not started yet' },
+  { id: 'progress', title: 'In progress', color: 'var(--sds-brand-primary)', desc: 'Owner working on it' },
+  { id: 'verify', title: 'Pending verification', color: 'var(--sds-warning)', desc: 'Owner says complete · verifier required' },
+  { id: 'closed', title: 'Verified · Closed', color: 'var(--sds-success)', desc: 'Verifier confirmed effectiveness' },
 ];
 
 const LANE_LABELS = { pending: 'Pending', progress: 'In progress', verify: 'Pending verification', closed: 'Verified · Closed' };

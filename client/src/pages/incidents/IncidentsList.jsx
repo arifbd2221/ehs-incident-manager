@@ -101,28 +101,28 @@ export default function IncidentsList() {
           </div>
         </div>
         <div className="inc-stats">
-          <div className="inc-stat" style={{ '--is-color': '#626DF9' }}>
+          <div className="inc-stat" style={{ '--is-color': 'var(--sds-brand-primary)' }}>
             <div className="inc-stat-icon"><Icon name="incidents" size={16} /></div>
             <div>
               <div className="inc-stat-val">{total}</div>
               <div className="inc-stat-lbl">Total</div>
             </div>
           </div>
-          <div className="inc-stat" style={{ '--is-color': '#16a34a' }}>
+          <div className="inc-stat" style={{ '--is-color': 'var(--sds-success)' }}>
             <div className="inc-stat-icon"><Icon name="pulse" size={16} /></div>
             <div>
               <div className="inc-stat-val">{stats.open}</div>
               <div className="inc-stat-lbl">Open</div>
             </div>
           </div>
-          <div className="inc-stat" style={{ '--is-color': '#2563eb' }}>
+          <div className="inc-stat" style={{ '--is-color': 'var(--sds-info-blue)' }}>
             <div className="inc-stat-icon"><Icon name="investigation" size={16} /></div>
             <div>
               <div className="inc-stat-val">{stats.investigating}</div>
               <div className="inc-stat-lbl">Investigating</div>
             </div>
           </div>
-          <div className="inc-stat" style={{ '--is-color': '#6b7280' }}>
+          <div className="inc-stat" style={{ '--is-color': 'var(--sds-fg-tertiary)' }}>
             <div className="inc-stat-icon"><Icon name="check" size={16} /></div>
             <div>
               <div className="inc-stat-val">{stats.closed}</div>
