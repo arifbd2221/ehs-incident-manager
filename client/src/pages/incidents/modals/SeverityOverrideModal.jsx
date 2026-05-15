@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 import { sevName } from '../../../components/shared/Badges';
 
 const SEVS = [1, 2, 3, 4, 5];
@@ -35,12 +36,12 @@ export default function SeverityOverrideModal({ incident, onCancel, onConfirm })
           </div>
           <div className="form-group">
             <label className="form-label">Reason</label>
-            <textarea
-              className="form-textarea"
-              rows={3}
-              placeholder="Explain why this override is justified — e.g. follow-up photos showed a compound fracture, hospitalisation now required, etc."
+            <SmartTextarea
               value={reason}
-              onChange={e => setReason(e.target.value)}
+              onChange={setReason}
+              rows={3}
+              inputClassName="form-textarea"
+              placeholder="Explain why this override is justified — e.g. follow-up photos showed a compound fracture, hospitalisation now required, etc."
             />
           </div>
         </div>
