@@ -18,6 +18,7 @@ export default function SmartTextarea({
   disabled,
   mic = true,
   onKeyDown,
+  maxLength,
 }) {
   const [phIdx, setPhIdx] = useState(() => Math.floor(Math.random() * (examples?.length || 1)));
   const [phVisible, setPhVisible] = useState(true);
@@ -90,6 +91,7 @@ export default function SmartTextarea({
           placeholder={placeholder}
           autoFocus={autoFocus}
           disabled={disabled}
+          maxLength={maxLength}
           {...extraProps}
         />
         {showPlaceholder && (

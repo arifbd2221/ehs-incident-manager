@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import Icon from '../shared/Icon';
 import ComboBox from '../shared/ComboBox';
 import DatePicker from '../shared/DatePicker';
+import SmartTextarea from '../shared/SmartTextarea';
 import { getUsers } from '../../api/users';
 import { escalateToCapa } from '../../api/maintenance';
 
@@ -112,10 +113,9 @@ export default function EscalateModal({ schedule, event, onClose, onEscalated })
 
           <div className="field">
             <label className="label">Description</label>
-            <textarea
-              className="textarea"
+            <SmartTextarea
               value={description}
-              onChange={e => setDescription(e.target.value)}
+              onChange={setDescription}
               rows={3}
               placeholder="What was found, what corrective action is needed…"
             />

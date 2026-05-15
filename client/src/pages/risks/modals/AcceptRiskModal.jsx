@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../../../components/shared/Icon';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 import { acceptRisk } from '../../../api/risks';
 
 export default function AcceptRiskModal({ riskId, riskNumber, onCancel, onAccepted }) {
@@ -43,12 +44,11 @@ export default function AcceptRiskModal({ riskId, riskNumber, onCancel, onAccept
           </div>
           <div className="field">
             <label className="label">Justification <span className="req">*</span></label>
-            <textarea
-              className="textarea"
+            <SmartTextarea
+              value={justification}
+              onChange={setJustification}
               rows={4}
               placeholder="Why is this risk being accepted? What factors support this decision?"
-              value={justification}
-              onChange={e => setJustification(e.target.value)}
             />
           </div>
           {error && <div style={{ color: 'var(--sds-error)', fontSize: 13, marginTop: 8 }}>{error}</div>}

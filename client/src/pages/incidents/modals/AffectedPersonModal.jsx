@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
 import DatePicker from '../../../components/shared/DatePicker';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 import {
   createAffectedPerson,
   updateAffectedPerson,
@@ -441,21 +442,21 @@ export default function AffectedPersonModal({
               <div className="field-row">
                 <div className="field">
                   <label className="label">Body part</label>
-                  <input className="input" value={form.body_part} onChange={e => setField('body_part', e.target.value)} placeholder="e.g. Right hand, Left forearm" />
+                  <SmartTextarea multiline={false} value={form.body_part} onChange={v => setField('body_part', v)} placeholder="e.g. Right hand, Left forearm" />
                 </div>
                 <div className="field">
                   <label className="label">Injury type</label>
-                  <input className="input" value={form.injury_type} onChange={e => setField('injury_type', e.target.value)} placeholder="e.g. Laceration, Burn, Sprain" />
+                  <SmartTextarea multiline={false} value={form.injury_type} onChange={v => setField('injury_type', v)} placeholder="e.g. Laceration, Burn, Sprain" />
                 </div>
               </div>
               <div className="field-row">
                 <div className="field">
                   <label className="label">Mechanism</label>
-                  <input className="input" value={form.mechanism} onChange={e => setField('mechanism', e.target.value)} placeholder="How did the injury happen?" />
+                  <SmartTextarea multiline={false} value={form.mechanism} onChange={v => setField('mechanism', v)} placeholder="How did the injury happen?" />
                 </div>
                 <div className="field">
                   <label className="label">Treatment</label>
-                  <input className="input" value={form.treatment} onChange={e => setField('treatment', e.target.value)} placeholder="e.g. First aid, Medical treatment" />
+                  <SmartTextarea multiline={false} value={form.treatment} onChange={v => setField('treatment', v)} placeholder="e.g. First aid, Medical treatment" />
                 </div>
               </div>
             </div>

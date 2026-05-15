@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../../../components/shared/Icon';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 import { addControl } from '../../../api/risks';
 
 const CONTROL_TYPES = [
@@ -70,17 +71,17 @@ export default function AddControlModal({ riskId, riskNumber, onCancel, onAdded 
 
           <div className="field">
             <label className="label">Title <span className="req">*</span></label>
-            <input className="input" placeholder="Describe the control measure..." value={title} onChange={e => setTitle(e.target.value)} />
+            <SmartTextarea multiline={false} placeholder="Describe the control measure..." value={title} onChange={setTitle} />
           </div>
 
           <div className="field">
             <label className="label">Description</label>
-            <textarea className="textarea" rows={3} placeholder="Implementation details..." value={description} onChange={e => setDescription(e.target.value)} />
+            <SmartTextarea rows={3} placeholder="Implementation details..." value={description} onChange={setDescription} />
           </div>
 
           <div className="field">
             <label className="label">Notes</label>
-            <textarea className="textarea" rows={2} placeholder="Additional notes..." value={notes} onChange={e => setNotes(e.target.value)} />
+            <SmartTextarea rows={2} placeholder="Additional notes..." value={notes} onChange={setNotes} />
           </div>
 
           {error && <div style={{ color: 'var(--sds-error)', fontSize: 13, marginTop: 8 }}>{error}</div>}

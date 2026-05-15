@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../shared/Icon';
 import DatePicker from '../shared/DatePicker';
+import SmartTextarea from '../shared/SmartTextarea';
 import { completeSchedule } from '../../api/maintenance';
 import { uploadAttachments } from '../../api/incidents';
 
@@ -164,12 +165,11 @@ export default function CompleteModal({ schedule, onClose, onCompleted }) {
 
           <div className="field">
             <label className="label">Notes</label>
-            <textarea
-              className="textarea"
+            <SmartTextarea
               value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="What was done, what was found, parts replaced, observations…"
+              onChange={setNotes}
               rows={3}
+              placeholder="What was done, what was found, parts replaced, observations…"
               maxLength={1000}
             />
           </div>
