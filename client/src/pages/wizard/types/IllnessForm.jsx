@@ -1,6 +1,7 @@
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
 import DatePicker from '../../../components/shared/DatePicker';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 
 const ILLNESS_CATEGORIES = [
   { value: '', label: 'Select...' },
@@ -76,7 +77,7 @@ export default function IllnessForm({ data, onChange }) {
         </div>
         <div className="field">
           <label className="label">Substance / agent that caused or contributed</label>
-          <input className="input" value={data.substance || ''} onChange={e => onChange({ ...data, substance: e.target.value })} placeholder="e.g. asbestos fibers, toluene, latex gloves"/>
+          <SmartTextarea multiline={false} value={data.substance || ''} onChange={v => onChange({ ...data, substance: v })} placeholder="e.g. asbestos fibers, toluene, latex gloves"/>
         </div>
       </div>
     </>

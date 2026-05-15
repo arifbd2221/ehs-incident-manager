@@ -7,6 +7,7 @@ import { getAsset, updateAsset, deleteAsset } from '../../api/assets';
 import { listSites } from '../../api/sites';
 import { listAssetCategories, createAssetCategory, listCategoryFields } from '../../api/asset_categories';
 import Icon from '../../components/shared/Icon';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
 import CustomFieldsDisplay from '../../components/assets/CustomFieldsDisplay';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
@@ -781,7 +782,7 @@ export default function AssetDetail() {
                   </div>
                   <div className="am-field" style={{ animationDelay: '60ms' }}>
                     <label className="am-label">Location description</label>
-                    <input className="am-input" value={form.location_description || ''} onChange={e => set('location_description', e.target.value)} placeholder="e.g. Bay 3, production floor" />
+                    <SmartTextarea multiline={false} inputClassName="am-input" value={form.location_description || ''} onChange={v => set('location_description', v)} placeholder="e.g. Bay 3, production floor" />
                   </div>
                   {(siteName || form.location_description) && (
                     <div className="am-location-preview" style={{ animationDelay: '120ms' }}>
@@ -806,7 +807,7 @@ export default function AssetDetail() {
                   )}
                   <div className="am-field" style={{ animationDelay: '0ms' }}>
                     <label className="am-label">Description / notes</label>
-                    <textarea className="am-input am-textarea" rows={4} value={form.description || ''} onChange={e => set('description', e.target.value)} placeholder="Specs, model details, maintenance notes..." />
+                    <SmartTextarea rows={4} inputClassName="am-input am-textarea" value={form.description || ''} onChange={v => set('description', v)} placeholder="Specs, model details, maintenance notes..." />
                   </div>
                   <div className="am-summary" style={{ animationDelay: '60ms' }}>
                     <div className="am-summary-title"><Icon name="check" size={14} /> Asset summary</div>

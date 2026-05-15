@@ -5,6 +5,7 @@ import { getTemplate, updateTemplate, publishTemplate, updateTemplateItems, uplo
 import { getAnswerSets, createAnswerSet } from '../../api/answer_sets';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import '../../styles/templates.css';
 
 let keyCounter = 0;
@@ -457,7 +458,7 @@ export default function TemplateEditor() {
             </div>
             <div className="te-hero-meta">
               <input className="te-title-input" value={template.name || ''} onChange={e => handleNameChange(e.target.value)} placeholder="Untitled template..." disabled={isArchived} />
-              <input className="te-desc-input" value={template.description || ''} onChange={e => handleDescChange(e.target.value)} placeholder="Add a description..." disabled={isArchived} />
+              <SmartTextarea multiline={false} inputClassName="te-desc-input" value={template.description || ''} onChange={handleDescChange} placeholder="Add a description..." disabled={isArchived} />
             </div>
           </div>
           {/* Ungrouped items */}
