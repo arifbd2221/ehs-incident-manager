@@ -13,9 +13,11 @@ export default function SmartTextarea({
   multiline = true,
   rows = 3,
   className,
+  inputClassName,
   autoFocus,
   disabled,
   mic = true,
+  onKeyDown,
 }) {
   const [phIdx, setPhIdx] = useState(() => Math.floor(Math.random() * (examples?.length || 1)));
   const [phVisible, setPhVisible] = useState(true);
@@ -81,9 +83,10 @@ export default function SmartTextarea({
       <div className="st-field">
         <Tag
           ref={inputRef}
-          className={`st-input ${multiline ? 'textarea' : 'input'}`}
+          className={`st-input ${inputClassName || (multiline ? 'textarea' : 'input')}`}
           value={value}
           onChange={e => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
           placeholder={placeholder}
           autoFocus={autoFocus}
           disabled={disabled}
