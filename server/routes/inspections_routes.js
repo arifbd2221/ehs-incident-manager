@@ -92,9 +92,17 @@ router.get('/', (req, res) => {
   ).get(...params).count;
 
   const inspections = db.prepare(`
-    SELECT i.*, t.name as template_name, u.name as started_by_name,
+    SELECT i.*, t.name as template_name, t.description as template_description,
+           u.name as started_by_name,
            tv.version_number as template_version_number,
-           s.name as site_name
+           s.name as site_name,
+           (SELECT COUNT(*) FROM inspection_items ii WHERE ii.inspection_id = i.id) as items_total,
+           (SELECT COUNT(*) FROM inspection_items ii
+              WHERE ii.inspection_id = i.id
+                AND (ii.selected_option_id IS NOT NULL OR (ii.response_text IS NOT NULL AND ii.response_text <> ''))
+           ) as items_answered,
+           (SELECT COUNT(*) FROM inspection_items ii WHERE ii.inspection_id = i.id AND ii.is_failed = 1) as items_failed,
+           (SELECT COUNT(*) FROM inspection_items ii WHERE ii.inspection_id = i.id AND ii.is_flagged = 1) as items_flagged
     FROM inspections i
     LEFT JOIN templates t ON t.id = i.template_id
     LEFT JOIN users u ON u.id = i.started_by

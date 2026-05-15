@@ -140,7 +140,7 @@ const fileTypeInfo = (file) => {
   return { type: 'text', color: 'var(--sds-fg-tertiary)', bg: 'rgba(102,106,114,0.08)', label: 'File' };
 };
 
-export default function ReportWizard({ onClose, onSubmit }) {
+export default function ReportWizard({ onClose, onSubmit, prefill }) {
   const { user } = useAuth();
   const { voiceSheetData, setVoiceSheetData, activeSiteId } = useApp();
   const { showOsha, showRiddor } = frameworkVisibility(user);
@@ -392,13 +392,28 @@ export default function ReportWizard({ onClose, onSubmit }) {
     getSites().then(data => {
       setSites(data);
       if (data.length > 0) {
-        const defaultId = activeSiteId && data.some(s => s.id === activeSiteId)
-          ? String(activeSiteId)
-          : String(data[0].id);
+        // Honour caller prefill (e.g. asset detail "Report incident") first,
+        // then the active site filter, then the first site as fallback.
+        const prefillSite = prefill?.siteId && data.some(s => String(s.id) === String(prefill.siteId))
+          ? String(prefill.siteId)
+          : null;
+        const defaultId = prefillSite
+          || (activeSiteId && data.some(s => s.id === activeSiteId) ? String(activeSiteId) : String(data[0].id));
         setSiteId(defaultId);
       }
     });
-  }, [activeSiteId]);
+  }, [activeSiteId, prefill?.siteId]);
+
+  // Apply caller asset prefill once assets for the chosen site finish loading.
+  // The site-change effect clears assetId, so this fires after that reset and
+  // only sets the value if the asset actually exists in the loaded list.
+  useEffect(() => {
+    const target = prefill?.assetId ? String(prefill.assetId) : null;
+    if (!target) return;
+    if (assets.some(a => String(a.id) === target)) {
+      setAssetId(target);
+    }
+  }, [assets, prefill?.assetId]);
 
   // Reload assets when the site changes; reset asset selection
   useEffect(() => {

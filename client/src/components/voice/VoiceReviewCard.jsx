@@ -4,7 +4,7 @@ import ComboBox from '../shared/ComboBox';
 import DatePicker from '../shared/DatePicker';
 import { getSites } from '../../api/auth';
 import { TypePill, TYPES } from '../shared/Badges';
-import { checkCompleteness, getFieldMeta } from './voiceFieldConfig';
+import { checkCompleteness, getFieldMeta, getGapFields } from './voiceFieldConfig';
 
 function nowLocal() {
   const d = new Date();
@@ -119,6 +119,14 @@ export default function VoiceReviewCard({ extraction, onSubmit, onEditInWizard, 
     [extraction, gapValues, sites]
   );
 
+  // Render gap-fill from a list derived from the extraction (not gapValues).
+  // Otherwise text inputs unmount as soon as the user types a character —
+  // completeness.missing would flip the field to "filled" and remove it.
+  const gapFields = useMemo(
+    () => getGapFields(extraction, gapValues, sites),
+    [extraction, gapValues.type, sites]
+  );
+
   const resolvedTitle = gapValues.title || fields.title || '';
   const resolvedType = gapValues.type || fields.type || '';
   const resolvedSiteId = gapValues.site_id || (fields.site_id ? String(fields.site_id) : '');
@@ -220,15 +228,14 @@ export default function VoiceReviewCard({ extraction, onSubmit, onEditInWizard, 
         </div>
       )}
 
-      {/* Gap-fill section — only missing required fields */}
-      {completeness.missing.length > 0 && (
+      {/* Gap-fill section — required fields the extraction didn't provide */}
+      {gapFields.length > 0 && (
         <div className="voice-gap-section">
           <div className="voice-section-label voice-section-label-warn">
             <Icon name="warning" size={12} /> Please fill in
           </div>
-          {completeness.missing.map(key => {
+          {gapFields.map(key => {
             const meta = getFieldMeta(key);
-            if (key === 'incident_datetime') return null;
             return (
               <div key={key} className="voice-gap-row">
                 <label className="voice-gap-prompt">{meta.prompt}</label>

@@ -36,7 +36,7 @@ const NAV = [
   'divider',
   // Asset management
   { id: 'assets', path: '/assets', icon: 'widgets', label: 'Assets', color: '#546E7A' },
-  { id: 'maintenance', path: '/maintenance', icon: 'clock', label: 'Maintenance', color: '#FB8C00' },
+  { id: 'maintenance', path: '/maintenance', icon: 'clockSolid', label: 'Maintenance', color: '#FB8C00' },
   'divider',
   // Records & reporting
   { id: 'documents', path: '/documents', icon: 'file', label: 'Documents', color: '#1E88E5' },
@@ -44,7 +44,7 @@ const NAV = [
   // WI-B: Approvals queue for recordability override requests. Hidden for
   // workers via the elevatedOnly flag; the underlying endpoint already
   // returns 403 to non-elevated roles, so this is just hiding noise.
-  { id: 'approvals', path: '/approvals', icon: 'shield', label: 'Approvals', color: '#ED6C02', elevatedOnly: true },
+  { id: 'approvals', path: '/approvals', icon: 'checkBox', label: 'Approvals', color: '#ED6C02', elevatedOnly: true },
 ];
 
 const SETTINGS_CHILDREN = [
