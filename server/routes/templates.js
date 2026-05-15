@@ -16,6 +16,7 @@ import { basename } from 'path';
 import { unlinkSync } from 'fs';
 import db from '../db/connection.js';
 import { upload, uploadDir } from '../middleware/upload.js';
+import { writeActivity, diffFields } from '../services/activity_log.js';
 
 const router = Router();
 

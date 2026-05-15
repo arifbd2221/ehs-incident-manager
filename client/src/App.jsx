@@ -38,7 +38,7 @@ import GlobalVoiceFab from './components/voice/GlobalVoiceFab';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
-  const { wizardOpen, setWizardOpen, triggerRefresh } = useApp();
+  const { wizardOpen, wizardPrefill, closeWizard, triggerRefresh } = useApp();
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;
   if (!user) return <Navigate to="/login" />;
@@ -53,8 +53,9 @@ function ProtectedLayout() {
       </div>
       {wizardOpen && (
         <ReportWizard
-          onClose={() => setWizardOpen(false)}
-          onSubmit={() => { setWizardOpen(false); triggerRefresh(); }}
+          prefill={wizardPrefill}
+          onClose={closeWizard}
+          onSubmit={() => { closeWizard(); triggerRefresh(); }}
         />
       )}
       <GlobalVoiceFab />

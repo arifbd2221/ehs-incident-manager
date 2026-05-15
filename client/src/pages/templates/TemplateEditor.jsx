@@ -420,7 +420,7 @@ export default function TemplateEditor() {
                   <Icon name="settings" size={14} /> Answer Sets
                 </button>
                 {isDraft && (
-                  <button className="tp-btn-create" onClick={() => setShowPublish(true)} disabled={questionCount === 0}>
+                  <button className="btn btn-primary" onClick={() => setShowPublish(true)} disabled={questionCount === 0}>
                     <Icon name="check" size={16} /> Publish{latestVersion > 0 ? ` v${nextVersion}` : ''}
                   </button>
                 )}

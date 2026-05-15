@@ -15,7 +15,19 @@ function readStoredSite() {
 export function AppProvider({ children }) {
   const { user } = useAuth();
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardPrefill, setWizardPrefill] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Helper: open the wizard with optional initial values (e.g. asset_id from
+  // an asset detail page). Cleared automatically when the wizard closes.
+  const openWizard = useCallback((prefill = null) => {
+    setWizardPrefill(prefill);
+    setWizardOpen(true);
+  }, []);
+  const closeWizard = useCallback(() => {
+    setWizardOpen(false);
+    setWizardPrefill(null);
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
   const [voiceSheetData, setVoiceSheetData] = useState(null);
@@ -64,6 +76,7 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       wizardOpen, setWizardOpen,
+      wizardPrefill, openWizard, closeWizard,
       refreshKey, triggerRefresh,
       sidebarOpen, setSidebarOpen,
       voiceSheetOpen, setVoiceSheetOpen,

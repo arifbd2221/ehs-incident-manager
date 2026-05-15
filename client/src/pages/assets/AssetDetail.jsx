@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useApp } from '../../context/AppContext';
 import { getAsset, updateAsset, deleteAsset } from '../../api/assets';
 import { listSites } from '../../api/sites';
 import { listAssetCategories, createAssetCategory, listCategoryFields } from '../../api/asset_categories';
@@ -39,6 +40,7 @@ export default function AssetDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { openWizard } = useApp();
   const canEdit = ELEVATED.has(user?.role);
   const confirmDialog = useConfirm();
   const alertDialog = useAlert();
@@ -498,7 +500,7 @@ export default function AssetDetail() {
               </header>
               <div className="adp-section-body">
                 <div className="adp-qa-list">
-                  <button className="adp-qa" onClick={() => navigate(`/report?asset_id=${asset.id}`)}>
+                  <button className="adp-qa" onClick={() => openWizard({ assetId: asset.id, siteId: asset.site_id })}>
                     <span className="adp-qa-icon adp-qa-icon-warn"><Icon name="warning" size={16} /></span>
                     <div className="adp-qa-text">
                       <div className="adp-qa-title">Report incident</div>
