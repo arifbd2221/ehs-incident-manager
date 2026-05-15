@@ -53,18 +53,34 @@ router.get('/', (req, res) => {
 
   const where = ['a.org_id = ?'];
   const params = [orgId];
+  // Parallel where clause that honours every filter EXCEPT active, so the
+  // tab badges in the UI stay correct regardless of which tab is selected.
+  const countWhere = ['a.org_id = ?'];
+  const countParams = [orgId];
 
-  if (site_id) { where.push('a.site_id = ?'); params.push(Number(site_id)); }
-  if (asset_type) { where.push('lower(a.asset_type) = lower(?)'); params.push(asset_type); }
-  if (asset_category_id) { where.push('a.asset_category_id = ?'); params.push(Number(asset_category_id)); }
+  if (site_id) {
+    where.push('a.site_id = ?'); params.push(Number(site_id));
+    countWhere.push('a.site_id = ?'); countParams.push(Number(site_id));
+  }
+  if (asset_type) {
+    where.push('lower(a.asset_type) = lower(?)'); params.push(asset_type);
+    countWhere.push('lower(a.asset_type) = lower(?)'); countParams.push(asset_type);
+  }
+  if (asset_category_id) {
+    where.push('a.asset_category_id = ?'); params.push(Number(asset_category_id));
+    countWhere.push('a.asset_category_id = ?'); countParams.push(Number(asset_category_id));
+  }
   if (active !== undefined && active !== '') { where.push('a.active = ?'); params.push(Number(active) ? 1 : 0); }
   if (q) {
     where.push('(a.name LIKE ? OR a.asset_number LIKE ? OR a.serial_number LIKE ? OR a.location_description LIKE ?)');
     const like = `%${q}%`;
     params.push(like, like, like, like);
+    countWhere.push('(a.name LIKE ? OR a.asset_number LIKE ? OR a.serial_number LIKE ? OR a.location_description LIKE ?)');
+    countParams.push(like, like, like, like);
   }
 
   const whereClause = where.join(' AND ');
+  const countWhereClause = countWhere.join(' AND ');
   const offset = (Number(page) - 1) * Number(limit);
 
   const total = db.prepare(`SELECT COUNT(*) as c FROM assets a WHERE ${whereClause}`).get(...params).c;
@@ -79,7 +95,21 @@ router.get('/', (req, res) => {
     LIMIT ? OFFSET ?
   `).all(...params, Number(limit), offset);
 
-  res.json({ assets, total, page: Number(page), limit: Number(limit) });
+  // Active vs archived counts and distinct type count, both computed over
+  // the un-active-filtered set so tab badges read correctly on every tab.
+  const activeRows = db.prepare(
+    `SELECT a.active as active, COUNT(*) as c FROM assets a WHERE ${countWhereClause} GROUP BY a.active`
+  ).all(...countParams);
+  const active_counts = { active: 0, archived: 0 };
+  for (const row of activeRows) {
+    if (row.active === 1) active_counts.active = row.c;
+    else active_counts.archived = row.c;
+  }
+  const types_count = db.prepare(
+    `SELECT COUNT(DISTINCT lower(a.asset_type)) as c FROM assets a WHERE ${countWhereClause} AND a.asset_type IS NOT NULL AND a.asset_type != ''`
+  ).get(...countParams).c;
+
+  res.json({ assets, total, page: Number(page), limit: Number(limit), active_counts, types_count });
 });
 
 router.get('/:id', (req, res) => {

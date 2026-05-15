@@ -49,8 +49,21 @@ router.get('/', (req, res) => {
     `SELECT COUNT(*) as count FROM templates t WHERE ${whereClause}`
   ).get(...params).count;
 
+  // Subquery counts let the FE render a "18 items · 3 sections · ~5 min" spec
+  // row without an N+1 round-trip. Items here are everything except section
+  // headings (questions/text/checkbox/media/signature).
   const templates = db.prepare(`
-    SELECT t.*, u.name as created_by_name
+    SELECT
+      t.*,
+      u.name as created_by_name,
+      COALESCE((
+        SELECT COUNT(*) FROM template_items ti
+        WHERE ti.template_id = t.id AND ti.type != 'section'
+      ), 0) as items_count,
+      COALESCE((
+        SELECT COUNT(*) FROM template_items ti
+        WHERE ti.template_id = t.id AND ti.type = 'section'
+      ), 0) as sections_count
     FROM templates t
     LEFT JOIN users u ON u.id = t.created_by
     WHERE ${whereClause}
@@ -61,7 +74,14 @@ router.get('/', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /summary — counts by status
+// GET /summary — counts by status + inspection rollups
+//
+// Returns both template counts (drives the status chips) and inspection-level
+// aggregates (drives the hero stat strip):
+//   inspections_run         — total inspections started from any template
+//   inspections_in_progress — currently active
+//   avg_pass_rate           — % across COMPLETED inspections, averaged per
+//                             inspection so each one weights equally
 // ---------------------------------------------------------------------------
 router.get('/summary', (req, res) => {
   const orgId = req.user.org_id;
@@ -76,11 +96,38 @@ router.get('/summary', (req, res) => {
     WHERE org_id = ?
   `).get(orgId);
 
+  const inspRow = db.prepare(`
+    SELECT
+      COUNT(*) as run,
+      SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress
+    FROM inspections
+    WHERE org_id = ?
+  `).get(orgId);
+
+  // Per-inspection pass rate, then averaged. NULL when an inspection has no
+  // responded items so it's excluded from AVG().
+  const avgRow = db.prepare(`
+    SELECT ROUND(COALESCE(AVG(pass_pct), 0), 1) AS avg_pass_rate FROM (
+      SELECT
+        CASE WHEN COUNT(ii.id) > 0
+          THEN 100.0 * (1.0 - 1.0 * SUM(ii.is_failed) / COUNT(ii.id))
+          ELSE NULL
+        END AS pass_pct
+      FROM inspections i
+      LEFT JOIN inspection_items ii ON ii.inspection_id = i.id
+      WHERE i.org_id = ? AND i.status = 'completed'
+      GROUP BY i.id
+    )
+  `).get(orgId);
+
   res.json({
     draft: row.draft || 0,
     published: row.published || 0,
     archived: row.archived || 0,
     total: row.total || 0,
+    inspections_run: inspRow.run || 0,
+    inspections_in_progress: inspRow.in_progress || 0,
+    avg_pass_rate: avgRow.avg_pass_rate || 0,
   });
 });
 

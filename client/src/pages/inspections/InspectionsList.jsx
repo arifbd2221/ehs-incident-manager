@@ -88,152 +88,211 @@ export default function InspectionsList() {
     if (diff < 3600000) return `${Math.max(1, Math.floor(diff / 60000))}m ago`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
     if (diff < 172800000) return 'Yesterday';
-    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const statusLabel = (s) => {
-    if (s === 'in_progress') return 'In Progress';
+    if (s === 'in_progress') return 'In progress';
     return s.charAt(0).toUpperCase() + s.slice(1);
   };
 
-  const tabs = [
+  const tabs = useMemo(() => [
     { id: 'all', label: 'All', count: summary.total },
-    { id: 'in_progress', label: 'In Progress', count: summary.in_progress },
+    { id: 'in_progress', label: 'In progress', count: summary.in_progress },
     { id: 'completed', label: 'Completed', count: summary.completed },
     { id: 'abandoned', label: 'Abandoned', count: summary.abandoned },
+  ], [summary]);
+
+  const stats = [
+    { key: 'total', label: 'Total inspections', value: summary.total, kind: 'brand', sub: 'Across all sites' },
+    { key: 'in_progress', label: 'In progress', value: summary.in_progress, kind: 'warn', sub: 'Awaiting completion' },
+    { key: 'completed', label: 'Completed', value: summary.completed, kind: 'ok', sub: 'Audit-ready' },
+    { key: 'abandoned', label: 'Abandoned', value: summary.abandoned, kind: 'neutral', sub: 'Not finished' },
   ];
 
-  const statCards = [
-    { label: 'Total', value: summary.total, icon: 'shield', accent: 'var(--sds-brand-primary)', accentBg: 'var(--sds-brand-primary-tint)' },
-    { label: 'In Progress', value: summary.in_progress, icon: 'pulse', accent: 'var(--sds-brand-primary)', accentBg: 'var(--sds-brand-primary-tint)' },
-    { label: 'Completed', value: summary.completed, icon: 'check', accent: 'var(--sds-success)', accentBg: 'rgba(46,125,50,0.08)' },
-    { label: 'Abandoned', value: summary.abandoned, icon: 'close', accent: '#999', accentBg: 'rgba(0,0,0,0.04)' },
-  ];
+  const emptyCopy = () => {
+    const noneAnywhere = summary.total === 0;
+    const filtersActive = !!search.trim();
+    if (noneAnywhere) return {
+      title: 'No inspections yet',
+      desc: 'Start your first inspection from a published template to begin tracking safety walks.',
+      cta: canCreate ? { label: 'Start your first inspection', onClick: openStartModal } : null,
+    };
+    if (filtersActive) return {
+      title: 'No inspections match your search',
+      desc: 'Try a different keyword or clear the search.',
+      cta: { label: 'Clear search', onClick: () => setSearch(''), variant: 'secondary' },
+    };
+    if (tab === 'in_progress') return { title: 'No inspections in progress', desc: 'When teammates start an inspection it shows up here until they complete it.' };
+    if (tab === 'completed') return { title: 'No completed inspections', desc: 'Finished inspections will appear here for audit history.' };
+    if (tab === 'abandoned') return { title: 'No abandoned inspections', desc: 'Inspections that were started but never finished will appear here.' };
+    return { title: 'No inspections to show', desc: 'Adjust your filters or check a different tab.' };
+  };
 
   return (
     <div className="page ip-page">
       {/* Hero */}
-      <div className="ip-hero">
-        <div className="ip-hero-shapes" aria-hidden="true">
-          <span className="ip-shape ip-shape-circle" />
-          <span className="ip-shape ip-shape-rect" />
-          <span className="ip-shape ip-shape-dot" />
-          <span className="ip-shape ip-shape-ring" />
-          <span className="ip-shape ip-shape-square" />
+      <section className="ip-hero">
+        <div className="ip-hero-icon">
+          <Icon name="inspections" size={22} />
         </div>
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <div className="ip-heading">Inspections</div>
-          <div className="ip-subtitle">
-            Conduct safety inspections
-            <span className="count-badge">{summary.total} inspections</span>
+        <div className="ip-hero-text">
+          <h1 className="ip-hero-title">Inspections</h1>
+          <p className="ip-hero-sub">Conduct safety inspections using published templates</p>
+        </div>
+        {canCreate && (
+          <div className="ip-hero-actions">
+            <button className="btn btn-primary" onClick={openStartModal}>
+              <Icon name="plus" size={16} /> Start inspection
+            </button>
           </div>
-        </div>
-        <div className="ip-hero-actions">
-          {canCreate && (
-            <button className="ip-btn-start" onClick={openStartModal}>
-              <Icon name="plus" size={16} /> Start Inspection
+        )}
+      </section>
+
+      {/* Stat strip */}
+      <section className="ip-stat-strip">
+        {stats.map(s => (
+          <div key={s.key} className={`ip-stat ip-stat-${s.kind}`}>
+            <div className="ip-stat-label">{s.label}</div>
+            <div className="ip-stat-value">{loading ? '—' : s.value}</div>
+            <div className="ip-stat-sub">{s.sub}</div>
+          </div>
+        ))}
+      </section>
+
+      {/* Tabs */}
+      <div className="ip-tabs">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            className={`ip-tab ${tab === t.id ? 'active' : ''}`}
+            onClick={() => setTab(t.id)}
+          >
+            <span>{t.label}</span>
+            <span className="ip-tab-count">{t.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Toolbar — search */}
+      <div className="ip-toolbar">
+        <div className="ip-search">
+          <Icon name="search" size={15} />
+          <input
+            placeholder="Search inspections by title, number, or location…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className="ip-search-clear" onClick={() => setSearch('')} title="Clear search">
+              <Icon name="close" size={12} />
             </button>
           )}
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="ip-stats">
-        {statCards.map(s => (
-          <div key={s.label} className="ip-stat" style={{ '--stat-accent': s.accent, '--stat-accent-bg': s.accentBg }}>
-            <div className="ip-stat-label">{s.label}</div>
-            <div className="ip-stat-value">{loading ? '—' : s.value}</div>
-            <div className="ip-stat-icon"><Icon name={s.icon} size={18} /></div>
-          </div>
-        ))}
-      </div>
-
-      {/* Toolbar */}
-      <div className="ip-toolbar">
-        <div className="ip-tabs">
-          {tabs.map(t => (
-            <button key={t.id} className={`ip-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
-              {t.label} <span className="cnt">{t.count}</span>
-            </button>
+      {/* Card grid */}
+      {loading ? (
+        <div className="ip-grid">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="ip-card ip-card-skel" style={{ animationDelay: `${i * 60}ms` }}>
+              <div className="ip-skel ip-skel-pill" />
+              <div className="ip-skel ip-skel-title" />
+              <div className="ip-skel ip-skel-line" />
+              <div className="ip-skel ip-skel-line ip-skel-line-short" />
+            </div>
           ))}
         </div>
-        <div className="ip-search">
-          <Icon name="search" size={16} color="var(--sds-fg-muted)" />
-          <input
-            placeholder="Search inspections..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="ip-table-wrap">
-        {loading ? (
-          Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="ip-skel-row">
-              <div className="ip-skel" style={{ width: '80%' }} />
-              <div className="ip-skel" style={{ width: '60%' }} />
-              <div className="ip-skel" style={{ width: '50%' }} />
-              <div className="ip-skel" style={{ width: '40%' }} />
-              <div className="ip-skel" style={{ width: '60%' }} />
-              <div className="ip-skel" style={{ width: '40%' }} />
+      ) : inspections.length === 0 ? (
+        (() => {
+          const e = emptyCopy();
+          return (
+            <div className="card card-pad ip-empty">
+              <div className="ip-empty-icon"><Icon name="inspections" size={28} /></div>
+              <div className="ip-empty-title">{e.title}</div>
+              <div className="ip-empty-desc">{e.desc}</div>
+              {e.cta && (
+                <button
+                  className={`btn btn-${e.cta.variant || 'primary'}`}
+                  onClick={e.cta.onClick}
+                >
+                  <Icon name={e.cta.variant === 'secondary' ? 'close' : 'plus'} size={14} /> {e.cta.label}
+                </button>
+              )}
             </div>
-          ))
-        ) : (
-          <table className="ip-table">
-            <thead>
-              <tr>
-                <th>Number</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Location</th>
-                <th>Started By</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inspections.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="ip-empty-row">
-                    <div className="ip-empty">
-                      <div className="ip-empty-icon"><Icon name="shield" size={28} /></div>
-                      <div className="ip-empty-title">No inspections yet</div>
-                      <div className="ip-empty-desc">Start your first inspection from a published template</div>
-                      {canCreate && (
-                        <button className="ip-btn-start" onClick={openStartModal}>
-                          <Icon name="plus" size={16} /> Start Inspection
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ) : inspections.map((ins, idx) => (
-                <tr key={ins.id} onClick={() => navigate(`/inspections/${ins.id}`)} style={{ animationDelay: `${50 + idx * 30}ms` }}>
-                  <td><span className="ip-number">{ins.inspection_number}</span></td>
-                  <td>
-                    <div className="ip-title-cell">{ins.title}</div>
-                    {ins.template_name && (
-                      <div className="ip-template-name">
-                        {ins.template_name}
-                        {ins.template_version_number && <span className="ip-version-tag">v{ins.template_version_number}</span>}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <span className={`ip-status ip-status-${ins.status}`}>
-                      <span className="dot" /> {statusLabel(ins.status)}
+          );
+        })()
+      ) : (
+        <div className="ip-grid">
+          {inspections.map((ins, idx) => (
+            <article
+              key={ins.id}
+              className={`ip-card ip-card-${ins.status}`}
+              style={{ animationDelay: `${50 + idx * 30}ms` }}
+              onClick={() => navigate(`/inspections/${ins.id}`)}
+              onKeyDown={e => { if (e.key === 'Enter') navigate(`/inspections/${ins.id}`); }}
+              role="button"
+              tabIndex={0}
+            >
+              <header className="ip-card-head">
+                <span className="ip-number mono">{ins.inspection_number}</span>
+                <span className={`ip-status ip-status-${ins.status}`}>
+                  <span className="ip-status-dot" />
+                  {statusLabel(ins.status)}
+                </span>
+              </header>
+
+              <h3 className="ip-card-title">{ins.title}</h3>
+
+              {ins.template_name && (
+                <div className="ip-card-template">
+                  <Icon name="templates" size={12} />
+                  <span>{ins.template_name}</span>
+                  {ins.template_version_number && (
+                    <span className="ip-version-tag">v{ins.template_version_number}</span>
+                  )}
+                </div>
+              )}
+
+              <div className="ip-card-meta">
+                {ins.location && (
+                  <>
+                    <span className="ip-meta-item">
+                      <Icon name="location" size={12} />
+                      <span>{ins.location}</span>
                     </span>
-                  </td>
-                  <td className="ip-meta-cell">{ins.location || '—'}</td>
-                  <td className="ip-meta-cell">{ins.started_by_name || '—'}</td>
-                  <td className="ip-meta-cell">{fmtDate(ins.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+                    <span className="ip-meta-sep">·</span>
+                  </>
+                )}
+                <span className="ip-meta-item">
+                  <Icon name="person" size={12} />
+                  <span>{ins.started_by_name || '—'}</span>
+                </span>
+                <span className="ip-meta-sep">·</span>
+                <span className="ip-meta-item">
+                  <Icon name="clock" size={12} />
+                  <span>{fmtDate(ins.created_at)}</span>
+                </span>
+              </div>
+            </article>
+          ))}
+
+          {canCreate && (
+            <button
+              type="button"
+              className="ip-add-card"
+              onClick={openStartModal}
+            >
+              <div className="ip-add-card-circle">
+                <Icon name="plus" size={22} />
+              </div>
+              <div className="ip-add-card-label">Start inspection</div>
+              <div className="ip-add-card-sub">Begin a new safety walk from a published template</div>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Start Inspection Modal */}
       {showStart && createPortal(

@@ -10,6 +10,7 @@ import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
 import CustomFieldsDisplay from '../../components/assets/CustomFieldsDisplay';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import MaintenanceTab from '../../components/maintenance/MaintenanceTab';
+import AssetIllustration, { illustrationKind } from '../../components/assets/AssetIllustration';
 import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import { listSchedules } from '../../api/maintenance';
 import { timeAgo } from '../../utils/time';
@@ -208,12 +209,26 @@ export default function AssetDetail() {
   const siteName = sites.find(s => String(s.id) === String(form.site_id))?.name;
   const catName = categories.find(c => String(c.id) === String(form.asset_category_id))?.name || form.asset_type;
 
-  if (loading) return <div className="page assets-page"><div className="assets-skel-grid"><div className="assets-skel-card"><div className="skel skel-pill" /><div className="skel skel-title" /><div className="skel skel-row" /></div></div></div>;
-  if (err || !asset) return (
-    <div className="page assets-page">
-      <div className="asset-detail-breadcrumb">
-        <button onClick={() => navigate('/assets')}><Icon name="arrowL" size={13} /> Assets</button>
+  if (loading) return (
+    <div className="page adp-page">
+      <div className="adp-hero">
+        <div className="adp-hero-banner adp-hero-skel" />
+        <div className="adp-hero-content">
+          <div className="adp-hero-avatar adp-hero-skel-avatar" />
+          <div className="adp-hero-info">
+            <div className="skel skel-pill" style={{ width: 120 }} />
+            <div className="skel skel-title" style={{ marginTop: 10 }} />
+            <div className="skel skel-row" style={{ marginTop: 8, width: '60%' }} />
+          </div>
+        </div>
       </div>
+    </div>
+  );
+  if (err || !asset) return (
+    <div className="page adp-page">
+      <button className="adp-hero-back adp-hero-back-static" onClick={() => navigate('/assets')}>
+        <Icon name="arrowL" size={13} /> <span>Assets</span>
+      </button>
       <div className="card card-pad empty-state">
         <div className="empty-state-icon"><Icon name="warning" size={24} /></div>
         <div className="empty-state-title">{err || 'Asset not found'}</div>
@@ -228,231 +243,454 @@ export default function AssetDetail() {
   const heroColor = asset.category_color || '#626DF9';
   const initials = (asset.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const incidentCount = asset.linked_incidents?.length || 0;
+  const activityCount = asset.activity?.length || 0;
+  const kind = illustrationKind(asset);
+  let cfValues = asset.custom_fields;
+  if (typeof cfValues === 'string') {
+    try { cfValues = JSON.parse(cfValues); } catch { cfValues = {}; }
+  }
 
   const TABS = [
-    { id: 'overview', label: 'Overview', icon: 'info' },
-    { id: 'incidents', label: 'Incidents', icon: 'incidents', count: incidentCount },
-    { id: 'maintenance', label: 'Maintenance', icon: 'gear', count: maintenanceCounts.total, overdue: maintenanceCounts.overdue },
-    { id: 'documents', label: 'Documents', icon: 'file', count: 0 },
-    { id: 'activity', label: 'Activity', icon: 'pulse', count: 0 },
+    { id: 'overview', label: 'Overview' },
+    { id: 'incidents', label: 'Incidents', count: incidentCount },
+    { id: 'maintenance', label: 'Maintenance', count: maintenanceCounts.total, overdue: maintenanceCounts.overdue },
+    { id: 'documents', label: 'Documents' },
+    { id: 'activity', label: 'Activity', count: activityCount },
   ];
 
   return (
-    <div className="page asset-detail-page">
-      {/* Breadcrumb */}
-      <div className="asset-detail-breadcrumb">
-        <button onClick={() => navigate('/assets')}>
-          <Icon name="arrowL" size={13} /> Assets
-        </button>
-        <span className="bc-sep">/</span>
-        <span className="bc-current">{asset.name}</span>
-      </div>
+    <div className="page adp-page">
+      {/* Hero — illustration banner + avatar + identity + actions */}
+      <section className="adp-hero">
+        <div className="adp-hero-banner">
+          <AssetIllustration kind={kind} tint={heroColor} />
+          <div className="adp-hero-banner-overlay" />
+          <button className="adp-hero-back" onClick={() => navigate('/assets')}>
+            <Icon name="arrowL" size={13} /> <span>Assets</span>
+          </button>
+        </div>
 
-      {/* Hero card */}
-      <div className="asset-detail-hero" style={{ '--ad-color': heroColor }}>
-        <div className="asset-detail-hero-strip" />
-        <div className="asset-detail-hero-body">
-          <div className="asset-detail-avatar">{initials}</div>
-          <div className="asset-detail-hero-info">
-            <div className="asset-detail-num">
+        <div className="adp-hero-content">
+          <div className="adp-hero-avatar" style={{ '--ah-color': heroColor }}>
+            <div className="adp-hero-avatar-inner">{initials || '?'}</div>
+          </div>
+
+          <div className="adp-hero-info">
+            <div className="adp-hero-id mono">
               {asset.display_id || asset.asset_number}
               {asset.display_id && asset.display_id !== asset.asset_number && (
-                <span className="asset-detail-num-sys">{asset.asset_number}</span>
+                <span className="adp-hero-id-sys">· {asset.asset_number}</span>
               )}
             </div>
-            <h1 className="asset-detail-name">
-              {asset.name}
-              {!asset.active && <span className="asset-badge-archived">archived</span>}
-            </h1>
-            <div className="asset-detail-meta">
-              <span className="asset-type-pill" style={{ background: heroColor }}>
-                {asset.asset_type || '—'}
+            <h1 className="adp-hero-title">{asset.name}</h1>
+            <div className="adp-hero-meta">
+              <span className="adp-type-pill" style={{ '--type-color': heroColor }}>
+                <span className="adp-type-dot" />
+                {asset.asset_type || 'Asset'}
               </span>
-              <span>
-                <span className="asset-detail-status-dot" style={{ background: asset.active ? '#2E7D32' : '#90A4AE' }} />
+              <span className={`adp-status-pill adp-status-${asset.active ? 'ok' : 'archived'}`}>
+                <span className="adp-status-dot" />
                 {asset.active ? 'Active' : 'Archived'}
               </span>
-              <span><Icon name="factory" size={13} /> {asset.site_name || '—'}{asset.site_country ? ` · ${asset.site_country}` : ''}</span>
-              {asset.location_description && <span><Icon name="location" size={13} /> {asset.location_description}</span>}
+              <span className="adp-hero-divider" />
+              <span className="adp-hero-meta-item">
+                <Icon name="factory" size={13} />
+                {asset.site_name || '—'}{asset.site_country ? ` · ${asset.site_country}` : ''}
+              </span>
+              {asset.location_description && (
+                <span className="adp-hero-meta-item">
+                  <Icon name="location" size={13} />
+                  {asset.location_description}
+                </span>
+              )}
+              {asset.serial_number && (
+                <span className="adp-hero-meta-item mono">
+                  <Icon name="shield" size={13} />
+                  {asset.serial_number}
+                </span>
+              )}
             </div>
           </div>
+
           {canEdit && (
-            <div className="asset-detail-actions">
-              <button className="btn btn-secondary btn-sm" onClick={openEdit}>
+            <div className="adp-hero-actions">
+              {asset.active
+                ? <button className="btn btn-ghost asset-archive" onClick={handleArchive}>Archive</button>
+                : <button className="btn btn-ghost" onClick={handleRestore}>Restore</button>}
+              <button className="btn btn-primary" onClick={openEdit}>
                 <Icon name="edit" size={14} /> Edit
               </button>
-              {asset.active
-                ? <button className="btn btn-ghost btn-sm asset-archive" onClick={handleArchive}>Archive</button>
-                : <button className="btn btn-ghost btn-sm" onClick={handleRestore}>Restore</button>}
             </div>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Tabs with badges */}
-      <div className="asset-detail-tabs">
-        {TABS.map(t => (
-          <div key={t.id} className={`asset-detail-tab ${tab === t.id ? 'active' : ''}`}
-            onClick={() => setTab(t.id)}>
-            {t.label}
-            {t.count !== undefined && (
-              <span className="tab-badge">{t.count}</span>
-            )}
-            {t.id === 'maintenance' && t.overdue > 0 && (
-              <span className="pill pill-err" style={{ marginLeft: 6, fontSize: 10 }}>
-                <span className="dot" />{t.overdue} overdue
-              </span>
-            )}
+      {/* Stat strip — only metrics we can back from data */}
+      <section className="adp-stat-strip">
+        <div className={`adp-stat-tile adp-stat-${asset.active ? 'ok' : 'neutral'}`}>
+          <div className="adp-stat-label">Status</div>
+          <div className="adp-stat-value">{asset.active ? 'Active' : 'Archived'}</div>
+          <div className="adp-stat-sub">{asset.asset_type || 'Unclassified'}</div>
+        </div>
+        <div className={`adp-stat-tile ${incidentCount > 0 ? 'adp-stat-warn' : 'adp-stat-ok'}`}>
+          <div className="adp-stat-label">Linked incidents</div>
+          <div className="adp-stat-value">{incidentCount}</div>
+          <div className="adp-stat-sub">{incidentCount === 0 ? 'None reported' : `${incidentCount} on file`}</div>
+        </div>
+        <div className={`adp-stat-tile ${maintenanceCounts.overdue > 0 ? 'adp-stat-crit' : maintenanceCounts.total > 0 ? 'adp-stat-brand' : 'adp-stat-neutral'}`}>
+          <div className="adp-stat-label">Maintenance</div>
+          <div className="adp-stat-value">{maintenanceCounts.total}</div>
+          <div className="adp-stat-sub">
+            {maintenanceCounts.overdue > 0
+              ? `${maintenanceCounts.overdue} overdue`
+              : maintenanceCounts.total > 0 ? 'On schedule' : 'No schedules'}
           </div>
+        </div>
+        <div className="adp-stat-tile adp-stat-neutral">
+          <div className="adp-stat-label">Activity events</div>
+          <div className="adp-stat-value">{activityCount}</div>
+          <div className="adp-stat-sub">{activityCount === 0 ? 'No history' : 'Tracked changes'}</div>
+        </div>
+      </section>
+
+      {/* Tabs */}
+      <div className="adp-tabs">
+        {TABS.map(t => (
+          <button key={t.id} type="button"
+            className={`adp-tab ${tab === t.id ? 'active' : ''}`}
+            onClick={() => setTab(t.id)}>
+            <span>{t.label}</span>
+            {t.count != null && <span className="adp-tab-count">{t.count}</span>}
+            {t.id === 'maintenance' && t.overdue > 0 && (
+              <span className="adp-tab-overdue">{t.overdue}</span>
+            )}
+          </button>
         ))}
       </div>
 
-      {/* Overview tab */}
+      {/* OVERVIEW TAB — 2-col split */}
       {tab === 'overview' && (
-        <div className="asset-detail-grid">
-          <div className="card card-pad">
-            <div className="card-h">
-              <div className="adet-card-icon" style={{ '--ci-color': '#626DF9' }}><Icon name="info" size={14} /></div>
-              Identification
-            </div>
-            <div className="kv"><div className="kv-k">Unique ID</div><div className="kv-v mono">{asset.display_id || '—'}</div></div>
-            <div className="kv"><div className="kv-k">System #</div><div className="kv-v mono">{asset.asset_number}</div></div>
-            <div className="kv"><div className="kv-k">Name</div><div className="kv-v">{asset.name}</div></div>
-            <div className="kv"><div className="kv-k">Type</div><div className="kv-v">{asset.asset_type || '—'}{!asset.category_name && asset.asset_type ? ' (custom)' : ''}</div></div>
-            <div className="kv"><div className="kv-k">Serial</div><div className="kv-v">{asset.serial_number || '—'}</div></div>
-            <div className="kv">
-              <div className="kv-k">Status</div>
-              <div className="kv-v">
-                <span className="kv-status">
-                  <span className="kv-status-dot" style={{ background: asset.active ? '#2E7D32' : '#90A4AE' }} />
-                  {asset.active ? 'Active' : 'Archived'}
-                </span>
+        <div className="adp-overview-grid">
+          <div className="adp-overview-main">
+            <section className="adp-section">
+              <header className="adp-section-head">
+                <div className="adp-section-icon"><Icon name="info" size={14} /></div>
+                <h2 className="adp-section-title">About this asset</h2>
+                {canEdit && (
+                  <button className="adp-section-action" onClick={openEdit}>
+                    <Icon name="edit" size={12} /> Edit
+                  </button>
+                )}
+              </header>
+              <div className="adp-section-body">
+                <div className="adp-kv-grid">
+                  <div className="adp-kv">
+                    <span className="adp-kv-k">Unique ID</span>
+                    <span className="adp-kv-v mono">{asset.display_id || '—'}</span>
+                  </div>
+                  <div className="adp-kv">
+                    <span className="adp-kv-k">System number</span>
+                    <span className="adp-kv-v mono">{asset.asset_number}</span>
+                  </div>
+                  <div className="adp-kv">
+                    <span className="adp-kv-k">Type</span>
+                    <span className="adp-kv-v">
+                      {asset.asset_type || '—'}
+                      {!asset.category_name && asset.asset_type ? ' (custom)' : ''}
+                    </span>
+                  </div>
+                  <div className="adp-kv">
+                    <span className="adp-kv-k">Serial</span>
+                    <span className="adp-kv-v mono">{asset.serial_number || '—'}</span>
+                  </div>
+                  <div className="adp-kv">
+                    <span className="adp-kv-k">Site</span>
+                    <span className="adp-kv-v">{asset.site_name || '—'}{asset.site_country ? ` · ${asset.site_country}` : ''}</span>
+                  </div>
+                  <div className="adp-kv">
+                    <span className="adp-kv-k">Location</span>
+                    <span className="adp-kv-v">{asset.location_description || '—'}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </section>
 
-          <div className="card card-pad">
-            <div className="card-h">
-              <div className="adet-card-icon" style={{ '--ci-color': '#2E7D32' }}><Icon name="location" size={14} /></div>
-              Location
-            </div>
-            <div className="kv"><div className="kv-k">Site</div><div className="kv-v">{asset.site_name || '—'}</div></div>
-            <div className="kv"><div className="kv-k">Country</div><div className="kv-v">{asset.site_country || '—'}</div></div>
-            <div className="kv"><div className="kv-k">Description</div><div className="kv-v">{asset.location_description || '—'}</div></div>
-          </div>
+            {asset.description && (
+              <section className="adp-section">
+                <header className="adp-section-head">
+                  <div className="adp-section-icon"><Icon name="file" size={14} /></div>
+                  <h2 className="adp-section-title">Notes</h2>
+                </header>
+                <div className="adp-section-body">
+                  <p className="adp-notes">{asset.description}</p>
+                </div>
+              </section>
+            )}
 
-          {asset.description && (
-            <div className="card card-pad asset-detail-fullrow">
-              <div className="card-h">
-                <div className="adet-card-icon" style={{ '--ci-color': '#ED6C02' }}><Icon name="file" size={14} /></div>
-                Notes
+            {asset.category_fields && asset.category_fields.length > 0 && (
+              <section className="adp-section">
+                <header className="adp-section-head">
+                  <div className="adp-section-icon"><Icon name="gear" size={14} /></div>
+                  <h2 className="adp-section-title">Custom fields</h2>
+                </header>
+                <div className="adp-section-body">
+                  <CustomFieldsDisplay
+                    fields={asset.category_fields}
+                    values={cfValues}
+                  />
+                </div>
+              </section>
+            )}
+
+            <section className="adp-section">
+              <header className="adp-section-head">
+                <div className="adp-section-icon"><Icon name="incidents" size={14} /></div>
+                <h2 className="adp-section-title">
+                  Linked incidents
+                  <span className="adp-section-count">{incidentCount}</span>
+                </h2>
+              </header>
+              <div className="adp-section-body">
+                {incidentCount > 0 ? (
+                  <div className="adp-inc-list">
+                    {asset.linked_incidents.map(i => (
+                      <button
+                        key={i.id}
+                        type="button"
+                        className="adp-inc-row"
+                        onClick={() => navigate(`/incidents/${i.id}`)}
+                      >
+                        <span className={`adp-inc-sev pill pill-sev-${i.severity || '5'}`}>S{i.severity}</span>
+                        <div className="adp-inc-body">
+                          <div className="adp-inc-title">{i.title}</div>
+                          <div className="adp-inc-meta">
+                            <span className="mono">{i.incident_number}</span>
+                            <span>·</span>
+                            <span>Track {i.track}</span>
+                            <span>·</span>
+                            <span>{i.type}</span>
+                            <span>·</span>
+                            <span>{i.incident_datetime?.slice(0, 10)}</span>
+                          </div>
+                        </div>
+                        <span className={`adp-inc-status status-${(i.status || 'New').toLowerCase().replace(/\s+/g, '-')}`}>
+                          {i.status}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="adp-tab-empty adp-tab-empty-sm">
+                    <Icon name="incidents" size={22} />
+                    <p>No incidents reported against this asset.</p>
+                  </div>
+                )}
               </div>
-              <div className="asset-detail-notes">{asset.description}</div>
-            </div>
-          )}
-
-          {asset.category_fields && asset.category_fields.length > 0 && (
-            <div className="asset-detail-fullrow">
-              <CustomFieldsDisplay
-                fields={asset.category_fields}
-                values={asset.custom_fields}
-              />
-            </div>
-          )}
-
-          <div className="card card-pad">
-            <div className="card-h">
-              <div className="adet-card-icon" style={{ '--ci-color': '#8b5cf6' }}><Icon name="clock" size={14} /></div>
-              Lifecycle
-            </div>
-            <div className="kv"><div className="kv-k">Created</div><div className="kv-v">{asset.created_at?.slice(0, 10) || '—'}</div></div>
-            <div className="kv"><div className="kv-k">Updated</div><div className="kv-v">{asset.updated_at?.slice(0, 10) || '—'}</div></div>
+            </section>
           </div>
+
+          {/* Sidebar */}
+          <aside className="adp-overview-side">
+            <section className="adp-section">
+              <header className="adp-section-head">
+                <div className="adp-section-icon"><Icon name="pulse" size={14} /></div>
+                <h2 className="adp-section-title">Quick actions</h2>
+              </header>
+              <div className="adp-section-body">
+                <div className="adp-qa-list">
+                  <button className="adp-qa" onClick={() => navigate(`/report?asset_id=${asset.id}`)}>
+                    <span className="adp-qa-icon adp-qa-icon-warn"><Icon name="warning" size={16} /></span>
+                    <div className="adp-qa-text">
+                      <div className="adp-qa-title">Report incident</div>
+                      <div className="adp-qa-sub">Log a new event linked to this asset</div>
+                    </div>
+                    <Icon name="arrow" size={14} />
+                  </button>
+                  <button className="adp-qa" onClick={() => setTab('maintenance')}>
+                    <span className="adp-qa-icon adp-qa-icon-brand"><Icon name="clock" size={16} /></span>
+                    <div className="adp-qa-text">
+                      <div className="adp-qa-title">Schedule maintenance</div>
+                      <div className="adp-qa-sub">Open the maintenance tab</div>
+                    </div>
+                    <Icon name="arrow" size={14} />
+                  </button>
+                  {canEdit && (
+                    <button className="adp-qa" onClick={openEdit}>
+                      <span className="adp-qa-icon adp-qa-icon-ok"><Icon name="edit" size={16} /></span>
+                      <div className="adp-qa-text">
+                        <div className="adp-qa-title">Edit asset details</div>
+                        <div className="adp-qa-sub">Update identity, location, or notes</div>
+                      </div>
+                      <Icon name="arrow" size={14} />
+                    </button>
+                  )}
+                  {canEdit && asset.active && (
+                    <button className="adp-qa" onClick={handleArchive}>
+                      <span className="adp-qa-icon adp-qa-icon-neutral"><Icon name="close" size={16} /></span>
+                      <div className="adp-qa-text">
+                        <div className="adp-qa-title">Archive asset</div>
+                        <div className="adp-qa-sub">Hide from active views, retain history</div>
+                      </div>
+                      <Icon name="arrow" size={14} />
+                    </button>
+                  )}
+                  {canEdit && !asset.active && (
+                    <button className="adp-qa" onClick={handleRestore}>
+                      <span className="adp-qa-icon adp-qa-icon-ok"><Icon name="check" size={16} /></span>
+                      <div className="adp-qa-text">
+                        <div className="adp-qa-title">Restore asset</div>
+                        <div className="adp-qa-sub">Return to active registry</div>
+                      </div>
+                      <Icon name="arrow" size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className="adp-section">
+              <header className="adp-section-head">
+                <div className="adp-section-icon"><Icon name="clock" size={14} /></div>
+                <h2 className="adp-section-title">Lifecycle</h2>
+              </header>
+              <div className="adp-section-body">
+                <div className="adp-spec-list">
+                  <div className="adp-spec"><span>Created</span><span>{asset.created_at?.slice(0, 10) || '—'}</span></div>
+                  <div className="adp-spec"><span>Last updated</span><span>{asset.updated_at?.slice(0, 10) || '—'}</span></div>
+                  <div className="adp-spec"><span>Status</span>
+                    <span className={`adp-status-pill adp-status-${asset.active ? 'ok' : 'archived'}`}>
+                      <span className="adp-status-dot" />
+                      {asset.active ? 'Active' : 'Archived'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <ReferencedByCard entityType="asset" entityId={asset.id} />
+          </aside>
         </div>
       )}
 
-      {/* Incidents tab */}
+      {/* INCIDENTS TAB */}
       {tab === 'incidents' && (
-        incidentCount > 0 ? (
-          <div className="card card-pad">
-            <div className="card-h">
-              <div className="adet-card-icon" style={{ '--ci-color': '#D32F2F' }}><Icon name="incidents" size={14} /></div>
-              {incidentCount} incident{incidentCount !== 1 ? 's' : ''} linked
-            </div>
-            <div className="asset-linked-list">
-              {asset.linked_incidents.map(i => (
-                <div key={i.id} className="asset-linked-row" onClick={() => navigate(`/incidents/${i.id}`)}>
-                  <div className="asset-linked-num">{i.incident_number}</div>
-                  <div className="asset-linked-main">
-                    <div className="asset-linked-title">{i.title}</div>
-                    <div className="asset-linked-meta">
-                      <span className={`pill pill-sev-${i.severity || '5'}`}>S{i.severity}</span>
-                      <span className={`pill pill-track-${(i.track || 'C').toLowerCase()}`}>Track {i.track}</span>
-                      <span>{i.type}</span>
-                      <span>{i.site_name}</span>
-                      <span>{i.incident_datetime?.slice(0, 10)}</span>
-                      {i.reporter_name && <span>by {i.reporter_initials || i.reporter_name}</span>}
+        <section className="adp-section">
+          <header className="adp-section-head">
+            <div className="adp-section-icon"><Icon name="incidents" size={14} /></div>
+            <h2 className="adp-section-title">
+              Incidents involving this asset
+              <span className="adp-section-count">{incidentCount}</span>
+            </h2>
+          </header>
+          <div className="adp-section-body">
+            {incidentCount > 0 ? (
+              <div className="adp-inc-list">
+                {asset.linked_incidents.map(i => (
+                  <button
+                    key={i.id}
+                    type="button"
+                    className="adp-inc-row"
+                    onClick={() => navigate(`/incidents/${i.id}`)}
+                  >
+                    <span className={`adp-inc-sev pill pill-sev-${i.severity || '5'}`}>S{i.severity}</span>
+                    <div className="adp-inc-body">
+                      <div className="adp-inc-title">{i.title}</div>
+                      <div className="adp-inc-meta">
+                        <span className="mono">{i.incident_number}</span>
+                        <span>·</span>
+                        <span>Track {i.track}</span>
+                        <span>·</span>
+                        <span>{i.type}</span>
+                        <span>·</span>
+                        <span>{i.site_name}</span>
+                        <span>·</span>
+                        <span>{i.incident_datetime?.slice(0, 10)}</span>
+                        {i.reporter_name && (<><span>·</span><span>by {i.reporter_initials || i.reporter_name}</span></>)}
+                      </div>
                     </div>
-                  </div>
-                  <div className={`asset-linked-status status-${(i.status || 'New').toLowerCase().replace(/\s+/g, '-')}`}>{i.status}</div>
-                </div>
-              ))}
-            </div>
+                    <span className={`adp-inc-status status-${(i.status || 'New').toLowerCase().replace(/\s+/g, '-')}`}>
+                      {i.status}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="adp-tab-empty">
+                <Icon name="incidents" size={28} />
+                <h3>No incidents linked to this asset yet</h3>
+                <p>When workers report an incident and select this asset, they'll show up here.</p>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="card card-pad asset-tab-empty">
-            <Icon name="incidents" size={28} />
-            <h3>No incidents linked to this asset yet</h3>
-            <p>When workers report an incident and select this asset, they'll show up here.</p>
-          </div>
-        )
+        </section>
       )}
 
-      {/* Maintenance tab — P3-OP1 schedules + recent events + escalate-to-CAPA */}
+      {/* MAINTENANCE TAB */}
       {tab === 'maintenance' && (
         <MaintenanceTab asset={asset} user={user} onRefresh={refreshMaintenanceCounts} />
       )}
 
-      {/* Documents tab */}
+      {/* DOCUMENTS TAB */}
       {tab === 'documents' && (
-        <div className="card card-pad asset-tab-empty">
-          <Icon name="file" size={28} />
-          <h3>No documents linked</h3>
-          <p>Manuals, SDS sheets, certificates, and other documents linked to this asset will appear here.</p>
-        </div>
+        <section className="adp-section">
+          <header className="adp-section-head">
+            <div className="adp-section-icon"><Icon name="file" size={14} /></div>
+            <h2 className="adp-section-title">Documents</h2>
+          </header>
+          <div className="adp-section-body">
+            <div className="adp-tab-empty">
+              <Icon name="file" size={28} />
+              <h3>No documents linked</h3>
+              <p>Manuals, SDS sheets, certificates, and other documents linked to this asset will appear here.</p>
+            </div>
+          </div>
+        </section>
       )}
 
-      {/* Activity tab — real audit timeline scoped to this asset */}
+      {/* ACTIVITY TAB */}
       {tab === 'activity' && (
-        <div className="card card-pad">
-          <div className="activity-feed">
-            {(asset.activity || []).map((e, i) => {
-              const mapped = ACTION_ICON[e.action] || { icon: 'bell', cls: 'act-system' };
-              return (
-                <div className="act-item" key={e.id || i}>
-                  <div className={`act-dot ${mapped.cls}`}>
-                    <Icon name={mapped.icon} size={16} />
-                  </div>
-                  <div className="act-body">
-                    <div className="act-who">{e.user_name || 'System'}</div>
-                    <div className="act-desc">{e.description}</div>
-                    <div className="act-when">{timeAgo(e.created_at)}</div>
-                  </div>
-                </div>
-              );
-            })}
-            {(!asset.activity || asset.activity.length === 0) && (
-              <div className="asset-tab-empty">
+        <section className="adp-section">
+          <header className="adp-section-head">
+            <div className="adp-section-icon"><Icon name="pulse" size={14} /></div>
+            <h2 className="adp-section-title">
+              Activity
+              <span className="adp-section-count">{activityCount}</span>
+            </h2>
+          </header>
+          <div className="adp-section-body">
+            {activityCount > 0 ? (
+              <div className="adp-actv-list">
+                {asset.activity.map((e, i) => {
+                  const mapped = ACTION_ICON[e.action] || { icon: 'bell', cls: 'act-system' };
+                  return (
+                    <div className="adp-actv" key={e.id || i}>
+                      <div className="adp-actv-tl">
+                        <div className={`adp-actv-dot ${mapped.cls}`}>
+                          <Icon name={mapped.icon} size={13} />
+                        </div>
+                        {i !== asset.activity.length - 1 && <div className="adp-actv-line" />}
+                      </div>
+                      <div className="adp-actv-body">
+                        <div className="adp-actv-head">
+                          <span className="adp-actv-user">{e.user_name || 'System'}</span>
+                          <span className="adp-actv-when">{timeAgo(e.created_at)}</span>
+                        </div>
+                        <div className="adp-actv-desc">{e.description}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="adp-tab-empty">
                 <Icon name="pulse" size={28} />
                 <h3>No activity yet</h3>
                 <p>Edits, archive/restore actions, and audit events will appear here as they happen.</p>
               </div>
             )}
           </div>
-        </div>
+        </section>
       )}
-
-      <ReferencedByCard entityType="asset" entityId={asset.id} />
 
       {/* Edit modal */}
       {editOpen && createPortal(
