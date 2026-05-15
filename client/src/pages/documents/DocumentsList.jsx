@@ -9,6 +9,7 @@ import { listFolders, createFolder, updateFolder, deleteFolder } from '../../api
 import { getSites } from '../../api/auth';
 import api from '../../api/client';
 import Icon from '../../components/shared/Icon';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import '../../styles/documents.css';
@@ -1196,14 +1197,13 @@ export default function DocumentsList() {
                     onChange={e => setSupersedeFile(e.target.files[0] || null)}
                     style={{ fontSize: 12 }}
                   />
-                  <textarea
-                    className="input"
-                    placeholder="What changed? (optional — shown in the audit trail)"
+                  <SmartTextarea
                     value={supersedeNotes}
-                    onChange={e => setSupersedeNotes(e.target.value)}
-                    maxLength={500}
+                    onChange={setSupersedeNotes}
                     rows={2}
-                    style={{ fontSize: 12, resize: 'vertical' }}
+                    maxLength={500}
+                    inputClassName="input"
+                    placeholder="What changed? (optional — shown in the audit trail)"
                   />
                   {supersedeErr && (
                     <span className="helper" style={{ color: 'var(--sds-error)' }}>{supersedeErr}</span>

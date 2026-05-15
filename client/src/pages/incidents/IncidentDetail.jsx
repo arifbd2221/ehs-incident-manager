@@ -16,6 +16,7 @@ import Icon from '../../components/shared/Icon';
 import EmptyState, { EmptyAttachmentsIllustration, EmptyWitnessesIllustration } from '../../components/shared/EmptyState';
 import { useConfirm, usePrompt } from '../../components/shared/Dialog';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
 import DeadlineBadge from '../../components/incidents/DeadlineBadge';
 import { useAuth } from '../../context/AuthContext';
@@ -113,7 +114,13 @@ function FactEdit({ label, value, onSave, allowed, placeholder = '—' }) {
   if (editing) return (
     <div className="idet-fact is-editing">
       <span className="idet-fact-label">{label}</span>
-      <input className="input" value={draft} autoFocus onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel(); }}/>
+      <SmartTextarea
+        value={draft}
+        onChange={setDraft}
+        multiline={false}
+        autoFocus
+        onKeyDown={e => { if (e.key === 'Escape') cancel(); }}
+      />
       <div className="idet-edit-row">
         <button className="btn btn-secondary btn-sm" onClick={cancel} disabled={saving}>Cancel</button>
         <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || draft.trim() === (value || '')}>{saving ? 'Saving…' : 'Save'}</button>
@@ -156,7 +163,14 @@ function DescEdit({ value, fallback, onSave, allowed }) {
 
   if (editing) return (
     <>
-      <textarea className="textarea" value={draft} autoFocus rows={5} placeholder="Describe what happened…" onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel(); }}/>
+      <SmartTextarea
+        value={draft}
+        onChange={setDraft}
+        rows={5}
+        autoFocus
+        placeholder="Describe what happened…"
+        onKeyDown={e => { if (e.key === 'Escape') cancel(); }}
+      />
       <div className="idet-edit-row">
         <button className="btn btn-secondary btn-sm" onClick={cancel} disabled={saving}>Cancel</button>
         <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || draft.trim() === (value || '')}>{saving ? 'Saving…' : 'Save'}</button>
@@ -1126,12 +1140,12 @@ export default function IncidentDetail() {
               {/* Add-note composer — anyone authenticated can leave an
                   observation. Notes interleave with system events below. */}
               <div className="idet-note-composer">
-                <textarea
-                  className="idet-note-input"
-                  rows={2}
-                  placeholder="Add a note to the timeline — context, side conversations, things you noticed…"
+                <SmartTextarea
                   value={noteText}
-                  onChange={e => setNoteText(e.target.value)}
+                  onChange={setNoteText}
+                  rows={2}
+                  inputClassName="idet-note-input"
+                  placeholder="Add a note to the timeline — context, side conversations, things you noticed…"
                   onKeyDown={e => {
                     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handlePostNote(); }
                   }}
@@ -1653,10 +1667,9 @@ function LogOshaSevereModal({ target, onClose, onSaved }) {
           </div>
           <div className="field">
             <label className="label">Notes</label>
-            <textarea
-              className="textarea"
+            <SmartTextarea
               value={notes}
-              onChange={e => setNotes(e.target.value)}
+              onChange={setNotes}
               placeholder="Who you spoke with, what you reported, follow-up agreed."
             />
           </div>
@@ -1938,7 +1951,7 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
               </div>
               <div className="field">
                 <label className="label">Notes</label>
-                <textarea className="textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Who you spoke with, what you reported."/>
+                <SmartTextarea value={notes} onChange={setNotes} placeholder="Who you spoke with, what you reported."/>
               </div>
             </>
           )}
@@ -1959,7 +1972,7 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
               </div>
               <div className="field">
                 <label className="label">Notes</label>
-                <textarea className="textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Method (email / portal), recipient, attachments."/>
+                <SmartTextarea value={notes} onChange={setNotes} placeholder="Method (email / portal), recipient, attachments."/>
               </div>
             </>
           )}
@@ -1972,7 +1985,7 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
               </div>
               <div className="field">
                 <label className="label">Notes</label>
-                <textarea className="textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Reason for any disturbance; actions taken."/>
+                <SmartTextarea value={notes} onChange={setNotes} placeholder="Reason for any disturbance; actions taken."/>
               </div>
               <div className="field">
                 <label className="label">Inspector arrived at (optional)</label>

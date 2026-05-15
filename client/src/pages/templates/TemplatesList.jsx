@@ -5,6 +5,7 @@ import { getTemplates, getTemplateSummary, createTemplate, archiveTemplate, publ
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import TemplateIllustration, { CategoryIcon, templateIllustrationKind, CATEGORY_META } from '../../components/templates/TemplateIllustration';
 import '../../styles/templates.css';
 
@@ -455,7 +456,7 @@ export default function TemplatesList() {
               </div>
               <div className="field">
                 <label className="label">Description</label>
-                <textarea className="textarea" placeholder="Brief description of this template..." value={newDesc} onChange={e => setNewDesc(e.target.value)} />
+                <SmartTextarea placeholder="Brief description of this template..." value={newDesc} onChange={setNewDesc} />
               </div>
             </div>
             <div className="modal-f">

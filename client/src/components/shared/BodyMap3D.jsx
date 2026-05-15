@@ -3,7 +3,7 @@ import { useState, useRef, useCallback } from 'react';
 const VIEWS = ['front', 'back', 'left', 'right'];
 const VIEW_LABELS = { front: 'Front', back: 'Back', left: 'Left side', right: 'Right side' };
 
-const PART_LABELS = {
+export const PART_LABELS = {
   head: 'Head', face: 'Face', neck: 'Neck',
   l_shoulder: 'Left shoulder', r_shoulder: 'Right shoulder',
   l_upper_arm: 'Left upper arm', r_upper_arm: 'Right upper arm',

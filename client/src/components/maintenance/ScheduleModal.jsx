@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import Icon from '../shared/Icon';
 import ComboBox from '../shared/ComboBox';
 import DatePicker from '../shared/DatePicker';
+import SmartTextarea from '../shared/SmartTextarea';
 import { createSchedule, updateSchedule } from '../../api/maintenance';
 import { listAssets } from '../../api/assets';
 import { getUsers } from '../../api/users';
@@ -190,10 +191,9 @@ export default function ScheduleModal({ assetId, assetName, schedule, onClose, o
 
           <div className="field">
             <label className="label">Description</label>
-            <textarea
-              className="textarea"
+            <SmartTextarea
               value={form.description}
-              onChange={e => set('description', e.target.value)}
+              onChange={v => set('description', v)}
               placeholder="Procedure notes, what to check, acceptance criteria…"
               rows={3}
             />

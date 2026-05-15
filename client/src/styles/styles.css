@@ -610,6 +610,45 @@ body {
 }
 .modal .btn[disabled] { opacity: .38; cursor: not-allowed; }
 
+/* Drawer — right-side slide-in panel for input-heavy forms.
+   Same backdrop semantics as a modal; differs in shape and motion. */
+.drawer-backdrop {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(26, 26, 26, 0.45);
+  display: flex; justify-content: flex-end;
+  animation: fadeIn 120ms ease-out;
+}
+.drawer {
+  height: 100vh; max-width: 100%;
+  background: var(--sds-bg-surface);
+  box-shadow: -16px 0 48px rgba(0,0,0,0.18);
+  display: flex; flex-direction: column; overflow: hidden;
+  animation: drawerSlideIn 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes drawerSlideIn {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.drawer-h {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 18px 24px 14px; border-bottom: 1px solid var(--sds-border);
+}
+.drawer-title { font-size: 16px; font-weight: 700; color: var(--sds-fg-heading); }
+.drawer-sub { font-size: 12px; color: var(--sds-fg-tertiary); margin-top: 2px; font-family: 'SF Mono', Menlo, monospace; }
+.drawer-body { padding: 18px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+.drawer-f {
+  padding: 14px 24px; border-top: 1px solid var(--sds-border);
+  display: flex; justify-content: flex-end; gap: 8px;
+  background: var(--sds-bg-surface-alt);
+}
+@media (max-width: 640px) {
+  .drawer { width: 100% !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer { animation: none; }
+  .drawer-backdrop { animation: none; }
+}
+
 .field-lbl {
   display: block; font-size: 12px; font-weight: 600;
   color: var(--sds-fg-secondary); margin-bottom: 6px;
