@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
 import DatePicker from '../../../components/shared/DatePicker';
 import SmartTextarea from '../../../components/shared/SmartTextarea';
+import BodyMap3D, { PART_LABELS } from '../../../components/shared/BodyMap3D';
+import Drawer from '../../../components/shared/Drawer';
 import {
   createAffectedPerson,
   updateAffectedPerson,
@@ -46,6 +47,7 @@ export default function AffectedPersonModal({
   const [isEmployee, setIsEmployee] = useState('yes');
   const [selectedUserId, setSelectedUserId] = useState('');
   const [form, setForm] = useState(BLANK_FORM);
+  const [selectedRegions, setSelectedRegions] = useState([]);
   const [users, setUsers] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -75,6 +77,7 @@ export default function AffectedPersonModal({
         setStep(0);
       }
       setSelectedUserId('');
+      setSelectedRegions([]);
       setError(null);
       setStepDir('forward');
       getUsers().then(setUsers).catch(() => setUsers([]));
@@ -117,8 +120,16 @@ export default function AffectedPersonModal({
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const goNext = () => { setStepDir('forward'); setStep(1); };
-  const goBack = () => { setStepDir('back'); setStep(0); };
+  const goNext = () => { setStepDir('forward'); setStep(s => Math.min(s + 1, 2)); };
+  const goBack = () => { setStepDir('back'); setStep(s => Math.max(s - 1, 0)); };
+
+  const toggleRegion = (id) => {
+    const next = selectedRegions.includes(id)
+      ? selectedRegions.filter(r => r !== id)
+      : [...selectedRegions, id];
+    setSelectedRegions(next);
+    setField('body_part', next.map(r => PART_LABELS[r] || r).join(', '));
+  };
 
   if (!open) return null;
 
@@ -182,16 +193,15 @@ export default function AffectedPersonModal({
 
   const statusObj = EMPLOYMENT_STATUSES.find(s => s.value === form.employment_status) || EMPLOYMENT_STATUSES[0];
 
-  return createPortal(
-    <div className="modal-backdrop" style={{ zIndex: 'var(--sds-z-toast)' }} onClick={onClose}>
-      <div className="modal afp-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-h">
+  return (
+    <Drawer open={open} onClose={onClose} className="afp-drawer" width={640}>
+        <div className="drawer-h">
           <div>
-            <div className="modal-title">
+            <div className="drawer-title">
               <Icon name="person" size={20} color="var(--sds-brand-primary)" />
               {isEdit ? 'Edit Affected Person' : 'Add Affected Person'}
             </div>
-            <div className="modal-sub">
+            <div className="drawer-sub">
               {incident?.incident_number ? `Incident ${incident.incident_number}` : 'New incident — staged before submit'}
             </div>
           </div>
@@ -202,18 +212,29 @@ export default function AffectedPersonModal({
 
         {/* Step indicator */}
         <div className="afp-steps">
-          <div className={`afp-step ${step === 0 ? 'active' : 'done'}`} onClick={() => step === 1 && goBack()}>
+          <div
+            className={`afp-step ${step === 0 ? 'active' : 'done'}`}
+            onClick={() => { if (step > 0) { setStepDir('back'); setStep(0); } }}
+          >
             <div className="afp-step-dot">{step > 0 ? <Icon name="check" size={12} /> : '1'}</div>
             <span>Person details</span>
           </div>
           <div className="afp-step-line" />
-          <div className={`afp-step ${step === 1 ? 'active' : ''}`}>
-            <div className="afp-step-dot">2</div>
+          <div
+            className={`afp-step ${step === 1 ? 'active' : step > 1 ? 'done' : ''}`}
+            onClick={() => { if (step > 1) { setStepDir('back'); setStep(1); } }}
+          >
+            <div className="afp-step-dot">{step > 1 ? <Icon name="check" size={12} /> : '2'}</div>
             <span>Injury info</span>
+          </div>
+          <div className="afp-step-line" />
+          <div className={`afp-step ${step === 2 ? 'active' : ''}`}>
+            <div className="afp-step-dot">3</div>
+            <span>Severity</span>
           </div>
         </div>
 
-        <div className="modal-body afp-body">
+        <div className="drawer-body afp-body">
           {error && (
             <div className="afp-error">
               <Icon name="warning" size={14} /> {error}
@@ -413,7 +434,7 @@ export default function AffectedPersonModal({
             </div>
           </div>
 
-          {/* ─── Step 1: Injury details ─── */}
+          {/* ─── Step 1: Injury details (incl. body map) ─── */}
           <div className={`afp-panel ${step === 1 ? 'afp-panel-active' : ''}`}
             style={{ display: step === 1 ? undefined : 'none' }}>
 
@@ -434,12 +455,19 @@ export default function AffectedPersonModal({
               </div>
             </div>
 
-            <div className="afp-section afp-fade-in">
-              <div className="afp-section-label">
-                <Icon name="warning" size={14} /> Injury details
-                <span className="afp-optional-tag">Optional</span>
+            <div className="afp-injury-grid">
+              <div className="afp-section afp-fade-in">
+                <div className="afp-section-label">
+                  <Icon name="person" size={14} /> Body part affected
+                  <span className="afp-optional-tag">Optional</span>
+                </div>
+                <BodyMap3D selected={selectedRegions} onToggle={toggleRegion} />
               </div>
-              <div className="field-row">
+
+              <div className="afp-section afp-fade-in" style={{ animationDelay: '50ms' }}>
+                <div className="afp-section-label">
+                  <Icon name="warning" size={14} /> Injury details
+                </div>
                 <div className="field">
                   <label className="label">Body part</label>
                   <SmartTextarea multiline={false} value={form.body_part} onChange={v => setField('body_part', v)} placeholder="e.g. Right hand, Left forearm" />
@@ -448,8 +476,6 @@ export default function AffectedPersonModal({
                   <label className="label">Injury type</label>
                   <SmartTextarea multiline={false} value={form.injury_type} onChange={v => setField('injury_type', v)} placeholder="e.g. Laceration, Burn, Sprain" />
                 </div>
-              </div>
-              <div className="field-row">
                 <div className="field">
                   <label className="label">Mechanism</label>
                   <SmartTextarea multiline={false} value={form.mechanism} onChange={v => setField('mechanism', v)} placeholder="How did the injury happen?" />
@@ -460,10 +486,16 @@ export default function AffectedPersonModal({
                 </div>
               </div>
             </div>
+          </div>
 
-            <div className="afp-section afp-fade-in" style={{ animationDelay: '50ms' }}>
+          {/* ─── Step 2: Severity ─── */}
+          <div className={`afp-panel ${step === 2 ? 'afp-panel-active' : ''}`}
+            style={{ display: step === 2 ? undefined : 'none' }}>
+
+            <div className="afp-section afp-fade-in">
               <div className="afp-section-label">
                 <Icon name="pulse" size={14} /> Severity indicators
+                <span className="afp-optional-tag">Optional</span>
               </div>
               <div className="afp-severity-cards">
                 <label className={`afp-sev-card ${form.er_treated ? 'active sev-warn' : ''}`}>
@@ -510,15 +542,26 @@ export default function AffectedPersonModal({
           </div>
         </div>
 
-        <div className="modal-f afp-footer">
-          {step === 0 ? (
+        <div className="drawer-f afp-footer">
+          {step === 0 && (
             <>
               <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
               <button type="button" className="btn btn-primary" onClick={goNext} disabled={!canProceed}>
                 Continue <Icon name="arrow" size={14} />
               </button>
             </>
-          ) : (
+          )}
+          {step === 1 && (
+            <>
+              <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>
+                <Icon name="arrowL" size={14} /> Back
+              </button>
+              <button type="button" className="btn btn-primary" onClick={goNext} disabled={saving}>
+                Continue <Icon name="arrow" size={14} />
+              </button>
+            </>
+          )}
+          {step === 2 && (
             <>
               <button type="button" className="btn btn-secondary" onClick={goBack} disabled={saving}>
                 <Icon name="arrowL" size={14} /> Back
@@ -529,9 +572,7 @@ export default function AffectedPersonModal({
             </>
           )}
         </div>
-      </div>
-    </div>,
-    document.body
+    </Drawer>
   );
 }
 
