@@ -12,6 +12,7 @@ import Icon from '../../components/shared/Icon';
 import AssetTypesModal from '../../components/modals/AssetTypesModal';
 import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
 import AssetIllustration, { illustrationKind } from '../../components/assets/AssetIllustration';
+import EmptyState, { EmptyCAPAsIllustration } from '../../components/shared/EmptyState';
 import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import '../../styles/assets.css';
 
@@ -390,27 +391,38 @@ export default function AssetsList() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="assets-tabs">
-        {[
-          { id: 'active', label: 'Active', count: stats.active },
-          { id: 'archived', label: 'Archived', count: stats.archived },
-          { id: 'all', label: 'All', count: stats.total },
-        ].map(t => (
-          <div key={t.id} className={`assets-tab ${activeTab === t.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(t.id)}>
-            {t.label}
-            <span className="assets-tab-count">{t.count}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Toolbar */}
+      {/* Toolbar — status chips + search + filters + view toggle */}
       <div className="assets-toolbar">
+        <div className="assets-status-chips">
+          {[
+            { id: 'active', label: 'Active', count: stats.active },
+            { id: 'archived', label: 'Archived', count: stats.archived },
+            { id: 'all', label: 'All', count: stats.total },
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              className={`assets-status-chip ${activeTab === t.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(t.id)}
+            >
+              <span>{t.label}</span>
+              <span className="assets-status-chip-count">{t.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="assets-toolbar-right">
         <div className="assets-search">
-          <Icon name="search" size={16} />
-          <input className="input" placeholder="Search assets..."
-            value={search} onChange={e => setSearch(e.target.value)} />
+          <Icon name="search" size={15} />
+          <input
+            placeholder="Search assets..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className="assets-search-clear" onClick={() => setSearch('')} title="Clear search">
+              <Icon name="close" size={12} />
+            </button>
+          )}
         </div>
         <div className="af-wrap" ref={filterRef}>
           <button
@@ -497,6 +509,7 @@ export default function AssetsList() {
             <Icon name="sort" size={15} />
           </button>
         </div>
+        </div>
       </div>
 
       {/* Active filter chips */}
@@ -571,14 +584,12 @@ export default function AssetsList() {
           desc = 'Try a different tab or adjust your filters.';
         }
         return (
-          <div className="card card-pad empty-state">
-            <div className="empty-state-icon">
-              <Icon name="factory" size={28} />
-            </div>
-            <div className="empty-state-title">{title}</div>
-            <div className="empty-state-desc">{desc}</div>
-            {action}
-          </div>
+          <EmptyState
+            illustration={<EmptyCAPAsIllustration />}
+            title={title}
+            body={desc}
+            action={action}
+          />
         );
       })()}
 

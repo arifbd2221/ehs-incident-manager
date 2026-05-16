@@ -538,36 +538,6 @@
   color: var(--sds-fg-tertiary);
 }
 
-/* Empty state */
-.inv-empty {
-  text-align: center;
-  padding: 60px 20px;
-  background: #fff;
-  border: 1px dashed var(--sds-border);
-  border-radius: 16px;
-}
-.inv-empty-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(98, 109, 249, 0.08));
-  color: #8b5cf6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 16px;
-}
-.inv-empty h3 {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--sds-fg-heading);
-  margin-bottom: 4px;
-}
-.inv-empty p {
-  font-size: 13px;
-  color: var(--sds-fg-tertiary);
-}
-
 /* Loading */
 .inv-skeleton {
   display: grid;

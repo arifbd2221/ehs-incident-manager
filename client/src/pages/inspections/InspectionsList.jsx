@@ -7,7 +7,9 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
+import EmptyState, { EmptyIncidentsIllustration } from '../../components/shared/EmptyState';
 import TemplateIllustration, {
+  CategoryIcon,
   templateIllustrationKind,
   CATEGORY_META,
 } from '../../components/templates/TemplateIllustration';
@@ -142,6 +144,23 @@ export default function InspectionsList() {
     if (categoryFilter === 'all') return inspections;
     return inspections.filter(ins => categoryFor(ins) === categoryFilter);
   }, [inspections, categoryFilter]);
+
+  // Category strip — mirrors TemplatesList. Counts update as status/search
+  // narrow the loaded set, since they're derived from the in-memory list.
+  const categoryStrip = useMemo(() => {
+    const counts = { safety: 0, environment: 0, quality: 0, compliance: 0, walkthrough: 0, custom: 0 };
+    for (const ins of inspections) counts[categoryFor(ins)] += 1;
+    const order = ['safety', 'environment', 'quality', 'compliance', 'walkthrough', 'custom'];
+    return [
+      { id: 'all', label: 'All categories', sub: `${inspections.length} ${inspections.length === 1 ? 'inspection' : 'inspections'}`, color: 'var(--sds-brand-primary)' },
+      ...order.map(k => ({
+        id: k,
+        label: CATEGORY_META[k].label,
+        sub: `${counts[k]} ${counts[k] === 1 ? 'inspection' : 'inspections'}`,
+        color: CATEGORY_META[k].color,
+      })),
+    ];
+  }, [inspections]);
 
   const kpis = useMemo(() => {
     const total = summary.total;
@@ -395,67 +414,76 @@ export default function InspectionsList() {
         </section>
       )}
 
-      {/* Tabs */}
-      <div className="ins-tabs">
-        {tabs.map(t => (
+      {/* Category strip — primary filter (matches templates page) */}
+      <section className="ins-cat-strip">
+        {categoryStrip.map(c => (
           <button
-            key={t.id}
+            key={c.id}
             type="button"
-            className={`ins-tab ${tab === t.id ? 'active' : ''}`}
-            onClick={() => setTab(t.id)}
+            className={`ins-cat ${categoryFilter === c.id ? 'active' : ''}`}
+            style={{ '--cat-color': c.color }}
+            onClick={() => setCategoryFilter(c.id)}
           >
-            <span>{t.label}</span>
-            <span className={`ins-tab-count ${t.tint ? `ins-tab-count-${t.tint}` : ''}`}>{t.count}</span>
+            <span className="ins-cat-icon">
+              <CategoryIcon kind={c.id} size={20} />
+            </span>
+            <span className="ins-cat-body">
+              <span className="ins-cat-label">{c.label}</span>
+              <span className="ins-cat-sub">{c.sub}</span>
+            </span>
           </button>
         ))}
-      </div>
+      </section>
 
-      {/* Toolbar */}
+      {/* Toolbar — status chips + search + view toggle */}
       <div className="ins-toolbar">
-        <div className="ins-search">
-          <Icon name="search" size={15} />
-          <input
-            placeholder="Search inspections by title, number, or location…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          {search && (
-            <button className="ins-search-clear" onClick={() => setSearch('')} title="Clear search">
-              <Icon name="close" size={12} />
+        <div className="ins-status-chips">
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              type="button"
+              className={`ins-status-chip ${tab === t.id ? 'active' : ''}`}
+              onClick={() => setTab(t.id)}
+            >
+              <span>{t.label}</span>
+              <span className="ins-status-chip-count">{t.count}</span>
             </button>
-          )}
+          ))}
         </div>
-        <div className="ins-filter">
-          <Icon name="filter" size={14} />
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-            <option value="all">All categories</option>
-            <option value="safety">Safety</option>
-            <option value="walkthrough">Walkthrough</option>
-            <option value="compliance">Compliance</option>
-            <option value="environment">Environmental</option>
-            <option value="quality">Quality</option>
-            <option value="custom">General</option>
-          </select>
-        </div>
-        <div className="ins-view-toggle" role="tablist" aria-label="View">
-          <button
-            type="button"
-            className={`ins-view-btn ${view === 'grid' ? 'active' : ''}`}
-            onClick={() => setView('grid')}
-            aria-pressed={view === 'grid'}
-            title="Grid view"
-          >
-            <Icon name="dashboard" size={15} />
-          </button>
-          <button
-            type="button"
-            className={`ins-view-btn ${view === 'kanban' ? 'active' : ''}`}
-            onClick={() => setView('kanban')}
-            aria-pressed={view === 'kanban'}
-            title="Kanban view"
-          >
-            <Icon name="sort" size={15} />
-          </button>
+        <div className="ins-toolbar-right">
+          <div className="ins-search">
+            <Icon name="search" size={15} />
+            <input
+              placeholder="Search inspections by title, number, or location…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button className="ins-search-clear" onClick={() => setSearch('')} title="Clear search">
+                <Icon name="close" size={12} />
+              </button>
+            )}
+          </div>
+          <div className="ins-view-toggle" role="tablist" aria-label="View">
+            <button
+              type="button"
+              className={`ins-view-btn ${view === 'grid' ? 'active' : ''}`}
+              onClick={() => setView('grid')}
+              aria-pressed={view === 'grid'}
+              title="Grid view"
+            >
+              <Icon name="dashboard" size={15} />
+            </button>
+            <button
+              type="button"
+              className={`ins-view-btn ${view === 'kanban' ? 'active' : ''}`}
+              onClick={() => setView('kanban')}
+              aria-pressed={view === 'kanban'}
+              title="Kanban view"
+            >
+              <Icon name="sort" size={15} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -475,11 +503,11 @@ export default function InspectionsList() {
         (() => {
           const e = emptyCopy();
           return (
-            <div className="card card-pad ins-empty">
-              <div className="ins-empty-icon"><Icon name="inspections" size={28} /></div>
-              <div className="ins-empty-title">{e.title}</div>
-              <div className="ins-empty-desc">{e.desc}</div>
-              {e.cta && (
+            <EmptyState
+              illustration={<EmptyIncidentsIllustration />}
+              title={e.title}
+              body={e.desc}
+              action={e.cta && (
                 <button
                   className={`btn btn-${e.cta.variant || 'primary'}`}
                   onClick={e.cta.onClick}
@@ -487,7 +515,7 @@ export default function InspectionsList() {
                   <Icon name={e.cta.variant === 'secondary' ? 'close' : 'plus'} size={14} /> {e.cta.label}
                 </button>
               )}
-            </div>
+            />
           );
         })()
       ) : view === 'kanban' ? (

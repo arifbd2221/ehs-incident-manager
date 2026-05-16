@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyWhysIllustration } from '../../components/shared/EmptyState';
 import { LEVEL_NAMES } from '../../components/shared/RiskMatrix';
 import { useAuth } from '../../context/AuthContext';
 import { getRisk, mitigateRisk, closeRisk, deleteControl } from '../../api/risks';
@@ -131,10 +132,14 @@ export default function RiskDetail() {
   if (!risk) {
     return (
       <div className="page rskd">
-        <div className="rsk-empty-state">
-          <div className="rsk-empty-title">Risk not found</div>
-          <button className="btn btn-secondary" onClick={() => navigate('/risks')}>Back to register</button>
-        </div>
+        <EmptyState
+          illustration={<EmptyWhysIllustration />}
+          title="Risk not found"
+          accent="warning"
+          action={(
+            <button className="btn btn-secondary" onClick={() => navigate('/risks')}>Back to register</button>
+          )}
+        />
       </div>
     );
   }

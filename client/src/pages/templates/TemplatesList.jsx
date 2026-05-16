@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import SmartTextarea from '../../components/shared/SmartTextarea';
+import EmptyState, { EmptyCAPAsIllustration } from '../../components/shared/EmptyState';
 import TemplateIllustration, { CategoryIcon, templateIllustrationKind, CATEGORY_META } from '../../components/templates/TemplateIllustration';
 import '../../styles/templates.css';
 
@@ -299,11 +300,11 @@ export default function TemplatesList() {
             ? { label: 'Show all categories', onClick: () => setCategory('all'), variant: 'secondary' }
             : e.cta;
           return (
-            <div className="card card-pad tp-empty">
-              <div className="tp-empty-icon"><Icon name="templates" size={28} /></div>
-              <div className="tp-empty-title">{title}</div>
-              <div className="tp-empty-desc">{desc}</div>
-              {cta && (
+            <EmptyState
+              illustration={<EmptyCAPAsIllustration />}
+              title={title}
+              body={desc}
+              action={cta && (
                 <button
                   className={`btn btn-${cta.variant || 'primary'}`}
                   onClick={cta.onClick}
@@ -311,7 +312,7 @@ export default function TemplatesList() {
                   <Icon name={cta.variant === 'secondary' ? 'close' : 'plus'} size={14} /> {cta.label}
                 </button>
               )}
-            </div>
+            />
           );
         })()
       ) : (

@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import SmartTextarea from '../../components/shared/SmartTextarea';
+import EmptyState, { EmptyWhysIllustration } from '../../components/shared/EmptyState';
 import { SevBadge } from '../../components/shared/Badges';
 import { timeAgo } from '../../utils/time';
 import { frameworkVisibility } from '../../utils/frameworks';
@@ -210,11 +211,11 @@ export default function InvestigationsPage() {
           ))}
         </div>
       ) : investigations.length === 0 ? (
-        <div className="inv-empty">
-          <div className="inv-empty-icon"><Icon name="investigation" size={26}/></div>
-          <h3>No investigations yet</h3>
-          <p>Escalate an incident to start a formal investigation</p>
-        </div>
+        <EmptyState
+          illustration={<EmptyWhysIllustration />}
+          title="No investigations yet"
+          body="Escalate an incident to start a formal investigation."
+        />
       ) : view === 'kanban' ? (
         <div className="inv-kanban">
           {KANBAN_COLS.map(col => {

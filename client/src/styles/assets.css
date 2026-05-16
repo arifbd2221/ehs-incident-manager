@@ -87,44 +87,49 @@
 /* ================================================================
  * TABS + TOOLBAR
  * ================================================================ */
-.assets-tabs {
+/* ---- Status chips (active/archived/all) — pill chips, mirrors templates + inspections ---- */
+.assets-status-chips {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid var(--sds-border);
-  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
-.assets-tab {
-  padding: 10px 18px;
-  font-size: 13px;
+.assets-status-chip {
+  background: var(--sds-bg-surface);
+  border: 1px solid var(--sds-border);
+  border-radius: var(--sds-radius-pill);
+  padding: 6px 12px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--sds-fg-secondary);
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 150ms ease;
-}
-.assets-tab:hover { color: var(--sds-fg-heading); }
-.assets-tab.active {
-  color: var(--sds-brand-primary);
-  border-bottom-color: var(--sds-brand-primary);
-}
-.assets-tab-count {
+  font-family: inherit;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 50px;
-  background: var(--sds-bg-surface-alt);
-  color: var(--sds-fg-tertiary);
+  gap: 6px;
+  transition: all 150ms ease;
+}
+.assets-status-chip:hover {
+  border-color: var(--sds-brand-primary);
+  color: var(--sds-brand-primary);
+}
+.assets-status-chip.active {
+  background: var(--sds-brand-primary);
+  color: #fff;
+  border-color: var(--sds-brand-primary);
+}
+.assets-status-chip-count {
   font-size: 10px;
   font-weight: 700;
-  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--sds-radius-pill);
+  background: var(--sds-bg-surface-alt);
+  color: var(--sds-fg-tertiary);
+  min-width: 18px;
+  text-align: center;
 }
-.assets-tab.active .assets-tab-count {
-  background: var(--sds-brand-primary-tint);
-  color: var(--sds-brand-primary);
+.assets-status-chip.active .assets-status-chip-count {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
 }
 
 .assets-toolbar {
@@ -132,21 +137,59 @@
   gap: 10px;
   margin-bottom: 10px;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.assets-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 280px;
+  justify-content: flex-end;
 }
 .assets-search {
   flex: 1;
   min-width: 200px;
-  position: relative;
+  max-width: 420px;
   display: flex;
   align-items: center;
+  gap: 8px;
+  background: var(--sds-bg-surface);
+  border: 1px solid var(--sds-border);
+  border-radius: var(--sds-radius-md);
+  padding: 0 12px;
+  height: 38px;
+  color: var(--sds-fg-tertiary);
+  transition: all 150ms ease;
 }
-.assets-search svg {
-  position: absolute;
-  left: 12px;
-  color: var(--sds-fg-secondary);
-  pointer-events: none;
+.assets-search:focus-within {
+  border-color: var(--sds-brand-primary);
+  box-shadow: 0 0 0 3px var(--sds-brand-primary-light);
 }
-.assets-search input { padding-left: 36px; }
+.assets-search input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--sds-fg-heading);
+}
+.assets-search-clear {
+  border: 0;
+  background: transparent;
+  color: var(--sds-fg-muted);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.assets-search-clear:hover { background: var(--sds-bg-surface-alt); color: var(--sds-fg-heading); }
 
 /* Filter button + dropdown */
 .af-wrap { position: relative; }
@@ -630,6 +673,15 @@
   border-color: var(--sds-error);
   color: var(--sds-error);
   background: rgba(211, 47, 47, 0.06);
+}
+
+/* Danger-tinted modifier for ghost Archive buttons. Calm at rest (inherits
+   .btn-ghost neutrals), shifts to error red on hover so the destructive
+   intent is clear only at the moment of commitment. */
+.btn-ghost.asset-archive { color: var(--sds-error); }
+.btn-ghost.asset-archive:hover {
+  background: rgba(211, 47, 47, 0.08);
+  color: var(--sds-error);
 }
 
 /* "Add new asset" tile at end of grid */

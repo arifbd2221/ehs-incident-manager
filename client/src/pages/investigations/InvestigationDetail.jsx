@@ -339,11 +339,12 @@ export default function InvestigationDetail() {
   );
   if (!inv) return (
     <div className="page invd">
-      <div className="inv-empty">
-        <div className="inv-empty-icon"><Icon name="investigation" size={26}/></div>
-        <h3>Investigation not found</h3>
-        <p>It may have been removed or the ID is incorrect.</p>
-      </div>
+      <EmptyState
+        illustration={<EmptyWhysIllustration />}
+        title="Investigation not found"
+        body="It may have been removed or the ID is incorrect."
+        accent="warning"
+      />
     </div>
   );
 

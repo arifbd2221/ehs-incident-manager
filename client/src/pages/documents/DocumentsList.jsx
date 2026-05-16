@@ -6,11 +6,11 @@ import { useApp } from '../../context/AppContext';
 import { listDocuments, getDocument, uploadDocument, updateDocument, deleteDocument, createDocumentVersion, downloadVersion } from '../../api/documents';
 import { timeAgo } from '../../utils/time';
 import { listFolders, createFolder, updateFolder, deleteFolder } from '../../api/folders';
-import { getSites } from '../../api/auth';
 import api from '../../api/client';
 import Icon from '../../components/shared/Icon';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
+import EmptyState, { EmptyAttachmentsIllustration } from '../../components/shared/EmptyState';
 import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import '../../styles/documents.css';
 
@@ -77,7 +77,7 @@ function fmtDate(d) {
 
 export default function DocumentsList() {
   const { user } = useAuth();
-  const { refreshKey } = useApp();
+  const { refreshKey, sites, activeSiteId } = useApp();
   const canEdit = ELEVATED.has(user?.role);
   const confirmDialog = useConfirm();
   const alertDialog = useAlert();
@@ -113,9 +113,9 @@ export default function DocumentsList() {
   const [supersedeErr, setSupersedeErr] = useState('');
   const supersedeInputRef = useRef(null);
 
-  // Folder + site state. currentFolderId = null → root view.
-  const [sites, setSites] = useState([]);
-  const [siteFilter, setSiteFilter] = useState('');
+  // Folder state. currentFolderId = null → root view. Site scope is driven by
+  // the global TopBar site picker (AppContext.activeSiteId); the API client
+  // interceptor auto-injects site_id into /folders + /documents GETs.
   const [folders, setFolders] = useState([]);
   const [currentFolderId, setCurrentFolderId] = useState(null);
   const [breadcrumb, setBreadcrumb] = useState([]); // [{id, name}, ...] root → here
@@ -128,24 +128,9 @@ export default function DocumentsList() {
   const [drag, setDrag] = useState(null); // {kind: 'doc'|'folder', id}
   const [dropTarget, setDropTarget] = useState(null); // 'folder:N' | 'crumb:N' | 'crumb:root'
 
-  // Load sites once on mount; pre-select the user's primary site.
-  useEffect(() => {
-    getSites().then(s => {
-      const list = s?.sites || s || [];
-      setSites(list);
-      if (user?.site_id && list.some(x => x.id === user.site_id)) {
-        setSiteFilter(String(user.site_id));
-      } else if (list.length === 1) {
-        setSiteFilter(String(list[0].id));
-      }
-    }).catch(() => setSites([]));
-  }, [user?.site_id]);
-
-  // Folders within the active site filter (root list); refreshed alongside docs.
+  // Folders within the active site (auto-scoped via api client interceptor).
   const refreshFolders = () => {
-    const params = {};
-    if (siteFilter) params.site_id = siteFilter;
-    listFolders(params).then(setFolders).catch(() => setFolders([]));
+    listFolders().then(setFolders).catch(() => setFolders([]));
   };
 
   // Drive-style: searching from the root folder goes global (across the whole
@@ -166,7 +151,6 @@ export default function DocumentsList() {
       if (currentFolderId == null) params.folder_id = 'null';
       else params.folder_id = currentFolderId;
     }
-    if (siteFilter && currentFolderId == null) params.site_id = siteFilter;
     listDocuments(params)
       .then(d => setDocs(d.documents || []))
       .catch(() => setDocs([]))
@@ -174,12 +158,21 @@ export default function DocumentsList() {
     refreshFolders();
   };
 
-  useEffect(refresh, [activeTab, typeFilter, currentFolderId, siteFilter, searchingGlobally, refreshKey]);
+  useEffect(refresh, [activeTab, typeFilter, currentFolderId, searchingGlobally, refreshKey, activeSiteId]);
+
+  // When the global active site changes, exit any open folder back to root.
+  // Folders are site-scoped, so a folder from the previous site no longer
+  // applies under the new site's scope.
+  useEffect(() => {
+    setCurrentFolderId(null);
+    setBreadcrumb([]);
+  }, [activeSiteId]);
 
   // Deep-link: ?folder=N from a Referenced-by card row navigates straight into
   // the folder containing that document. Waits for `folders` to populate, then
-  // walks up parent_id to build the breadcrumb. Clears siteFilter once if the
-  // folder isn't visible in the current site so cross-site links resolve.
+  // walks up parent_id to build the breadcrumb. If the folder isn't visible in
+  // the currently-selected global site, we drop the param — the user can pick
+  // a different site from the TopBar to access cross-site documents.
   const [searchParams, setSearchParams] = useSearchParams();
   const [paramConsumed, setParamConsumed] = useState(false);
   useEffect(() => {
@@ -200,15 +193,10 @@ export default function DocumentsList() {
       }
       setCurrentFolderId(folderId);
       setBreadcrumb(crumbs);
-      setParamConsumed(true);
-      setSearchParams({}, { replace: true });
-    } else if (siteFilter) {
-      setSiteFilter('');
-    } else {
-      setParamConsumed(true);
-      setSearchParams({}, { replace: true });
     }
-  }, [folders, searchParams, paramConsumed, siteFilter, setSearchParams]);
+    setParamConsumed(true);
+    setSearchParams({}, { replace: true });
+  }, [folders, searchParams, paramConsumed, setSearchParams]);
 
   // Folders shown at the current location: root-level (parent_id NULL) at root,
   // otherwise direct children of currentFolderId. When the user searches from
@@ -329,8 +317,6 @@ export default function DocumentsList() {
       cur = cur.parent_id ? byId.get(cur.parent_id) : null;
     }
     setBreadcrumb(crumbs);
-    // Lock site filter to the folder's site so the rail stays consistent.
-    if (folder.site_id) setSiteFilter(String(folder.site_id));
   };
   const navigateToCrumb = (idx) => {
     // idx -1 → root; otherwise breadcrumb[idx] is the new current
@@ -342,10 +328,10 @@ export default function DocumentsList() {
 
   // --- Folder CRUD ---
   const openCreateFolder = async () => {
-    if (!siteFilter) {
+    if (!activeSiteId) {
       await alertDialog({
         title: 'Pick a site to continue',
-        body: 'Folders are site-scoped — choose a site from the dropdown first.',
+        body: 'Folders are site-scoped — pick a site from the top bar first.',
         tone: 'info',
       });
       return;
@@ -381,7 +367,7 @@ export default function DocumentsList() {
     try {
       await createFolder({
         name: folderName.trim(),
-        site_id: Number(siteFilter),
+        site_id: Number(activeSiteId),
         parent_id: currentFolderId,
       });
       closeFolderModal();
@@ -668,7 +654,7 @@ export default function DocumentsList() {
         )}
       </div>
 
-      {/* Breadcrumb + site filter */}
+      {/* Breadcrumb */}
       <div className="dp-crumbwrap dp-anim" style={{ animationDelay: '20ms' }}>
         <nav className="dp-crumbs">
           <button
@@ -696,20 +682,6 @@ export default function DocumentsList() {
             </span>
           ))}
         </nav>
-        {sites.length > 1 && (
-          <div className="dp-site-filter">
-            <Icon name="location" size={14} />
-            <select
-              value={siteFilter}
-              onChange={e => { setSiteFilter(e.target.value); setCurrentFolderId(null); setBreadcrumb([]); }}
-              disabled={currentFolderId != null}
-              title={currentFolderId != null ? 'Site is locked while inside a folder' : 'Filter by site'}
-            >
-              <option value="">All sites</option>
-              {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-        )}
       </div>
 
       {/* Search bar (Drive-style) */}
@@ -844,27 +816,31 @@ export default function DocumentsList() {
       )}
 
       {/* Empty state — only when there are no folders AND no docs to show */}
-      {!loading && filtered.length === 0 && filteredFolders.length === 0 && (
-        <div className="dp-empty">
-          <div className="dp-empty-icon">
-            <Icon name={docs.length === 0 && folders.length === 0 ? 'upload' : 'search'} size={32} />
+      {!loading && filtered.length === 0 && filteredFolders.length === 0 && (() => {
+        const fresh = docs.length === 0 && folders.length === 0;
+        const title = fresh ? 'Nothing here yet' : 'No matches found';
+        const body = fresh
+          ? (canEdit ? 'Create a folder or upload your first document to get started.' : 'No documents in the library yet.')
+          : 'Try adjusting your search or filters.';
+        const action = fresh && canEdit ? (
+          <div style={{ display: 'inline-flex', gap: 8 }}>
+            <button className="btn btn-secondary" onClick={openCreateFolder}>
+              <Icon name="plus" size={14} /> New folder
+            </button>
+            <button className="btn btn-primary" onClick={openUpload}>
+              <Icon name="upload" size={14} /> Upload document
+            </button>
           </div>
-          <h3 className="dp-empty-title">{docs.length === 0 && folders.length === 0 ? 'Nothing here yet' : 'No matches found'}</h3>
-          <p className="dp-empty-text">{docs.length === 0 && folders.length === 0
-            ? (canEdit ? 'Create a folder or upload your first document to get started' : 'No documents in the library yet')
-            : 'Try adjusting your search or filters'}</p>
-          {docs.length === 0 && folders.length === 0 && canEdit && (
-            <div className="dp-empty-actions">
-              <button className="dp-empty-btn dp-empty-btn-secondary" onClick={openCreateFolder}>
-                <Icon name="plus" size={16} /> New folder
-              </button>
-              <button className="dp-empty-btn" onClick={openUpload}>
-                <Icon name="upload" size={16} /> Upload document
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+        ) : null;
+        return (
+          <EmptyState
+            illustration={<EmptyAttachmentsIllustration />}
+            title={title}
+            body={body}
+            action={action}
+          />
+        );
+      })()}
 
       {/* === GRID VIEW === */}
       {!loading && (filtered.length > 0 || filteredFolders.length > 0) && viewMode === 'grid' && (
@@ -1473,7 +1449,7 @@ export default function DocumentsList() {
                 {folderModal === 'create' && (
                   <div className="modal-sub">
                     {breadcrumb.length === 0
-                      ? `In ${sites.find(s => String(s.id) === siteFilter)?.name || 'site'} · root`
+                      ? `In ${sites.find(s => s.id === activeSiteId)?.name || 'site'} · root`
                       : `In ${breadcrumb.map(c => c.name).join(' / ')}`}
                   </div>
                 )}

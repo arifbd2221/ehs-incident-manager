@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyWhysIllustration } from '../../components/shared/EmptyState';
 import { SEV_GRID, LEVEL_NAMES } from '../../components/shared/RiskMatrix';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -233,15 +234,19 @@ export default function RisksPage() {
       {/* Controls */}
       <div className="rsk-controls">
         <div className="rsk-search">
-          <span className="rsk-search-icon" aria-hidden="true"><Icon name="search" size={15} /></span>
+          <Icon name="search" size={15} />
           <input
-            className="input"
             type="search"
             placeholder="Search risks..."
             aria-label="Search risks"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
+          {search && (
+            <button className="rsk-search-clear" onClick={() => { setSearch(''); setPage(1); }} title="Clear search">
+              <Icon name="close" size={12} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -273,17 +278,15 @@ export default function RisksPage() {
             </div>
           )}
           {filteredRisks.length === 0 ? (
-          <div className="rsk-empty-state">
-            <div className="rsk-empty-icon"><Icon name="fire" size={26} /></div>
-            <div className="rsk-empty-title">No risks found</div>
-            <div className="rsk-empty-sub">
-              {matrixFilter
-                ? 'No risks match the selected matrix cell'
-                : tab === 'all'
-                  ? 'Register your first risk to get started'
-                  : `No ${tab} risks`}
-            </div>
-          </div>
+          <EmptyState
+            illustration={<EmptyWhysIllustration />}
+            title="No risks found"
+            body={matrixFilter
+              ? 'No risks match the selected matrix cell.'
+              : tab === 'all'
+                ? 'Register your first risk to get started.'
+                : `No ${tab} risks.`}
+          />
         ) : (
           <div className="rsk-list">
             <table>

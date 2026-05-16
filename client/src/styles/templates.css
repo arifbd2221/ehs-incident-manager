@@ -231,9 +231,9 @@
   color: var(--sds-brand-primary);
 }
 .tp-status-chip.active {
-  background: var(--sds-fg-heading);
+  background: var(--sds-brand-primary);
   color: #fff;
-  border-color: var(--sds-fg-heading);
+  border-color: var(--sds-brand-primary);
 }
 .tp-status-chip-count {
   font-size: 10px;
@@ -622,38 +622,6 @@
   color: var(--sds-fg-tertiary);
   max-width: 220px;
   line-height: 1.4;
-}
-
-/* Empty state */
-.tp-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 48px 24px;
-  gap: 10px;
-}
-.tp-empty-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--sds-radius-md);
-  background: var(--sds-brand-primary-tint);
-  color: var(--sds-brand-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-}
-.tp-empty-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--sds-fg-heading);
-}
-.tp-empty-desc {
-  font-size: 13px;
-  color: var(--sds-fg-tertiary);
-  max-width: 420px;
-  line-height: 1.5;
 }
 
 /* Skeleton */

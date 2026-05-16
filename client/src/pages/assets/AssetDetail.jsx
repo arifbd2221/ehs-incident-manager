@@ -13,6 +13,7 @@ import CustomFieldsDisplay from '../../components/assets/CustomFieldsDisplay';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import MaintenanceTab from '../../components/maintenance/MaintenanceTab';
 import AssetIllustration, { illustrationKind } from '../../components/assets/AssetIllustration';
+import EmptyState, { EmptyAttachmentsIllustration } from '../../components/shared/EmptyState';
 import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import { listSchedules } from '../../api/maintenance';
 import { timeAgo } from '../../utils/time';
@@ -232,14 +233,17 @@ export default function AssetDetail() {
       <button className="adp-hero-back adp-hero-back-static" onClick={() => navigate('/assets')}>
         <Icon name="arrowL" size={13} /> <span>Assets</span>
       </button>
-      <div className="card card-pad empty-state">
-        <div className="empty-state-icon"><Icon name="warning" size={24} /></div>
-        <div className="empty-state-title">{err || 'Asset not found'}</div>
-        <div className="empty-state-desc">This asset may have been removed or you don't have access.</div>
-        <button className="btn btn-secondary" onClick={() => navigate('/assets')}>
-          <Icon name="arrowL" size={14} /> Back to assets
-        </button>
-      </div>
+      <EmptyState
+        illustration={<EmptyAttachmentsIllustration />}
+        title={err || 'Asset not found'}
+        body="This asset may have been removed or you don't have access."
+        accent="warning"
+        action={(
+          <button className="btn btn-secondary" onClick={() => navigate('/assets')}>
+            <Icon name="arrowL" size={14} /> Back to assets
+          </button>
+        )}
+      />
     </div>
   );
 
