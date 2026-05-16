@@ -35,6 +35,7 @@ import RisksPage from './pages/risks/RisksPage';
 import RiskDetail from './pages/risks/RiskDetail';
 import ReportWizard from './pages/wizard/ReportWizard';
 import GlobalVoiceFab from './components/voice/GlobalVoiceFab';
+import NotFound from './pages/NotFound';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -97,6 +98,7 @@ export default function App() {
         <Route path="/learn" element={<LearnPage />} />
         <Route path="/profile" element={<Settings />} />
       </Route>
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
