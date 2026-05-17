@@ -3753,6 +3753,116 @@ body {
 .dlg-alert-icon-success { background: rgba(46,125,50,0.12);          color: var(--sds-success); }
 
 /* ================================================================
+ * PAGINATION — shared list paginator (components/shared/Pagination)
+ * ================================================================ */
+.pgn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: var(--sds-bg-surface);
+  border: 1px solid var(--sds-border);
+  border-radius: var(--sds-radius-md);
+  font-size: 13px;
+  color: var(--sds-fg-secondary);
+}
+.pgn-compact {
+  margin-top: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.pgn-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.pgn-count {
+  font-weight: 600;
+  color: var(--sds-fg-heading);
+}
+.pgn-sep {
+  color: var(--sds-fg-tertiary);
+  opacity: 0.7;
+}
+.pgn-page {
+  color: var(--sds-fg-secondary);
+}
+.pgn-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.pgn-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--sds-fg-tertiary);
+}
+.pgn-size-lbl { font-weight: 500; }
+.pgn-size-sel {
+  font-family: var(--sds-font-family);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sds-fg-heading);
+  padding: 5px 10px;
+  border-radius: var(--sds-radius-sm);
+  border: 1px solid var(--sds-border-input);
+  background: var(--sds-bg-surface);
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.pgn-size-sel:focus-visible {
+  outline: none;
+  border-color: var(--sds-brand-primary);
+  box-shadow: 0 0 0 2px var(--sds-brand-primary-light);
+}
+.pgn-btns {
+  display: inline-flex;
+  gap: 6px;
+}
+.pgn-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--sds-font-family);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sds-fg-heading);
+  padding: 7px 12px;
+  border-radius: var(--sds-radius-sm);
+  border: 1px solid var(--sds-border);
+  background: var(--sds-bg-surface);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.pgn-btn:hover:not(:disabled) {
+  border-color: var(--sds-brand-primary);
+  color: var(--sds-brand-primary);
+  background: var(--sds-brand-primary-tint);
+}
+.pgn-btn:active:not(:disabled) { transform: scale(0.97); }
+.pgn-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pgn-btn:focus-visible {
+  outline: none;
+  border-color: var(--sds-brand-primary);
+  box-shadow: 0 0 0 2px var(--sds-brand-primary-light);
+}
+
+@media (max-width: 640px) {
+  .pgn { flex-direction: column; align-items: stretch; gap: 10px; }
+  .pgn-info { justify-content: center; text-align: center; }
+  .pgn-controls { justify-content: space-between; }
+}
+
+/* ================================================================
  * THEME PICKER — Settings → Appearance
  * ================================================================ */
 .theme-grid {

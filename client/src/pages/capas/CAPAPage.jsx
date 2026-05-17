@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import EmptyState, { EmptyCAPAsIllustration } from '../../components/shared/EmptyState';
+import Pagination from '../../components/shared/Pagination';
 import { usePrompt } from '../../components/shared/Dialog';
 import NewCapaModal from '../../components/modals/NewCapaModal';
 import { formatDateShort } from '../../utils/time';
@@ -37,10 +38,17 @@ export default function CAPAPage() {
   const promptDialog = usePrompt();
   const [showNew, setShowNew] = useState(false);
   const [capas, setCapas] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('board');
   const [tab, setTab] = useState('all');
+
+  // Board needs every CAPA to populate lanes accurately; list view paginates
+  // 50 at a time. Server-side `tab` filter trims the result set further.
+  const LIST_LIMIT = 50;
+  const BOARD_LIMIT = 500;
 
   const [dragId, setDragId] = useState(null);
   const [overCol, setOverCol] = useState(null);
@@ -50,13 +58,20 @@ export default function CAPAPage() {
 
   const load = () => {
     setLoading(true);
-    getCapas()
-      .then(data => { setCapas(data.capas || []); setStats(data.stats || {}); })
+    const params = view === 'list'
+      ? { page, limit: LIST_LIMIT }
+      : { page: 1, limit: BOARD_LIMIT };
+    getCapas(params)
+      .then(data => {
+        setCapas(data.capas || []);
+        setStats(data.stats || {});
+        setTotal(data.total ?? (data.capas?.length || 0));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [refreshKey]);
+  useEffect(load, [refreshKey, view, page]);
 
   const rows = capas.filter(c => {
     if (tab === 'active') return c.status === 'pending' || c.status === 'progress';
@@ -205,7 +220,7 @@ export default function CAPAPage() {
               role="tab"
               aria-selected={view === 'board'}
               className={`inv-view-btn ${view === 'board' ? 'active' : ''}`}
-              onClick={() => setView('board')}
+              onClick={() => { setView('board'); setPage(1); }}
             >
               <Icon name="dashboard" size={13}/>Board
             </button>
@@ -214,7 +229,7 @@ export default function CAPAPage() {
               role="tab"
               aria-selected={view === 'list'}
               className={`inv-view-btn ${view === 'list' ? 'active' : ''}`}
-              onClick={() => setView('list')}
+              onClick={() => { setView('list'); setPage(1); }}
             >
               <Icon name="sort" size={13}/>List
             </button>
@@ -492,6 +507,14 @@ export default function CAPAPage() {
           {rows.length === 0 && (
             <div style={{ padding: 40, textAlign: 'center', fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No CAPAs found</div>
           )}
+          <Pagination
+            page={page}
+            limit={LIST_LIMIT}
+            total={total}
+            loading={loading}
+            label="CAPA"
+            onPageChange={setPage}
+          />
         </div>
       )}
 

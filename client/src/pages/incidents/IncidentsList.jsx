@@ -4,6 +4,7 @@ import { getIncidents } from '../../api/incidents';
 import { useApp } from '../../context/AppContext';
 import Icon from '../../components/shared/Icon';
 import EmptyState, { EmptyIncidentsIllustration } from '../../components/shared/EmptyState';
+import Pagination from '../../components/shared/Pagination';
 import { TYPES, typeOf } from '../../components/shared/Badges';
 import DeadlineBadge from '../../components/incidents/DeadlineBadge';
 import { formatDate, timeAgo } from '../../utils/time';
@@ -340,25 +341,15 @@ export default function IncidentsList() {
       )}
 
       {/* Pagination */}
-      {!loading && filtered.length > 0 && (
-        (() => {
-          // `total` is the server-side filtered count (status/type-scoped) so
-          // ceil(total/50) gives the real last page. The previous check
-          // (incidents.length < 50) misfired whenever the last page happened
-          // to hold exactly 50 rows OR when a filter trimmed mid-page.
-          const limit = 50;
-          const lastPage = Math.max(1, Math.ceil((total || 0) / limit));
-          const atLastPage = page >= lastPage;
-          return (
-            <div className="inc-pagination">
-              <span className="page-info">Showing {filtered.length} of {total} · Page {page}</span>
-              <div className="page-btns">
-                <button className="inc-page-btn" aria-label="Previous page" disabled={loading || page <= 1} onClick={() => setPage(p => p - 1)}>← Previous</button>
-                <button className="inc-page-btn" aria-label="Next page" disabled={loading || atLastPage} onClick={() => setPage(p => p + 1)}>Next →</button>
-              </div>
-            </div>
-          );
-        })()
+      {!loading && total > 0 && (
+        <Pagination
+          page={page}
+          limit={50}
+          total={total}
+          loading={loading}
+          label="incident"
+          onPageChange={setPage}
+        />
       )}
     </div>
   );

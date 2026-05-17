@@ -29,7 +29,7 @@ const isElevated = (user) => ELEVATED_ROLES.has(user?.role);
 // GET / — list templates
 // ---------------------------------------------------------------------------
 router.get('/', (req, res) => {
-  const { status, search } = req.query;
+  const { status, search, page = 1, limit = 50 } = req.query;
   const orgId = req.user.org_id;
 
   const where = ['t.org_id = ?'];
@@ -50,6 +50,12 @@ router.get('/', (req, res) => {
     `SELECT COUNT(*) as count FROM templates t WHERE ${whereClause}`
   ).get(...params).count;
 
+  // Clamp pagination args so a hostile/odd value can't return everything or
+  // execute a negative offset.
+  const pageNum = Math.max(1, Number(page) || 1);
+  const limitNum = Math.min(200, Math.max(1, Number(limit) || 50));
+  const offset = (pageNum - 1) * limitNum;
+
   // Subquery counts let the FE render a "18 items · 3 sections · ~5 min" spec
   // row without an N+1 round-trip. Items here are everything except section
   // headings (questions/text/checkbox/media/signature).
@@ -69,9 +75,10 @@ router.get('/', (req, res) => {
     LEFT JOIN users u ON u.id = t.created_by
     WHERE ${whereClause}
     ORDER BY t.updated_at DESC
-  `).all(...params);
+    LIMIT ? OFFSET ?
+  `).all(...params, limitNum, offset);
 
-  res.json({ templates, total });
+  res.json({ templates, total, page: pageNum, limit: limitNum });
 });
 
 // ---------------------------------------------------------------------------

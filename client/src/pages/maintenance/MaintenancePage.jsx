@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
+import Pagination from '../../components/shared/Pagination';
 import { listSchedules, getSchedule, deleteSchedule } from '../../api/maintenance';
 import { getSites } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
@@ -80,6 +81,9 @@ export default function MaintenancePage() {
   const [tab, setTab] = useState('overdue');
 
   const [schedules, setSchedules] = useState([]);
+  const [schedulesTotal, setSchedulesTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
   const [loading, setLoading] = useState(true);
 
   const [counts, setCounts] = useState({ overdue: 0, due7: 0, due30: 0 });
@@ -110,16 +114,21 @@ export default function MaintenancePage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    const params = { status: tab, limit: 200 };
+    const params = { status: tab, page, limit: PAGE_SIZE };
     if (siteFilter) params.site_id = siteFilter;
     if (typeFilter) params.schedule_type = typeFilter;
     listSchedules(params)
-      .then(d => setSchedules(d.schedules || []))
-      .catch(() => setSchedules([]))
+      .then(d => {
+        setSchedules(d.schedules || []);
+        setSchedulesTotal(d.total ?? (d.schedules?.length || 0));
+      })
+      .catch(() => { setSchedules([]); setSchedulesTotal(0); })
       .finally(() => setLoading(false));
-  }, [tab, siteFilter, typeFilter, refreshKey]);
+  }, [tab, siteFilter, typeFilter, page, refreshKey]);
 
   useEffect(load, [load]);
+  // Reset to page 1 on any filter change.
+  useEffect(() => { setPage(1); }, [tab, siteFilter, typeFilter]);
 
   // Refresh the top KPI counts independently — these stay stable regardless
   // of the active tab. Bulk fetches per status so the FE doesn't re-implement
@@ -432,6 +441,15 @@ export default function MaintenancePage() {
           </table>
         )}
       </div>
+
+      <Pagination
+        page={page}
+        limit={PAGE_SIZE}
+        total={schedulesTotal}
+        loading={loading}
+        label="schedule"
+        onPageChange={setPage}
+      />
 
       {/* Modals */}
       {completeTarget && (

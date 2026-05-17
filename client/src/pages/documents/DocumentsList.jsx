@@ -11,6 +11,7 @@ import Icon from '../../components/shared/Icon';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import ReferencedByCard from '../../components/shared/ReferencedByCard';
 import EmptyState, { EmptyAttachmentsIllustration } from '../../components/shared/EmptyState';
+import Pagination from '../../components/shared/Pagination';
 import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import '../../styles/documents.css';
 
@@ -83,6 +84,9 @@ export default function DocumentsList() {
   const alertDialog = useAlert();
 
   const [docs, setDocs] = useState([]);
+  const [docsTotal, setDocsTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('active');
   const [typeFilter, setTypeFilter] = useState('');
@@ -151,14 +155,22 @@ export default function DocumentsList() {
       if (currentFolderId == null) params.folder_id = 'null';
       else params.folder_id = currentFolderId;
     }
+    params.page = page;
+    params.limit = PAGE_SIZE;
     listDocuments(params)
-      .then(d => setDocs(d.documents || []))
-      .catch(() => setDocs([]))
+      .then(d => {
+        setDocs(d.documents || []);
+        setDocsTotal(d.total ?? (d.documents?.length || 0));
+      })
+      .catch(() => { setDocs([]); setDocsTotal(0); })
       .finally(() => setLoading(false));
     refreshFolders();
   };
 
-  useEffect(refresh, [activeTab, typeFilter, currentFolderId, searchingGlobally, refreshKey, activeSiteId]);
+  useEffect(refresh, [activeTab, typeFilter, currentFolderId, searchingGlobally, refreshKey, activeSiteId, page]);
+  // Any filter/scope change resets to page 1 so the user sees the top of the
+  // re-filtered list rather than a stranded mid-pagination index.
+  useEffect(() => { setPage(1); }, [activeTab, typeFilter, currentFolderId, searchingGlobally, activeSiteId]);
 
   // When the global active site changes, exit any open folder back to root.
   // Folders are site-scoped, so a folder from the previous site no longer
@@ -1067,6 +1079,15 @@ export default function DocumentsList() {
           </table>
         </div>
       )}
+
+      <Pagination
+        page={page}
+        limit={PAGE_SIZE}
+        total={docsTotal}
+        loading={loading}
+        label="document"
+        onPageChange={setPage}
+      />
 
       {/* ========== PREVIEW MODAL ========== */}
       {previewDoc && createPortal(

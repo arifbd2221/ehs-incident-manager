@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import EmptyState, { EmptyWhysIllustration } from '../../components/shared/EmptyState';
+import Pagination from '../../components/shared/Pagination';
 import { SevBadge } from '../../components/shared/Badges';
 import { timeAgo } from '../../utils/time';
 import { frameworkVisibility } from '../../utils/frameworks';
@@ -34,9 +35,17 @@ export default function InvestigationsPage() {
   const { user } = useAuth();
   const { showRiddor } = frameworkVisibility(user);
   const [investigations, setInvestigations] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('kanban');
   const [search, setSearch] = useState('');
+
+  // Kanban needs every investigation to populate lanes accurately; list view
+  // paginates 50 at a time. The backend defaults to limit=50, so without
+  // this override Kanban silently lost rows once an org passed 50 records.
+  const LIST_LIMIT = 50;
+  const KANBAN_LIMIT = 500;
 
   const [dragId, setDragId] = useState(null);
   const [overCol, setOverCol] = useState(null);
@@ -50,13 +59,19 @@ export default function InvestigationsPage() {
 
   const load = () => {
     setLoading(true);
-    getInvestigations()
-      .then(data => setInvestigations(data.investigations || []))
+    const params = view === 'list'
+      ? { page, limit: LIST_LIMIT }
+      : { page: 1, limit: KANBAN_LIMIT };
+    getInvestigations(params)
+      .then(data => {
+        setInvestigations(data.investigations || []);
+        setTotal(data.total ?? (data.investigations?.length || 0));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [refreshKey]);
+  useEffect(load, [refreshKey, view, page]);
 
   const stats = useMemo(() => ({
     pending: investigations.filter(i => i.status === 'pending').length,
@@ -172,10 +187,10 @@ export default function InvestigationsPage() {
           </div>
           <div className="inv-hero-actions">
             <div className="inv-view-toggle" role="tablist">
-              <button className={`inv-view-btn ${view === 'kanban' ? 'active' : ''}`} onClick={() => setView('kanban')}>
+              <button className={`inv-view-btn ${view === 'kanban' ? 'active' : ''}`} onClick={() => { setView('kanban'); setPage(1); }}>
                 <Icon name="dashboard" size={13}/>Board
               </button>
-              <button className={`inv-view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
+              <button className={`inv-view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => { setView('list'); setPage(1); }}>
                 <Icon name="sort" size={13}/>List
               </button>
             </div>
@@ -345,6 +360,14 @@ export default function InvestigationsPage() {
           {investigations.length === 0 && (
             <div style={{ padding: 40, textAlign: 'center', fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No investigations</div>
           )}
+          <Pagination
+            page={page}
+            limit={LIST_LIMIT}
+            total={total}
+            loading={loading}
+            label="investigation"
+            onPageChange={setPage}
+          />
         </div>
       )}
 
