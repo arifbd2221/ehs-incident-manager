@@ -36,17 +36,17 @@
 }
 
 /* Left sidebar — context & progress
-   Stays a dark panel in every theme (like the login brand-side gradient).
-   Uses fixed colors so the gray-scale token inversion in dark mode
-   doesn't flip the panel to white. */
+   Brand-purple showcase panel that matches the login auth-brand
+   gradient. Stays purple in every theme so the gray-scale token
+   inversion in dark mode can't flip it to white. */
 .wiz-sidebar {
   width: 300px;
   flex-shrink: 0;
-  background: linear-gradient(180deg, #1A1A1A 0%, #333333 50%, #626DF9 100%);
+  background: linear-gradient(180deg, #626DF9 0%, #4338ca 50%, #312e81 100%);
   color: #fff;
   display: flex;
   flex-direction: column;
-  padding: 28px 24px;
+  padding: 22px 24px 20px;
   position: relative;
   overflow: hidden;
 }
@@ -75,7 +75,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
   position: relative;
   z-index: 1;
 }
@@ -102,27 +102,28 @@
   margin-top: 1px;
 }
 
-/* Vertical stepper */
+/* Vertical stepper — tightened so the Live Preview underneath stays
+   fully visible inside the sidebar's overflow:hidden viewport. */
 .wiz-steps {
   display: flex;
   flex-direction: column;
   gap: 0;
   position: relative;
   z-index: 1;
-  margin-bottom: 32px;
+  margin-bottom: 16px;
 }
 .wiz-step {
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 14px 0;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
   position: relative;
 }
 .wiz-step:not(:last-child)::after {
   content: '';
   position: absolute;
-  left: 16px;
-  top: 46px;
+  left: 14px;
+  top: 35px;
   bottom: -2px;
   width: 2px;
   background: rgba(255, 255, 255, 0.1);
@@ -132,13 +133,13 @@
   opacity: 0.5;
 }
 .wiz-step-num {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
   border: 2px solid rgba(255, 255, 255, 0.15);
@@ -151,93 +152,250 @@
   background: var(--sds-bg-surface);
   color: var(--sds-brand-primary);
   border-color: #fff;
-  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15);
 }
 .wiz-step.done .wiz-step-num {
   background: var(--sds-success);
   border-color: var(--sds-success);
   color: #fff;
 }
+.wiz-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
 .wiz-step-text .wiz-step-title {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
-  opacity: 0.45;
-  margin-top: 6px;
+  opacity: 0.5;
   transition: opacity 200ms;
+  line-height: 1.2;
 }
 .wiz-step.active .wiz-step-text .wiz-step-title,
 .wiz-step.done .wiz-step-text .wiz-step-title {
   opacity: 1;
 }
 .wiz-step-text .wiz-step-desc {
-  font-size: 11px;
-  opacity: 0.35;
-  margin-top: 2px;
-  line-height: 1.4;
+  font-size: 10.5px;
+  opacity: 0.4;
+  line-height: 1.3;
 }
 .wiz-step.active .wiz-step-text .wiz-step-desc {
-  opacity: 0.6;
+  opacity: 0.65;
 }
 
-/* Live preview in sidebar */
+/* Live preview in sidebar — frosted card on the brand gradient.
+   The translucent surface lifts the preview off the purple bg and gives
+   the labels enough contrast to read cleanly. min-height:0 + overflow-y
+   let the card scroll inside itself on very short viewports instead of
+   overflowing the sidebar (which has overflow:hidden). */
 .wiz-preview {
   flex: 1;
+  min-height: 0;
   position: relative;
   z-index: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 14px 14px 6px;
+  overflow-y: auto;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.25) transparent;
+}
+.wiz-preview::-webkit-scrollbar { width: 6px; }
+.wiz-preview::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.20);
+  border-radius: 3px;
 }
 .wiz-preview-h {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  opacity: 0.4;
-  margin-bottom: 12px;
+  letter-spacing: 0.12em;
+  opacity: 0.7;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wiz-preview-h::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #FFC93C;
+  box-shadow: 0 0 8px rgba(255, 201, 60, 0.6);
+  animation: wizPreviewDot 1.8s ease-in-out infinite;
+}
+@keyframes wizPreviewDot {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
 }
 .wiz-preview-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   font-size: 12px;
+  gap: 10px;
+  min-width: 0;
 }
+.wiz-preview-row:last-child { border-bottom: 0; }
 .wiz-preview-row .lbl {
-  opacity: 0.5;
+  font-size: 11px;
   font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
 .wiz-preview-row .val {
   font-weight: 600;
   text-align: right;
-  max-width: 140px;
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #fff;
 }
+
+/* "Incident being recorded" illustration — a small clipboard whose
+   data lines fill in sequentially and a check pops on, while a pen tip
+   quietly orbits the page. Loops every ~3.6s. */
+.wiz-preview-illust {
+  display: flex;
+  justify-content: center;
+  margin: 2px auto 12px;
+}
+.wiz-preview-illust svg {
+  width: 96px;
+  height: 52px;
+  display: block;
+  overflow: visible;
+}
+
+/* Each line "draws" left-to-right via stroke-dashoffset, with a small
+   stagger so they feel typed in sequence. */
+.wp-line {
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: wpLineFill 3.6s ease-in-out infinite;
+}
+.wp-line-2 { animation-delay: 0.15s; }
+.wp-line-3 { animation-delay: 0.30s; }
+@keyframes wpLineFill {
+  0%  { stroke-dashoffset: 40; }
+  18% { stroke-dashoffset: 0; }
+  75% { stroke-dashoffset: 0; }
+  88% { stroke-dashoffset: 40; }
+  100% { stroke-dashoffset: 40; }
+}
+
+/* Check draws on once the third line is in, holds while everything is
+   complete, then clears with the rest of the cycle. */
+.wp-check {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  opacity: 0;
+  animation: wpCheckDraw 3.6s ease-in-out infinite;
+}
+@keyframes wpCheckDraw {
+  0%, 15% { stroke-dashoffset: 22; opacity: 0; }
+  25%     { stroke-dashoffset: 0;  opacity: 1; }
+  72%     { stroke-dashoffset: 0;  opacity: 1; }
+  85%     { stroke-dashoffset: 0;  opacity: 0; }
+  100%    { stroke-dashoffset: 22; opacity: 0; }
+}
+
+/* Pen tip traces over each data line as it fills, then parks. */
+.wp-pen {
+  transform-box: fill-box;
+  animation: wpPenTrace 3.6s ease-in-out infinite;
+  opacity: 0.92;
+}
+@keyframes wpPenTrace {
+  0%   { transform: translate(63px, 20px); }
+  18%  { transform: translate(29px, 20px); }
+  25%  { transform: translate(57px, 27px); }
+  40%  { transform: translate(29px, 27px); }
+  47%  { transform: translate(61px, 34px); }
+  62%  { transform: translate(29px, 34px); }
+  72%  { transform: translate(56px, 37px); opacity: 0.92; }
+  85%  { opacity: 0; }
+  100% { transform: translate(63px, 20px); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wp-line, .wp-check, .wp-pen { animation: none; }
+  .wp-line { stroke-dashoffset: 0; }
+  .wp-check { stroke-dashoffset: 0; opacity: 1; }
+  .wp-pen { opacity: 0; }
+}
+
+/* Long free-text fields (title, area, location) need to wrap rather
+   than truncate at ~15 chars. Stack the value under the label and let
+   it use the full 224px content width, clamped at 2 lines. */
+.wiz-preview-row.is-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 10px 0;
+}
+.wiz-preview-row.is-stacked .lbl {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.55);
+}
+.wiz-preview-row.is-stacked .val {
+  text-align: left;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.35;
+  font-size: 12.5px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Severity + Track tags re-tuned for legibility on the purple gradient:
+   slightly stronger backgrounds, full-opacity text, and a hairline
+   white border for definition. */
 .wiz-preview-row .val .wiz-sev {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 50px;
   font-size: 10px;
   font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
-.wiz-sev.ws1 { background: rgba(211, 47, 47, 0.2); color: rgba(211, 47, 47, 0.85); }
-.wiz-sev.ws2 { background: rgba(237, 108, 2, 0.2); color: rgba(237, 108, 2, 0.85); }
-.wiz-sev.ws3 { background: rgba(237, 108, 2, 0.15); color: rgba(237, 108, 2, 0.7); }
-.wiz-sev.ws4 { background: rgba(46, 125, 50, 0.2); color: rgba(46, 125, 50, 0.85); }
-.wiz-sev.ws5 { background: rgba(98, 109, 249, 0.2); color: rgba(98, 109, 249, 0.85); }
+.wiz-sev.ws1 { background: rgba(244, 67, 54, 0.30);  color: #ffd0cc; }
+.wiz-sev.ws2 { background: rgba(255, 152, 0, 0.30);  color: #ffe2b3; }
+.wiz-sev.ws3 { background: rgba(255, 193, 7, 0.28);  color: #ffeab3; }
+.wiz-sev.ws4 { background: rgba(76, 175, 80, 0.32);  color: #c8f0c9; }
+.wiz-sev.ws5 { background: rgba(255, 255, 255, 0.18); color: #fff; }
 .wiz-track-tag {
   display: inline-flex;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 800;
   font-family: 'SF Mono', Menlo, monospace;
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
-.wiz-track-tag.wta { background: rgba(211, 47, 47, 0.2); color: rgba(211, 47, 47, 0.85); }
-.wiz-track-tag.wtb { background: rgba(237, 108, 2, 0.2); color: rgba(237, 108, 2, 0.85); }
-.wiz-track-tag.wtc { background: rgba(46, 125, 50, 0.2); color: rgba(46, 125, 50, 0.85); }
+.wiz-track-tag.wta { background: rgba(244, 67, 54, 0.30); color: #ffd0cc; }
+.wiz-track-tag.wtb { background: rgba(255, 152, 0, 0.30); color: #ffe2b3; }
+.wiz-track-tag.wtc { background: rgba(76, 175, 80, 0.32); color: #c8f0c9; }
 
 /* Main content area */
 .wiz-main {
