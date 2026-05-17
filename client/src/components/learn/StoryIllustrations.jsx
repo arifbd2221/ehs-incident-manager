@@ -205,7 +205,7 @@ export function OfficeScene({ className }) {
       <rect x="260" y="40" width="16" height="50" rx="6" fill="#ef4444" />
       <rect x="264" y="34" width="8" height="8" rx="2" fill="#b91c1c" />
       <rect x="270" y="36" width="12" height="3" rx="1" fill="#64748b" />
-      <text x="268" y="68" textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff">FE</text>
+      <text x="268" y="68" textAnchor="middle" fontSize="8" fontWeight="700" fill="var(--sds-bg-surface)">FE</text>
       <rect x="262" y="90" width="12" height="4" rx="1" fill="#94a3b8" />
     </svg>
   );
@@ -269,7 +269,7 @@ export function AuManufacturingScene({ className }) {
       <text x="152" y="55" textAnchor="middle" fontSize="14" fontWeight="800" fill="#92400e">!</text>
       {/* Australian flag hint */}
       <line x1="295" y1="10" x2="295" y2="30" stroke="#64748b" strokeWidth="1.5" />
-      <g className="am-flag"><rect x="295" y="10" width="16" height="10" rx="1" fill="#00008B" /><rect x="295" y="10" width="8" height="5" rx="0" fill="#fff" opacity=".3" /></g>
+      <g className="am-flag"><rect x="295" y="10" width="16" height="10" rx="1" fill="#00008B" /><rect x="295" y="10" width="8" height="5" rx="0" fill="var(--sds-bg-surface)" opacity=".3" /></g>
     </svg>
   );
 }
@@ -299,7 +299,7 @@ export function ScaffoldFallMoment({ className }) {
       <g className="sf-rail">
         <rect x="80" y="28" width="44" height="3" rx="1" fill="#f59e0b" opacity=".6" />
         <circle cx="84" cy="29" r="3" fill="#dc2626" opacity=".6" />
-        <text x="84" y="31" textAnchor="middle" fontSize="5" fontWeight="700" fill="#fff">X</text>
+        <text x="84" y="31" textAnchor="middle" fontSize="5" fontWeight="700" fill="var(--sds-bg-surface)">X</text>
       </g>
       {/* Guardrail intact — left side */}
       <rect x="40" y="28" width="44" height="3" rx="1" fill="#f59e0b" />
@@ -321,7 +321,7 @@ export function ScaffoldFallMoment({ className }) {
       <polygon points="100,96 104,92 108,96 104,100" fill="#dc2626" opacity=".3" />
       {/* SafeWork NSW alert badge */}
       <g className="sf-alert">
-        <rect x="170" y="20" width="120" height="40" rx="8" fill="#fff" stroke="#E91E63" strokeWidth="2" />
+        <rect x="170" y="20" width="120" height="40" rx="8" fill="var(--sds-bg-surface)" stroke="#E91E63" strokeWidth="2" />
         <text x="230" y="36" textAnchor="middle" fontSize="7" fontWeight="700" fill="#E91E63">NOTIFIABLE INCIDENT</text>
         <text x="230" y="48" textAnchor="middle" fontSize="6" fill="#64748b">WHS Act 2011 s.35(b)</text>
       </g>
@@ -345,18 +345,18 @@ export function WhsFormVisual({ className }) {
         @media(prefers-reduced-motion:reduce){.whs-badge{animation:none;opacity:1;transform:none}}
       `}</style>
       {/* Form background */}
-      <rect x="60" y="6" width="200" height="98" rx="8" fill="#fff" stroke="#E91E63" strokeWidth="1.5" />
+      <rect x="60" y="6" width="200" height="98" rx="8" fill="var(--sds-bg-surface)" stroke="#E91E63" strokeWidth="1.5" />
       {/* Header bar */}
       <rect x="60" y="6" width="200" height="24" rx="8" fill="#fce4ec" />
       <rect x="60" y="22" width="200" height="8" fill="#fce4ec" />
       <text x="160" y="22" textAnchor="middle" fontSize="8" fontWeight="700" fill="#E91E63">SafeWork NSW Notification</text>
       {/* s.35 category checkboxes */}
-      <rect x="78" y="38" width="10" height="10" rx="2" fill="#fff" stroke="#E91E63" strokeWidth="1" />
+      <rect x="78" y="38" width="10" height="10" rx="2" fill="var(--sds-bg-surface)" stroke="#E91E63" strokeWidth="1" />
       <text x="94" y="47" fontSize="7" fill="#64748b">s.35(a) Death</text>
       <rect x="78" y="54" width="10" height="10" rx="2" fill="#E91E63" />
       <path d="M80 59 L82 61 L86 56" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" fill="none" />
       <text x="94" y="63" fontSize="7" fontWeight="600" fill="#333">s.35(b) Serious injury</text>
-      <rect x="78" y="70" width="10" height="10" rx="2" fill="#fff" stroke="#E91E63" strokeWidth="1" />
+      <rect x="78" y="70" width="10" height="10" rx="2" fill="var(--sds-bg-surface)" stroke="#E91E63" strokeWidth="1" />
       <text x="94" y="79" fontSize="7" fill="#64748b">s.35(c) Dangerous incident</text>
       {/* PCBU section */}
       <rect x="170" y="38" width="76" height="34" rx="4" fill="#f8f9fb" stroke="#e0e0e0" strokeWidth="1" />
@@ -383,7 +383,7 @@ export function WizardMockup({ className }) {
         @media(prefers-reduced-motion:reduce){.wm-sel{animation:none}}
       `}</style>
       {/* Window chrome */}
-      <rect x="20" y="8" width="280" height="114" rx="10" fill="#fff" stroke="#e2e8f0" strokeWidth="1.5" />
+      <rect x="20" y="8" width="280" height="114" rx="10" fill="var(--sds-bg-surface)" stroke="#e2e8f0" strokeWidth="1.5" />
       <rect x="20" y="8" width="280" height="22" rx="10" fill="#f8fafc" />
       <rect x="20" y="20" width="280" height="10" fill="#f8fafc" />
       <circle cx="36" cy="19" r="4" fill="#fca5a5" />
@@ -392,9 +392,9 @@ export function WizardMockup({ className }) {
       <text x="160" y="22" textAnchor="middle" fontSize="7" fontWeight="600" fill="#94a3b8">Report Wizard</text>
       {/* Type cards grid 4x2 */}
       {/* Row 1 */}
-      <rect x="34" y="38" width="56" height="34" rx="6" fill="#fff" stroke="#e2e8f0" strokeWidth="1" />
+      <rect x="34" y="38" width="56" height="34" rx="6" fill="var(--sds-bg-surface)" stroke="#e2e8f0" strokeWidth="1" />
       <circle cx="62" cy="48" r="6" fill="#fecaca" /><text x="62" y="62" textAnchor="middle" fontSize="6" fill="#64748b">Injury</text>
-      <rect x="98" y="38" width="56" height="34" rx="6" fill="#fff" stroke="#e2e8f0" strokeWidth="1" />
+      <rect x="98" y="38" width="56" height="34" rx="6" fill="var(--sds-bg-surface)" stroke="#e2e8f0" strokeWidth="1" />
       <circle cx="126" cy="48" r="6" fill="#e9d5ff" /><text x="126" y="62" textAnchor="middle" fontSize="6" fill="#64748b">Illness</text>
       {/* Selected card */}
       <g className="wm-sel">
@@ -402,16 +402,16 @@ export function WizardMockup({ className }) {
         <circle cx="190" cy="48" r="6" fill="#c7d2fe" /><text x="190" y="62" textAnchor="middle" fontSize="6" fontWeight="700" fill="#626DF9">Near Miss</text>
         <circle cx="210" cy="42" r="6" fill="#626DF9" /><path d="M207 42 L209 44 L213 40" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" fill="none" />
       </g>
-      <rect x="226" y="38" width="56" height="34" rx="6" fill="#fff" stroke="#e2e8f0" strokeWidth="1" />
+      <rect x="226" y="38" width="56" height="34" rx="6" fill="var(--sds-bg-surface)" stroke="#e2e8f0" strokeWidth="1" />
       <circle cx="254" cy="48" r="6" fill="#d1d5db" /><text x="254" y="62" textAnchor="middle" fontSize="6" fill="#64748b">Property</text>
       {/* Row 2 */}
-      <rect x="34" y="80" width="56" height="34" rx="6" fill="#fff" stroke="#e2e8f0" strokeWidth="1" />
+      <rect x="34" y="80" width="56" height="34" rx="6" fill="var(--sds-bg-surface)" stroke="#e2e8f0" strokeWidth="1" />
       <circle cx="62" cy="90" r="6" fill="#bbf7d0" /><text x="62" y="104" textAnchor="middle" fontSize="6" fill="#64748b">Environ.</text>
-      <rect x="98" y="80" width="56" height="34" rx="6" fill="#fff" stroke="#e2e8f0" strokeWidth="1" />
+      <rect x="98" y="80" width="56" height="34" rx="6" fill="var(--sds-bg-surface)" stroke="#e2e8f0" strokeWidth="1" />
       <circle cx="126" cy="90" r="6" fill="#bfdbfe" /><text x="126" y="104" textAnchor="middle" fontSize="6" fill="#64748b">Unsafe</text>
-      <rect x="162" y="80" width="56" height="34" rx="6" fill="#fff" stroke="#e2e8f0" strokeWidth="1" />
+      <rect x="162" y="80" width="56" height="34" rx="6" fill="var(--sds-bg-surface)" stroke="#e2e8f0" strokeWidth="1" />
       <circle cx="190" cy="90" r="6" fill="#99f6e4" /><text x="190" y="104" textAnchor="middle" fontSize="6" fill="#64748b">Observ.</text>
-      <rect x="226" y="80" width="56" height="34" rx="6" fill="#fff" stroke="#e2e8f0" strokeWidth="1" />
+      <rect x="226" y="80" width="56" height="34" rx="6" fill="var(--sds-bg-surface)" stroke="#e2e8f0" strokeWidth="1" />
       <circle cx="254" cy="90" r="6" fill="#fecaca" /><text x="254" y="104" textAnchor="middle" fontSize="6" fill="#64748b">Dangerous</text>
     </svg>
   );
@@ -485,23 +485,23 @@ export function LifecycleFlowVisual({ className }) {
       <path className="lf-line" d="M50 40 L110 40 L160 40 L210 40 L270 40" stroke="#e2e8f0" strokeWidth="3" strokeLinecap="round" fill="none" />
       {/* New */}
       <circle cx="50" cy="40" r="14" fill="#0DB4F0" />
-      <text x="50" y="43" textAnchor="middle" fontSize="7" fontWeight="700" fill="#fff">NEW</text>
+      <text x="50" y="43" textAnchor="middle" fontSize="7" fontWeight="700" fill="var(--sds-bg-surface)">NEW</text>
       <text x="50" y="66" textAnchor="middle" fontSize="7" fontWeight="600" fill="#64748b">Day 0</text>
       {/* Triage */}
       <circle className="lf-d2" cx="110" cy="40" r="14" fill="#ED6C02" />
-      <text x="110" y="43" textAnchor="middle" fontSize="6" fontWeight="700" fill="#fff">TRIAGE</text>
+      <text x="110" y="43" textAnchor="middle" fontSize="6" fontWeight="700" fill="var(--sds-bg-surface)">TRIAGE</text>
       <text x="110" y="66" textAnchor="middle" fontSize="7" fontWeight="600" fill="#64748b">Day 0</text>
       {/* Investigating */}
       <circle className="lf-d3" cx="170" cy="40" r="14" fill="#626DF9" />
-      <text x="170" y="43" textAnchor="middle" fontSize="5" fontWeight="700" fill="#fff">INVEST.</text>
+      <text x="170" y="43" textAnchor="middle" fontSize="5" fontWeight="700" fill="var(--sds-bg-surface)">INVEST.</text>
       <text x="170" y="66" textAnchor="middle" fontSize="7" fontWeight="600" fill="#64748b">Day 1-7</text>
       {/* CAPA */}
       <circle className="lf-d4" cx="230" cy="40" r="14" fill="#8b5cf6" />
-      <text x="230" y="43" textAnchor="middle" fontSize="6" fontWeight="700" fill="#fff">CAPA</text>
+      <text x="230" y="43" textAnchor="middle" fontSize="6" fontWeight="700" fill="var(--sds-bg-surface)">CAPA</text>
       <text x="230" y="66" textAnchor="middle" fontSize="7" fontWeight="600" fill="#64748b">Day 8+</text>
       {/* Closed */}
       <circle className="lf-d5" cx="290" cy="40" r="14" fill="#2E7D32" />
-      <text x="290" y="43" textAnchor="middle" fontSize="5" fontWeight="700" fill="#fff">CLOSED</text>
+      <text x="290" y="43" textAnchor="middle" fontSize="5" fontWeight="700" fill="var(--sds-bg-surface)">CLOSED</text>
       <text x="290" y="66" textAnchor="middle" fontSize="7" fontWeight="600" fill="#64748b">Verified</text>
       {/* Arrows between dots */}
       <polygon points="76,38 76,42 82,40" fill="#cbd5e1" />
@@ -650,9 +650,9 @@ export function OshaFormVisual({ className }) {
         @media(prefers-reduced-motion:reduce){.of-stamp{animation:none;opacity:1;transform:none}}
       `}</style>
       {/* Clipboard */}
-      <rect x="90" y="8" width="140" height="94" rx="6" fill="#f0f1fe" stroke="#626DF9" strokeWidth="1.5" />
+      <rect x="90" y="8" width="140" height="94" rx="6" fill="var(--sds-brand-primary-tint)" stroke="#626DF9" strokeWidth="1.5" />
       <rect x="138" y="2" width="44" height="14" rx="4" fill="#626DF9" />
-      <rect x="146" y="6" width="28" height="6" rx="2" fill="#f0f1fe" />
+      <rect x="146" y="6" width="28" height="6" rx="2" fill="var(--sds-brand-primary-tint)" />
       {/* Header text */}
       <text x="160" y="30" textAnchor="middle" fontSize="8" fontWeight="700" fill="#626DF9">OSHA 300 Log</text>
       <rect x="108" y="34" width="104" height="1" fill="#626DF9" opacity=".2" />

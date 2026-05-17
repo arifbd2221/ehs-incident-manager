@@ -1,6 +1,10 @@
 /* 404 — full-screen, standalone (not nested in .page). All styles scoped to .nf-root. */
 
 .nf-root {
+  /* The 404 illustration was drawn with dark strokes on light paper; we
+     keep it as a standalone light surface in every theme rather than
+     re-tinting strokes individually. */
+  color-scheme: light;
   --nf-accent: var(--sds-brand-primary, #626DF9);
   --nf-accent-deep: #5C00FF;
   --nf-accent-tint: rgba(98, 109, 249, 0.08);

@@ -32,22 +32,22 @@ const IllusMachine = () => (
     <rect width="320" height="160" fill="url(#aiMachBg)" />
     <rect width="320" height="160" fill="url(#aiMachGrid)" opacity="0.6" />
     <path d="M40 130 L280 130 L260 142 L60 142 Z" fill="#C9CFFC" opacity="0.7" />
-    <rect x="92" y="60" width="136" height="70" rx="4" fill="#fff" stroke="#626DF9" strokeWidth="1.5" />
-    <rect x="102" y="72" width="48" height="14" rx="2" fill="#E8EBFF" />
-    <rect x="102" y="92" width="80" height="6" rx="1" fill="#E8EBFF" />
-    <rect x="102" y="104" width="60" height="6" rx="1" fill="#E8EBFF" />
+    <rect x="92" y="60" width="136" height="70" rx="4" fill="var(--sds-bg-surface)" stroke="#626DF9" strokeWidth="1.5" />
+    <rect x="102" y="72" width="48" height="14" rx="2" fill="var(--sds-brand-primary-tint)" />
+    <rect x="102" y="92" width="80" height="6" rx="1" fill="var(--sds-brand-primary-tint)" />
+    <rect x="102" y="104" width="60" height="6" rx="1" fill="var(--sds-brand-primary-tint)" />
     <circle cx="206" cy="79" r="4" fill="#2E7D32" />
     <circle cx="218" cy="79" r="4" fill="#ED6C02" />
     <g className="gear-lg">
       <circle cx="240" cy="50" r="22" fill="#626DF9" />
-      <circle cx="240" cy="50" r="9" fill="#fff" />
+      <circle cx="240" cy="50" r="9" fill="var(--sds-bg-surface)" />
       {[0, 45, 90, 135, 180, 225, 270, 315].map(a => (
         <rect key={a} x="237" y="22" width="6" height="9" fill="#626DF9" transform={`rotate(${a} 240 50)`} />
       ))}
     </g>
     <g className="gear-sm">
       <circle cx="82" cy="78" r="14" fill="#5C00FF" />
-      <circle cx="82" cy="78" r="5" fill="#fff" />
+      <circle cx="82" cy="78" r="5" fill="var(--sds-bg-surface)" />
       {[0, 60, 120, 180, 240, 300].map(a => (
         <rect key={a} x="80" y="60" width="4" height="6" fill="#5C00FF" transform={`rotate(${a} 82 78)`} />
       ))}
@@ -69,7 +69,7 @@ const IllusBuilding = () => (
     </defs>
     <rect width="320" height="160" fill="url(#aiBldBg)" />
     <line x1="0" y1="138" x2="320" y2="138" stroke="#CFC4FA" strokeWidth="0.6" strokeDasharray="3 4" />
-    <rect x="40" y="50" width="80" height="88" fill="#fff" stroke="#5C00FF" strokeWidth="1.5" />
+    <rect x="40" y="50" width="80" height="88" fill="var(--sds-bg-surface)" stroke="#5C00FF" strokeWidth="1.5" />
     {[58, 72, 86, 100, 114].map(y => (
       <g key={y}>
         <rect x="50" y={y} width="14" height="8" fill="#E8E2FF" />
@@ -77,7 +77,7 @@ const IllusBuilding = () => (
         <rect x="94" y={y} width="14" height="8" fill="#E8E2FF" />
       </g>
     ))}
-    <rect x="130" y="30" width="100" height="108" fill="#fff" stroke="#626DF9" strokeWidth="1.5" />
+    <rect x="130" y="30" width="100" height="108" fill="var(--sds-bg-surface)" stroke="#626DF9" strokeWidth="1.5" />
     <rect x="130" y="30" width="100" height="10" fill="#626DF9" />
     {[48, 64, 80, 96, 112].map(y => (
       <g key={y}>
@@ -88,7 +88,7 @@ const IllusBuilding = () => (
     ))}
     <rect x="170" y="118" width="20" height="20" fill="#626DF9" />
     <circle cx="186" cy="129" r="0.8" fill="#FFC93C" />
-    <rect x="238" y="70" width="50" height="68" fill="#fff" stroke="#AE8145" strokeWidth="1.5" />
+    <rect x="238" y="70" width="50" height="68" fill="var(--sds-bg-surface)" stroke="#AE8145" strokeWidth="1.5" />
     <rect x="238" y="70" width="50" height="6" fill="#FFC93C" />
     {[82, 96, 110, 124].map(y => (
       <rect key={y} x="248" y={y} width="30" height="8" fill="#FBE9C2" />
@@ -114,11 +114,11 @@ const IllusVehicle = () => (
     <rect x="42" y="124" width="6" height="10" fill="#AE8145" />
     <rect x="68" y="124" width="6" height="10" fill="#AE8145" />
     <rect x="92" y="124" width="6" height="10" fill="#AE8145" />
-    <rect x="44" y="100" width="52" height="18" fill="#fff" stroke="#AE8145" strokeWidth="1.5" />
+    <rect x="44" y="100" width="52" height="18" fill="var(--sds-bg-surface)" stroke="#AE8145" strokeWidth="1.5" />
     <text x="70" y="113" fontSize="9" fontWeight="700" textAnchor="middle" fill="#AE8145">CARGO</text>
     <g className="forklift">
       <rect x="160" y="86" width="80" height="38" rx="4" fill="#FFC93C" stroke="#AE8145" strokeWidth="1.5" />
-      <rect x="170" y="92" width="32" height="22" rx="2" fill="#fff" stroke="#AE8145" strokeWidth="1" />
+      <rect x="170" y="92" width="32" height="22" rx="2" fill="var(--sds-bg-surface)" stroke="#AE8145" strokeWidth="1" />
       <rect x="172" y="94" width="28" height="14" fill="#E5F6FD" />
       <line x1="158" y1="60" x2="158" y2="124" stroke="#52525F" strokeWidth="3" />
       <line x1="152" y1="60" x2="152" y2="124" stroke="#52525F" strokeWidth="3" />
@@ -146,13 +146,13 @@ const IllusArea = () => (
     </defs>
     <rect width="320" height="160" fill="url(#aiAreaBg)" />
     <path d="M60 50 L240 40 L260 100 L210 130 L80 125 L50 90 Z"
-      fill="#fff" stroke="#2E7D32" strokeWidth="1.5" strokeDasharray="4 3" />
+      fill="var(--sds-bg-surface)" stroke="#2E7D32" strokeWidth="1.5" strokeDasharray="4 3" />
     <rect x="130" y="78" width="60" height="22" rx="3" fill="#2E7D32" />
-    <text x="160" y="93" fontSize="10" fontWeight="700" textAnchor="middle" fill="#fff">ZONE</text>
+    <text x="160" y="93" fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--sds-bg-surface)">ZONE</text>
     <circle cx="100" cy="80" r="6" fill="#D32F2F" />
-    <circle cx="100" cy="80" r="2" fill="#fff" />
+    <circle cx="100" cy="80" r="2" fill="var(--sds-bg-surface)" />
     <circle cx="220" cy="100" r="6" fill="#0DB4F0" />
-    <circle cx="220" cy="100" r="2" fill="#fff" />
+    <circle cx="220" cy="100" r="2" fill="var(--sds-bg-surface)" />
   </svg>
 );
 
@@ -186,10 +186,10 @@ const IllusDefault = ({ tint = '#626DF9' }) => (
       </linearGradient>
     </defs>
     <rect width="320" height="160" fill="url(#aiDefBg)" />
-    <rect x="110" y="50" width="100" height="70" rx="6" fill="#fff" stroke={tint} strokeWidth="1.5" />
-    <rect x="122" y="62" width="40" height="8" rx="2" fill="#E8EBFF" />
-    <rect x="122" y="76" width="76" height="6" rx="1" fill="#E8EBFF" />
-    <rect x="122" y="88" width="56" height="6" rx="1" fill="#E8EBFF" />
+    <rect x="110" y="50" width="100" height="70" rx="6" fill="var(--sds-bg-surface)" stroke={tint} strokeWidth="1.5" />
+    <rect x="122" y="62" width="40" height="8" rx="2" fill="var(--sds-brand-primary-tint)" />
+    <rect x="122" y="76" width="76" height="6" rx="1" fill="var(--sds-brand-primary-tint)" />
+    <rect x="122" y="88" width="56" height="6" rx="1" fill="var(--sds-brand-primary-tint)" />
     <circle cx="200" cy="68" r="4" fill={tint} opacity="0.7" />
   </svg>
 );

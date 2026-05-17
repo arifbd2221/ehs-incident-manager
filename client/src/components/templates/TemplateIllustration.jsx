@@ -39,7 +39,7 @@ const TplIllusSafety = () => (
     <circle cx="160" cy="70" r="38" fill="none" stroke="#D32F2F" strokeWidth="1" opacity="0.15" className="tpl-pulse tpl-pulse-1" />
     <circle cx="160" cy="70" r="48" fill="none" stroke="#D32F2F" strokeWidth="1" opacity="0.1" className="tpl-pulse tpl-pulse-2" />
     <circle cx="160" cy="70" r="58" fill="none" stroke="#D32F2F" strokeWidth="1" opacity="0.06" className="tpl-pulse tpl-pulse-3" />
-    <path d="M160 30 L188 40 L188 70 Q188 92 160 108 Q132 92 132 70 L132 40 Z" fill="#fff" stroke="#D32F2F" strokeWidth="2" />
+    <path d="M160 30 L188 40 L188 70 Q188 92 160 108 Q132 92 132 70 L132 40 Z" fill="var(--sds-bg-surface)" stroke="#D32F2F" strokeWidth="2" />
     <path d="M160 30 L188 40 L188 50 L132 50 L132 40 Z" fill="#D32F2F" />
     <path d="M146 72 L156 82 L176 60" stroke="#D32F2F" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
     <g transform="translate(40 80)">
@@ -109,9 +109,9 @@ const TplIllusQuality = () => (
       <line key={i} x1={i * 40} y1="0" x2={i * 40} y2="140" stroke="#D6DAFB" strokeWidth="0.5" strokeDasharray="2 4" />
     ))}
     <g transform="translate(110 18)">
-      <rect x="0" y="8" width="100" height="120" rx="6" fill="#fff" stroke="#626DF9" strokeWidth="1.8" />
+      <rect x="0" y="8" width="100" height="120" rx="6" fill="var(--sds-bg-surface)" stroke="#626DF9" strokeWidth="1.8" />
       <rect x="30" y="0" width="40" height="16" rx="3" fill="#626DF9" />
-      <rect x="38" y="3" width="24" height="10" rx="1.5" fill="#fff" />
+      <rect x="38" y="3" width="24" height="10" rx="1.5" fill="var(--sds-bg-surface)" />
       <g className="tpl-check tpl-check-1">
         <rect x="12" y="30" width="11" height="11" rx="2" fill="#E8F5E9" stroke="#2E7D32" />
         <path d="M14 35 L17 38 L21 32" stroke="#2E7D32" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -128,11 +128,11 @@ const TplIllusQuality = () => (
         <line x1="29" y1="72" x2="82" y2="72" stroke="#52525F" strokeWidth="1.2" />
       </g>
       <g className="tpl-check tpl-check-4">
-        <rect x="12" y="84" width="11" height="11" rx="2" fill="#fff" stroke="#626DF9" />
+        <rect x="12" y="84" width="11" height="11" rx="2" fill="var(--sds-bg-surface)" stroke="#626DF9" />
         <line x1="29" y1="90" x2="70" y2="90" stroke="#52525F" strokeWidth="1.2" />
       </g>
       <g>
-        <rect x="12" y="102" width="11" height="11" rx="2" fill="#fff" stroke="#7E7E8C" />
+        <rect x="12" y="102" width="11" height="11" rx="2" fill="var(--sds-bg-surface)" stroke="#7E7E8C" />
         <line x1="29" y1="108" x2="64" y2="108" stroke="#7E7E8C" strokeWidth="1.2" />
       </g>
     </g>
@@ -155,7 +155,7 @@ const TplIllusCompliance = () => (
     </defs>
     <rect width="320" height="140" fill="url(#tplCompBg)" />
     <g transform="translate(80 14)">
-      <rect x="0" y="0" width="110" height="120" rx="4" fill="#fff" stroke="#5C00FF" strokeWidth="1.6" />
+      <rect x="0" y="0" width="110" height="120" rx="4" fill="var(--sds-bg-surface)" stroke="#5C00FF" strokeWidth="1.6" />
       <path d="M88 0 L110 22 L88 22 Z" fill="#E8E2FF" stroke="#5C00FF" strokeWidth="1.6" />
       <rect x="12" y="14" width="60" height="6" rx="2" fill="#5C00FF" />
       <rect x="12" y="28" width="86" height="3" rx="1.5" fill="#CFC4FA" />
@@ -173,8 +173,8 @@ const TplIllusCompliance = () => (
       </g>
       <circle cx="0" cy="0" r="24" fill="#D32F2F" />
       <circle cx="0" cy="0" r="20" fill="none" stroke="#fff" strokeWidth="1.2" />
-      <text x="0" y="-4" fontSize="6" fontWeight="700" fill="#fff" textAnchor="middle">VERIFIED</text>
-      <text x="0" y="10" fontSize="5" fontWeight="600" fill="#fff" textAnchor="middle">2026</text>
+      <text x="0" y="-4" fontSize="6" fontWeight="700" fill="var(--sds-bg-surface)" textAnchor="middle">VERIFIED</text>
+      <text x="0" y="10" fontSize="5" fontWeight="600" fill="var(--sds-bg-surface)" textAnchor="middle">2026</text>
       <path d="M-8 2 L-4 6 L8 -6" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </g>
     <g transform="translate(40 36)">
@@ -211,7 +211,7 @@ const TplIllusWalkthrough = () => (
       </g>
     ))}
     <g transform="translate(244 18)">
-      <rect x="0" y="6" width="50" height="62" rx="3" fill="#fff" stroke="#FFC93C" strokeWidth="1.6" />
+      <rect x="0" y="6" width="50" height="62" rx="3" fill="var(--sds-bg-surface)" stroke="#FFC93C" strokeWidth="1.6" />
       <rect x="14" y="0" width="22" height="10" rx="2" fill="#FFC93C" />
       <rect x="6" y="18" width="38" height="2" fill="#AE8145" opacity="0.5" />
       <rect x="6" y="26" width="30" height="2" fill="#AE8145" opacity="0.5" />
