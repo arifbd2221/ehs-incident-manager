@@ -1222,14 +1222,14 @@ export default function ReportWizard({ onClose, onSubmit, prefill }) {
                     </div>
 
                     {description && (
-                      <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid var(--sds-bg-surface-alt)' }}>
+                      <div style={{ marginTop: 16, padding: 12, background: 'var(--sds-bg-surface)', borderRadius: 8, border: '1px solid var(--sds-border)' }}>
                         <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sds-fg-tertiary)', marginBottom: 6 }}>Description</div>
                         <div style={{ fontSize: 12, color: 'var(--sds-fg-secondary)', lineHeight: 1.55 }}>{description}</div>
                       </div>
                     )}
 
                     {files.length > 0 && (
-                      <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid var(--sds-bg-surface-alt)' }}>
+                      <div style={{ marginTop: 16, padding: 12, background: 'var(--sds-bg-surface)', borderRadius: 8, border: '1px solid var(--sds-border)' }}>
                         <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sds-fg-tertiary)', marginBottom: 8 }}>Attachments · {files.length} file{files.length > 1 ? 's' : ''}</div>
                         {Object.keys(imageUrls).length > 0 && (
                           <div className="wiz-review-thumbs">

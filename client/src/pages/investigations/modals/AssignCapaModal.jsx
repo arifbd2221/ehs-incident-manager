@@ -75,8 +75,8 @@ export default function AssignCapaModal({ investigation, onCancel, onConfirm }) 
             />
           </div>
           {form.owner_id === form.verifier_id && form.owner_id && (
-            <div className="modal-info-banner" style={{ background: 'linear-gradient(135deg, #fef2f2, #fff1f2)', borderColor: '#fecaca' }}>
-              <div className="info-icon" style={{ background: 'rgba(220, 38, 38, 0.1)', color: '#dc2626' }}><Icon name="warning" size={14}/></div>
+            <div className="modal-info-banner" style={{ background: 'var(--sds-error-bg)', borderColor: 'var(--sds-error)' }}>
+              <div className="info-icon" style={{ background: 'var(--sds-error-bg)', color: 'var(--sds-error)' }}><Icon name="warning" size={14}/></div>
               <div className="info-text">Owner and verifier must be different people.</div>
             </div>
           )}

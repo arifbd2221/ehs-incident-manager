@@ -113,7 +113,7 @@ function DonutChart({ data, size = 160, strokeWidth = 22 }) {
 
 function MiniBar({ pct, color }) {
   return (
-    <div style={{ height: 4, background: '#f1f5f9', borderRadius: 4, flex: 1 }}>
+    <div style={{ height: 4, background: 'var(--sds-bg-surface-alt)', borderRadius: 4, flex: 1 }}>
       <div style={{ height: '100%', borderRadius: 4, background: color, width: `${Math.max(pct, 4)}%`, transition: 'width 500ms cubic-bezier(0.4,0,0.2,1)' }} />
     </div>
   );
@@ -777,11 +777,11 @@ export default function Dashboard() {
             </div>
             <div className="kpi-val"><KpiValue value={kpis.openIncidents || 0} /></div>
             <div className="kpi-foot">
-              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: '#dc2626' }}>{tc.A || 0}</span> A</span>
+              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: 'var(--sds-error)' }}>{tc.A || 0}</span> A</span>
               <span className="kpi-track-sep">&middot;</span>
-              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: '#d97706' }}>{tc.B || 0}</span> B</span>
+              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: 'var(--sds-warning)' }}>{tc.B || 0}</span> B</span>
               <span className="kpi-track-sep">&middot;</span>
-              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: '#059669' }}>{tc.C || 0}</span> C</span>
+              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: 'var(--sds-success)' }}>{tc.C || 0}</span> C</span>
             </div>
           </div>
         );

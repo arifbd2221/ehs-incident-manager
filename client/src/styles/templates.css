@@ -30,7 +30,7 @@
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #626DF9, #8b5cf6, #a855f7);
+  background: linear-gradient(90deg, var(--sds-brand-primary), #8b5cf6, #a855f7);
 }
 .tp-hero-icon {
   width: 46px;
@@ -630,7 +630,7 @@
   animation: slideUp 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .tp-skel {
-  background: linear-gradient(90deg, var(--sds-bg-surface-alt) 0%, #fafbfd 50%, var(--sds-bg-surface-alt) 100%);
+  background: linear-gradient(90deg, var(--sds-bg-surface-alt) 0%, var(--sds-bg-surface-alt) 50%, var(--sds-bg-surface-alt) 100%);
   background-size: 200% 100%;
   border-radius: var(--sds-radius-sm);
   animation: tpSkel 1.4s ease-in-out infinite;
@@ -990,7 +990,7 @@
   font-size: 11px;
   font-weight: 700;
   background: rgba(237,108,2,0.1);
-  color: #ED6C02;
+  color: var(--sds-warning);
   animation: teFadeIn 300ms ease-out both;
 }
 
@@ -1040,7 +1040,7 @@
   padding: 2px 8px;
   border-radius: 50px;
   background: rgba(46,125,50,0.1);
-  color: #2E7D32;
+  color: var(--sds-success);
   flex-shrink: 0;
 }
 
@@ -1256,7 +1256,7 @@
   border: 1px solid var(--sds-border);
   border-left: 4px solid transparent;
   border-radius: var(--sds-radius-md);
-  background: #fff;
+  background: var(--sds-bg-surface);
   padding: 14px 16px;
   cursor: pointer;
   transition: border-color 250ms cubic-bezier(0.34,1.56,0.64,1),
@@ -1423,7 +1423,7 @@
   font-size: 13px;
   color: var(--sds-fg-primary);
   font-family: var(--sds-font-family);
-  background: #fff;
+  background: var(--sds-bg-surface);
   cursor: pointer;
   transition: border-color 200ms, box-shadow 200ms;
 }
@@ -1493,7 +1493,7 @@
   top: 2px; left: 2px;
   width: 16px; height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--sds-bg-surface);
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   transition: transform 200ms cubic-bezier(0.34,1.56,0.64,1);
 }
@@ -1616,7 +1616,7 @@
   padding: 2px 8px;
   border: 1px solid var(--sds-border);
   border-radius: 4px;
-  background: #fff;
+  background: var(--sds-bg-surface);
   color: var(--sds-fg-primary);
   font-family: var(--sds-font-family);
   cursor: pointer;
@@ -1640,7 +1640,7 @@
   font-size: 12px;
   color: var(--sds-fg-primary);
   font-family: var(--sds-font-family);
-  background: #fff;
+  background: var(--sds-bg-surface);
   cursor: pointer;
   min-width: 0;
 }

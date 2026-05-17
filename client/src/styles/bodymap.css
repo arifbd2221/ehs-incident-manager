@@ -19,7 +19,7 @@
   width: 32px; height: 32px;
   border-radius: 8px;
   border: 1px solid var(--sds-border);
-  background: #fff;
+  background: var(--sds-bg-surface);
   color: var(--sds-fg-secondary);
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
@@ -192,9 +192,9 @@
   align-items: center;
   gap: 4px;
   padding: 3px 8px 3px 10px;
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  background: var(--sds-error-bg);
+  color: var(--sds-error);
+  border: 1px solid var(--sds-error-bg);
   border-radius: 50px;
   font-size: 10px;
   font-weight: 600;
@@ -203,7 +203,7 @@
   animation: bm3dTagIn 250ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .bm3d-tag:hover {
-  background: #fee2e2;
+  background: var(--sds-error-bg);
   border-color: #f87171;
 }
 .bm3d-tag svg {

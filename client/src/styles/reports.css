@@ -37,7 +37,7 @@
 }
 .rpt-site-select .cb-trigger {
   border-color: var(--sds-border);
-  background: #fff;
+  background: var(--sds-bg-surface);
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
@@ -56,7 +56,7 @@
 .rpt-year-select .cb-trigger {
   min-height: 32px;
   border-color: var(--sds-border);
-  background: #fff;
+  background: var(--sds-bg-surface);
   border-radius: 8px;
 }
 .rpt-year-select .cb-label {
@@ -74,7 +74,7 @@
 }
 .rpt-type-card {
   position: relative;
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 14px;
   padding: 18px 18px 16px;
@@ -165,7 +165,7 @@
 
 /* Report panel (wraps all report types) */
 .rpt-panel {
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 16px;
   overflow: hidden;
@@ -553,7 +553,7 @@
 }
 .rpt-metric-card {
   position: relative;
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 14px;
   padding: 20px;

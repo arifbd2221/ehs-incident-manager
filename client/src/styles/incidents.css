@@ -86,7 +86,7 @@
   padding: 10px 18px;
   border-radius: 12px;
   border: 1px solid var(--sds-border);
-  background: #fff;
+  background: var(--sds-bg-surface);
   color: var(--sds-fg-secondary);
   font-size: 13px;
   font-weight: 600;
