@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import Icon from '../../components/shared/Icon';
 import EmptyState, { EmptyWhysIllustration } from '../../components/shared/EmptyState';
+import Pagination from '../../components/shared/Pagination';
 import { SEV_GRID, LEVEL_NAMES } from '../../components/shared/RiskMatrix';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -330,31 +331,13 @@ export default function RisksPage() {
                 ))}
               </tbody>
             </table>
-            {totalPages > 1 && (
-              <div className="rsk-pagination">
-                <span aria-live="polite">Page {page} of {totalPages} ({total} risks)</span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    type="button"
-                    className="rsk-pag-btn"
-                    disabled={page <= 1}
-                    onClick={() => setPage(p => p - 1)}
-                    aria-label="Previous page"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    className="rsk-pag-btn"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage(p => p + 1)}
-                    aria-label="Next page"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
+            <Pagination
+              page={page}
+              limit={limit}
+              total={total}
+              label="risk"
+              onPageChange={setPage}
+            />
           </div>
         )}
         </>
