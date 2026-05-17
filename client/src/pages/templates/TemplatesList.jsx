@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import EmptyState, { EmptyCAPAsIllustration } from '../../components/shared/EmptyState';
+import Pagination from '../../components/shared/Pagination';
 import TemplateIllustration, { CategoryIcon, templateIllustrationKind, CATEGORY_META } from '../../components/templates/TemplateIllustration';
 import '../../styles/templates.css';
 
@@ -19,6 +20,9 @@ export default function TemplatesList() {
   const canEdit = ELEVATED.has(user?.role);
 
   const [templates, setTemplates] = useState([]);
+  const [templatesTotal, setTemplatesTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
   const [summary, setSummary] = useState({
     total: 0, draft: 0, published: 0, archived: 0,
     inspections_run: 0, inspections_in_progress: 0, avg_pass_rate: 0,
@@ -38,17 +42,22 @@ export default function TemplatesList() {
 
   const load = () => {
     setLoading(true);
+    const params = { page, limit: PAGE_SIZE, search };
+    if (tab !== 'all') params.status = tab;
     Promise.all([
-      getTemplates(tab !== 'all' ? { status: tab, search } : { search }),
+      getTemplates(params),
       getTemplateSummary(),
     ]).then(([list, sum]) => {
       setTemplates(list.templates || []);
+      setTemplatesTotal(list.total ?? (list.templates?.length || 0));
       setSummary(sum);
     }).catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [refreshKey, tab, search]);
+  useEffect(load, [refreshKey, tab, search, page]);
+  // Filter/search changes start at the top of the new result set.
+  useEffect(() => { setPage(1); }, [tab, search]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
@@ -436,6 +445,15 @@ export default function TemplatesList() {
           )}
         </div>
       )}
+
+      <Pagination
+        page={page}
+        limit={PAGE_SIZE}
+        total={templatesTotal}
+        loading={loading}
+        label="template"
+        onPageChange={setPage}
+      />
 
       {/* Create Modal */}
       {showCreate && createPortal(

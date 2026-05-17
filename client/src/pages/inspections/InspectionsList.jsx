@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
 import EmptyState, { EmptyIncidentsIllustration } from '../../components/shared/EmptyState';
+import Pagination from '../../components/shared/Pagination';
 import TemplateIllustration, {
   CategoryIcon,
   templateIllustrationKind,
@@ -44,6 +45,9 @@ export default function InspectionsList() {
   const canCreate = ELEVATED.has(user?.role);
 
   const [inspections, setInspections] = useState([]);
+  const [inspectionsTotal, setInspectionsTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
   const [summary, setSummary] = useState({ total: 0, in_progress: 0, completed: 0, abandoned: 0 });
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('all');
@@ -61,19 +65,23 @@ export default function InspectionsList() {
 
   const load = () => {
     setLoading(true);
-    const params = { search };
+    const params = { search, page, limit: PAGE_SIZE };
     if (tab !== 'all') params.status = tab;
     Promise.all([
       getInspections(params),
       getInspectionSummary(),
     ]).then(([list, sum]) => {
       setInspections(list.inspections || []);
+      setInspectionsTotal(list.total ?? (list.inspections?.length || 0));
       setSummary(sum);
     }).catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [refreshKey, tab, search]);
+  useEffect(load, [refreshKey, tab, search, page]);
+  // Filter / search changes return to the first page so the user sees the
+  // top of the new result set.
+  useEffect(() => { setPage(1); }, [tab, search]);
 
   // Preload published templates so the quick-launch strip can show without
   // waiting for the modal to open.
@@ -553,6 +561,15 @@ export default function InspectionsList() {
           )}
         </div>
       )}
+
+      <Pagination
+        page={page}
+        limit={PAGE_SIZE}
+        total={inspectionsTotal}
+        loading={loading}
+        label="inspection"
+        onPageChange={setPage}
+      />
 
       {/* Start Inspection Modal */}
       {showStart && createPortal(
