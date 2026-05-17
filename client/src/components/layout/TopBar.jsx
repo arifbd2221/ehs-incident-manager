@@ -7,6 +7,7 @@ import { getNotifications, markAllRead, markRead } from '../../api/notifications
 import { globalSearch } from '../../api/search';
 import StopWorkModal from '../modals/StopWorkModal';
 import SiteSelector from './SiteSelector';
+import ThemeToggle from './ThemeToggle';
 
 const PAGE_TIPS = {
   '/': [
@@ -377,6 +378,7 @@ export default function TopBar() {
         <button className="btn btn-primary btn-sm" onClick={() => setWizardOpen(true)}>
           <Icon name="plus" size={16} /><span>Report incident</span>
         </button>
+        <ThemeToggle />
         <button className={`icon-btn help-beacon ${helpOpen ? 'is-open' : ''}`} title="Help" onClick={() => setHelpOpen(v => !v)}><Icon name="help" size={20} /></button>
         <div className="notif-anchor">
           <button className={`icon-btn ${notifOpen ? 'is-open' : ''}`} title="Notifications" onClick={() => setNotifOpen(v => !v)}>

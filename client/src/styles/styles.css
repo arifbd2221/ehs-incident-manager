@@ -3863,6 +3863,225 @@ body {
 }
 
 /* ================================================================
+ * THEME TOGGLE — TopBar icon button (components/layout/ThemeToggle)
+ * Click flips light↔dark with a sun→moon morph. Long-press / right-
+ * click opens a popover with Light / Dark / System.
+ * ================================================================ */
+.theme-toggle-anchor { position: relative; }
+
+.theme-toggle {
+  /* Override icon-btn defaults: keep the box, but animate cleanly. */
+  position: relative;
+}
+.theme-toggle svg { overflow: visible; }
+
+/* Sun rays — eight short lines around the orb. Stroke uses brand gold
+   in light mode; shrinks + fades when transitioning to moon. */
+.theme-toggle .tt-rays {
+  fill: none;
+  stroke: #F5B400;
+  stroke-width: 2;
+  stroke-linecap: round;
+  transform-origin: 12px 12px;
+  transform-box: view-box;
+  transition: transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 220ms ease,
+              stroke 200ms ease;
+}
+.theme-toggle.is-dark .tt-rays {
+  transform: scale(0.4);
+  opacity: 0;
+  stroke: var(--sds-brand-primary);
+}
+
+/* The orb — sun in light, becomes a crescent in dark (mask cutout slides
+   in from the right). */
+.theme-toggle .tt-orb {
+  fill: #F5B400;
+  transition: fill 280ms ease;
+}
+.theme-toggle.is-dark .tt-orb {
+  fill: #F2F4F8;
+}
+
+/* Mask cutout — sits outside the orb in light, slides in to carve the
+   crescent in dark. */
+.theme-toggle .tt-cutout {
+  transform: translateX(0);
+  transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.theme-toggle.is-dark .tt-cutout {
+  transform: translateX(-8px);
+}
+
+/* Stronger hover glow than the default icon-btn — this button has
+   personality. */
+.theme-toggle:hover:not(:disabled) {
+  background: var(--sds-brand-primary-tint);
+}
+
+/* First-login pulsing ring — draws attention without being loud. */
+.tt-pulse {
+  position: absolute;
+  inset: -2px;
+  border-radius: 10px;
+  pointer-events: none;
+  box-shadow: 0 0 0 0 rgba(98, 109, 249, 0.55);
+  animation: ttPulse 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes ttPulse {
+  0%   { box-shadow: 0 0 0 0   rgba(98, 109, 249, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(98, 109, 249, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(98, 109, 249, 0); }
+}
+
+/* First-login tooltip — short message anchored under the button. */
+.tt-intro {
+  position: fixed;
+  z-index: var(--sds-z-tooltip);
+  max-width: 260px;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
+  background: #1A1A1A;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  animation: ttIntroIn 360ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  cursor: pointer;
+}
+@keyframes ttIntroIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.tt-intro-arrow {
+  position: absolute;
+  top: -5px;
+  right: 22px;
+  width: 10px;
+  height: 10px;
+  background: #1A1A1A;
+  transform: rotate(45deg);
+  border-radius: 2px;
+}
+.tt-intro-text { flex: 1; min-width: 0; }
+.tt-intro-close {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 150ms ease;
+  margin-top: 1px;
+}
+.tt-intro-close:hover { background: rgba(255, 255, 255, 0.24); }
+
+/* Popover (long-press / right-click) */
+.tt-pop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--sds-z-dropdown) - 1);
+}
+.tt-pop {
+  position: fixed;
+  z-index: var(--sds-z-dropdown);
+  min-width: 220px;
+  background: var(--sds-bg-surface);
+  border: 1px solid var(--sds-border);
+  border-radius: var(--sds-radius-md);
+  box-shadow: var(--sds-shadow-elevated);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: ttPopIn 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-origin: top right;
+}
+@keyframes ttPopIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.tt-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--sds-fg-heading);
+  font-family: var(--sds-font-family);
+  transition: background 120ms ease;
+}
+.tt-pop-item:hover { background: var(--sds-bg-surface-alt); }
+.tt-pop-item.is-active { background: var(--sds-brand-primary-tint); }
+.tt-pop-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  border: 1px solid var(--sds-border);
+}
+.tt-pop-swatch-light {
+  background: linear-gradient(135deg, #FFFFFF 0%, #F2F5F7 100%);
+}
+.tt-pop-swatch-dark {
+  background: linear-gradient(135deg, #1A1D24 0%, #0F1218 100%);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.tt-pop-swatch-system {
+  background: linear-gradient(135deg, #FFFFFF 0%, #FFFFFF 49%, #1A1D24 51%, #0F1218 100%);
+}
+.tt-pop-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.tt-pop-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.tt-pop-desc {
+  font-size: 11px;
+  color: var(--sds-fg-tertiary);
+}
+.tt-pop-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--sds-brand-primary);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle .tt-rays,
+  .theme-toggle .tt-orb,
+  .theme-toggle .tt-cutout { transition: none; }
+  .tt-pulse { animation: none; }
+  .tt-intro,
+  .tt-pop { animation: none; }
+}
+
+/* ================================================================
  * THEME PICKER — Settings → Appearance
  * ================================================================ */
 .theme-grid {
