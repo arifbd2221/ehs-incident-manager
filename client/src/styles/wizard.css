@@ -36,13 +36,13 @@
 }
 
 /* Left sidebar — context & progress
-   Stays a dark panel in every theme (like the login brand-side gradient).
-   Uses fixed colors so the gray-scale token inversion in dark mode
-   doesn't flip the panel to white. */
+   Brand-purple showcase panel that matches the login auth-brand
+   gradient. Stays purple in every theme so the gray-scale token
+   inversion in dark mode can't flip it to white. */
 .wiz-sidebar {
   width: 300px;
   flex-shrink: 0;
-  background: linear-gradient(180deg, #1A1A1A 0%, #333333 50%, #626DF9 100%);
+  background: linear-gradient(180deg, #626DF9 0%, #4338ca 50%, #312e81 100%);
   color: #fff;
   display: flex;
   flex-direction: column;
