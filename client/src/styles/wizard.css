@@ -225,6 +225,7 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   font-size: 12px;
   gap: 10px;
+  min-width: 0;
 }
 .wiz-preview-row:last-child { border-bottom: 0; }
 .wiz-preview-row .lbl {
@@ -232,15 +233,47 @@
   font-weight: 500;
   color: rgba(255, 255, 255, 0.7);
   letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
 .wiz-preview-row .val {
   font-weight: 600;
   text-align: right;
-  max-width: 150px;
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #fff;
+}
+
+/* Long free-text fields (title, area, location) need to wrap rather
+   than truncate at ~15 chars. Stack the value under the label and let
+   it use the full 224px content width, clamped at 2 lines. */
+.wiz-preview-row.is-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 10px 0;
+}
+.wiz-preview-row.is-stacked .lbl {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.55);
+}
+.wiz-preview-row.is-stacked .val {
+  text-align: left;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.35;
+  font-size: 12.5px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* Severity + Track tags re-tuned for legibility on the purple gradient:

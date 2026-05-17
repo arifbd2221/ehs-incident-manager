@@ -694,23 +694,23 @@ export default function ReportWizard({ onClose, onSubmit, prefill }) {
           <div className="wiz-preview">
             <div className="wiz-preview-h">Live preview</div>
             {title && (
-              <div className="wiz-preview-row">
+              <div className="wiz-preview-row is-stacked">
                 <span className="lbl">Title</span>
-                <span className="val">{title}</span>
+                <span className="val" title={title}>{title}</span>
               </div>
             )}
             <div className="wiz-preview-row">
               <span className="lbl">Type</span>
-              <span className="val">{typeName}</span>
+              <span className="val" title={typeName}>{typeName}</span>
             </div>
             <div className="wiz-preview-row">
               <span className="lbl">Site</span>
-              <span className="val">{siteName}</span>
+              <span className="val" title={siteName}>{siteName}</span>
             </div>
             {area && (
-              <div className="wiz-preview-row">
+              <div className="wiz-preview-row is-stacked">
                 <span className="lbl">Area</span>
-                <span className="val">{area}</span>
+                <span className="val" title={area}>{area}</span>
               </div>
             )}
             <div className="wiz-preview-row">
