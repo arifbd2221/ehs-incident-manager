@@ -35,11 +35,14 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* Left sidebar — context & progress */
+/* Left sidebar — context & progress
+   Stays a dark panel in every theme (like the login brand-side gradient).
+   Uses fixed colors so the gray-scale token inversion in dark mode
+   doesn't flip the panel to white. */
 .wiz-sidebar {
   width: 300px;
   flex-shrink: 0;
-  background: linear-gradient(180deg, var(--sds-gray-900) 0%, var(--sds-gray-800) 50%, var(--sds-brand-primary) 100%);
+  background: linear-gradient(180deg, #1A1A1A 0%, #333333 50%, #626DF9 100%);
   color: #fff;
   display: flex;
   flex-direction: column;

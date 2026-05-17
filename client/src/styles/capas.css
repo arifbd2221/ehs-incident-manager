@@ -1092,7 +1092,8 @@
   transform: translateX(-50%);
   padding: 12px 24px;
   border-radius: 12px;
-  background: var(--sds-gray-900);
+  /* Toast stays an always-dark pill across themes. */
+  background: #1A1A1A;
   color: #fff;
   font-size: 13px;
   font-weight: 600;
