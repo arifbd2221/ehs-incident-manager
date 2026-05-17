@@ -230,8 +230,8 @@ export default function BodyMap3D({ selected = [], onToggle }) {
                 <feComposite in="SourceGraphic" in2="blur" operator="over" />
               </filter>
               <linearGradient id="bm3d-body-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#e8eaf0" />
-                <stop offset="100%" stopColor="#d1d5de" />
+                <stop offset="0%" stopColor="var(--sds-bg-surface-alt)" />
+                <stop offset="100%" stopColor="var(--sds-border)" />
               </linearGradient>
               <linearGradient id="bm3d-sel-fill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#f87171" />

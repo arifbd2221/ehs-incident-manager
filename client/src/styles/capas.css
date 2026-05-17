@@ -41,7 +41,7 @@
 }
 .capa-stat {
   position: relative;
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 14px;
   padding: 18px 20px;
@@ -127,7 +127,7 @@
 }
 .capa-tab:hover { color: var(--sds-fg-secondary); }
 .capa-tab.active {
-  background: #fff;
+  background: var(--sds-bg-surface);
   color: var(--sds-brand-primary);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
@@ -190,7 +190,7 @@
   height: 22px;
   padding: 0 6px;
   border-radius: 50px;
-  background: #fff;
+  background: var(--sds-bg-surface);
   font-size: 11px;
   font-weight: 800;
   color: var(--sds-fg-tertiary);
@@ -212,7 +212,7 @@
 /* Kanban card */
 .capa-kcard {
   position: relative;
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 12px;
   padding: 14px;
@@ -534,7 +534,7 @@
 
 /* ---- LIST VIEW ---- */
 .capa-list-wrap {
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 14px;
   overflow: hidden;
@@ -595,7 +595,7 @@
 .capa-empty {
   text-align: center;
   padding: 60px 20px;
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px dashed var(--sds-border);
   border-radius: 16px;
 }
@@ -679,7 +679,7 @@
 
 /* Hero card */
 .capd-hero {
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 16px;
   padding: 24px 28px 20px;
@@ -901,7 +901,7 @@
 
 /* Cards */
 .capd-card {
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 14px;
   overflow: hidden;
@@ -1092,7 +1092,8 @@
   transform: translateX(-50%);
   padding: 12px 24px;
   border-radius: 12px;
-  background: var(--sds-gray-900);
+  /* Toast stays an always-dark pill across themes. */
+  background: #1A1A1A;
   color: #fff;
   font-size: 13px;
   font-weight: 600;
@@ -1205,7 +1206,7 @@
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--sds-border);
-  background: #fff;
+  background: var(--sds-bg-surface);
   text-align: left;
   cursor: pointer;
   transition: all 150ms;

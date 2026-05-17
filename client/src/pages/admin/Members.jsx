@@ -417,28 +417,28 @@ export default function Members() {
       {/* Stat cards */}
       <div className="mbr-stats">
         <div className="mbr-stat" style={{ animationDelay: '50ms' }}>
-          <div className="mbr-stat-icon" style={{ background: 'rgba(98,109,249,0.1)', color: '#626DF9' }}>
+          <div className="mbr-stat-icon" style={{ background: 'var(--sds-brand-primary-tint)', color: 'var(--sds-brand-primary)' }}>
             <Icon name="person" size={16} />
           </div>
           <div className="mbr-stat-val">{users.length}</div>
           <div className="mbr-stat-lbl">Total</div>
         </div>
         <div className="mbr-stat" style={{ animationDelay: '100ms' }}>
-          <div className="mbr-stat-icon" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+          <div className="mbr-stat-icon" style={{ background: 'var(--sds-success-bg)', color: 'var(--sds-success)' }}>
             <Icon name="check" size={16} />
           </div>
           <div className="mbr-stat-val">{activeCount}</div>
           <div className="mbr-stat-lbl">Active</div>
         </div>
         <div className="mbr-stat" style={{ animationDelay: '150ms' }}>
-          <div className="mbr-stat-icon" style={{ background: 'rgba(98,109,249,0.1)', color: '#626DF9' }}>
+          <div className="mbr-stat-icon" style={{ background: 'var(--sds-brand-primary-tint)', color: 'var(--sds-brand-primary)' }}>
             <Icon name="shield" size={16} />
           </div>
           <div className="mbr-stat-val">{(roleCounts.admin || 0) + (roleCounts.ehs_manager || 0) + (roleCounts.ehs_officer || 0)}</div>
           <div className="mbr-stat-lbl">Elevated</div>
         </div>
         <div className="mbr-stat" style={{ animationDelay: '200ms' }}>
-          <div className="mbr-stat-icon" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316' }}>
+          <div className="mbr-stat-icon" style={{ background: 'var(--sds-warning-bg)', color: 'var(--sds-warning)' }}>
             <Icon name="factory" size={16} />
           </div>
           <div className="mbr-stat-val">{sites.length}</div>

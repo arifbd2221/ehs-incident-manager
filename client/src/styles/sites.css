@@ -34,7 +34,7 @@
 }
 
 .site-card {
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 8px;
   padding: 18px;

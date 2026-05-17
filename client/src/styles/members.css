@@ -20,7 +20,7 @@
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #626DF9, #4338ca);
+  background: linear-gradient(135deg, var(--sds-brand-primary), #4338ca);
   color: #fff;
   display: flex;
   align-items: center;
@@ -306,13 +306,13 @@
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #22c55e;
+  color: var(--sds-success);
 }
 .mbr-status-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #22c55e;
+  background: var(--sds-success);
   display: inline-block;
   --dot-glow: rgba(34, 197, 94, 0.4);
   animation: dotPulse 2s infinite;
@@ -367,14 +367,14 @@
   transform: scale(0.93);
 }
 .mbr-act-btn.mbr-act-danger:hover {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #dc2626;
+  background: var(--sds-error-bg);
+  border-color: var(--sds-error-bg);
+  color: var(--sds-error);
 }
 .mbr-act-btn.mbr-act-success:hover {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
-  color: #22c55e;
+  background: var(--sds-success-bg);
+  border-color: var(--sds-success-bg);
+  color: var(--sds-success);
 }
 
 /* Empty state */
