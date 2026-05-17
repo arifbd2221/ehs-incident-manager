@@ -179,65 +179,100 @@
   opacity: 0.6;
 }
 
-/* Live preview in sidebar */
+/* Live preview in sidebar — frosted card on the brand gradient.
+   The translucent surface lifts the preview off the purple bg and gives
+   the labels enough contrast to read cleanly. */
 .wiz-preview {
   flex: 1;
   position: relative;
   z-index: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 14px 14px 6px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .wiz-preview-h {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  opacity: 0.4;
-  margin-bottom: 12px;
+  letter-spacing: 0.12em;
+  opacity: 0.7;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wiz-preview-h::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #FFC93C;
+  box-shadow: 0 0 8px rgba(255, 201, 60, 0.6);
+  animation: wizPreviewDot 1.8s ease-in-out infinite;
+}
+@keyframes wizPreviewDot {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
 }
 .wiz-preview-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   font-size: 12px;
+  gap: 10px;
 }
+.wiz-preview-row:last-child { border-bottom: 0; }
 .wiz-preview-row .lbl {
-  opacity: 0.5;
+  font-size: 11px;
   font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.02em;
 }
 .wiz-preview-row .val {
   font-weight: 600;
   text-align: right;
-  max-width: 140px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #fff;
 }
+
+/* Severity + Track tags re-tuned for legibility on the purple gradient:
+   slightly stronger backgrounds, full-opacity text, and a hairline
+   white border for definition. */
 .wiz-preview-row .val .wiz-sev {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 50px;
   font-size: 10px;
   font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
-.wiz-sev.ws1 { background: rgba(211, 47, 47, 0.2); color: rgba(211, 47, 47, 0.85); }
-.wiz-sev.ws2 { background: rgba(237, 108, 2, 0.2); color: rgba(237, 108, 2, 0.85); }
-.wiz-sev.ws3 { background: rgba(237, 108, 2, 0.15); color: rgba(237, 108, 2, 0.7); }
-.wiz-sev.ws4 { background: rgba(46, 125, 50, 0.2); color: rgba(46, 125, 50, 0.85); }
-.wiz-sev.ws5 { background: rgba(98, 109, 249, 0.2); color: rgba(98, 109, 249, 0.85); }
+.wiz-sev.ws1 { background: rgba(244, 67, 54, 0.30);  color: #ffd0cc; }
+.wiz-sev.ws2 { background: rgba(255, 152, 0, 0.30);  color: #ffe2b3; }
+.wiz-sev.ws3 { background: rgba(255, 193, 7, 0.28);  color: #ffeab3; }
+.wiz-sev.ws4 { background: rgba(76, 175, 80, 0.32);  color: #c8f0c9; }
+.wiz-sev.ws5 { background: rgba(255, 255, 255, 0.18); color: #fff; }
 .wiz-track-tag {
   display: inline-flex;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 800;
   font-family: 'SF Mono', Menlo, monospace;
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
-.wiz-track-tag.wta { background: rgba(211, 47, 47, 0.2); color: rgba(211, 47, 47, 0.85); }
-.wiz-track-tag.wtb { background: rgba(237, 108, 2, 0.2); color: rgba(237, 108, 2, 0.85); }
-.wiz-track-tag.wtc { background: rgba(46, 125, 50, 0.2); color: rgba(46, 125, 50, 0.85); }
+.wiz-track-tag.wta { background: rgba(244, 67, 54, 0.30); color: #ffd0cc; }
+.wiz-track-tag.wtb { background: rgba(255, 152, 0, 0.30); color: #ffe2b3; }
+.wiz-track-tag.wtc { background: rgba(76, 175, 80, 0.32); color: #c8f0c9; }
 
 /* Main content area */
 .wiz-main {
