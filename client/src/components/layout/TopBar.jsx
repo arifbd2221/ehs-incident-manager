@@ -370,7 +370,6 @@ export default function TopBar() {
           )}
         </div>
         <SiteSelector />
-        <div className="module-tag"><span className="pulse" />EHS Module</div>
         <div className="grow" />
         <button className="btn btn-danger btn-sm topbar-stopwork" onClick={() => setStopWorkOpen(true)} title="Submit a stop-work — imminent danger">
           <Icon name="warning" size={16} /><span>STOP WORK</span>
