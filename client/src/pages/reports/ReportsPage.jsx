@@ -9,6 +9,7 @@ import Icon from '../../components/shared/Icon';
 import { useAlert, usePrompt } from '../../components/shared/Dialog';
 import ComboBox from '../../components/shared/ComboBox';
 import DatePicker from '../../components/shared/DatePicker';
+import Pagination from '../../components/shared/Pagination';
 import CertifyOsha300AModal from '../../components/modals/CertifyOsha300AModal';
 import { formatDateShort, formatDate } from '../../utils/time';
 import { riddorCategoryLabel, riddorCategoryReg } from '../../utils/riddor';
@@ -727,17 +728,14 @@ function AuditLogReport() {
           </table>
         </div>
 
-        {data.total > data.limit && (
-          <div className="al-pager">
-            <button className="btn btn-secondary btn-sm" disabled={data.page <= 1 || loading} onClick={() => fetchPage(data.page - 1)}>
-              <Icon name="arrowL" size={12}/> Prev
-            </button>
-            <span className="al-pager-meta">Page {data.page} of {totalPages}</span>
-            <button className="btn btn-secondary btn-sm" disabled={data.page >= totalPages || loading} onClick={() => fetchPage(data.page + 1)}>
-              Next <Icon name="arrow" size={12}/>
-            </button>
-          </div>
-        )}
+        <Pagination
+          page={data.page}
+          limit={data.limit}
+          total={data.total}
+          loading={loading}
+          label="entry"
+          onPageChange={fetchPage}
+        />
       </div>
     </div>
   );
