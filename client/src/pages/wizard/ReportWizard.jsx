@@ -693,6 +693,36 @@ export default function ReportWizard({ onClose, onSubmit, prefill }) {
 
           <div className="wiz-preview">
             <div className="wiz-preview-h">Live preview</div>
+            <div className="wiz-preview-illust" aria-hidden="true">
+              <svg viewBox="0 0 96 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Clipboard body */}
+                <rect x="22" y="8" width="52" height="40" rx="3"
+                      fill="rgba(255,255,255,0.06)"
+                      stroke="rgba(255,255,255,0.50)" strokeWidth="1.4" />
+                {/* Clip at the top */}
+                <rect x="38" y="3" width="20" height="8" rx="1.6"
+                      fill="rgba(255,255,255,0.22)"
+                      stroke="rgba(255,255,255,0.60)" strokeWidth="1.4" />
+                {/* Three data lines that fill in sequentially */}
+                <line className="wp-line wp-line-1" x1="29" y1="20" x2="63" y2="20"
+                      stroke="#FFC93C" strokeWidth="2" strokeLinecap="round" />
+                <line className="wp-line wp-line-2" x1="29" y1="27" x2="57" y2="27"
+                      stroke="#FFC93C" strokeWidth="2" strokeLinecap="round" />
+                <line className="wp-line wp-line-3" x1="29" y1="34" x2="61" y2="34"
+                      stroke="#FFC93C" strokeWidth="2" strokeLinecap="round" />
+                {/* Check that draws in once the rows settle */}
+                <path className="wp-check" d="M41 41 L46 45 L56 37"
+                      stroke="#9be3a0" strokeWidth="2.2" strokeLinecap="round"
+                      strokeLinejoin="round" fill="none" />
+                {/* Pen tip — quietly orbits while data is being captured */}
+                <g className="wp-pen">
+                  <line x1="0" y1="0" x2="7" y2="-7"
+                        stroke="rgba(255,255,255,0.85)" strokeWidth="2"
+                        strokeLinecap="round" />
+                  <circle cx="0" cy="0" r="1.5" fill="#FFC93C" />
+                </g>
+              </svg>
+            </div>
             {title && (
               <div className="wiz-preview-row is-stacked">
                 <span className="lbl">Title</span>

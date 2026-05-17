@@ -246,6 +246,79 @@
   color: #fff;
 }
 
+/* "Incident being recorded" illustration — a small clipboard whose
+   data lines fill in sequentially and a check pops on, while a pen tip
+   quietly orbits the page. Loops every ~3.6s. */
+.wiz-preview-illust {
+  display: flex;
+  justify-content: center;
+  margin: 2px auto 12px;
+}
+.wiz-preview-illust svg {
+  width: 96px;
+  height: 52px;
+  display: block;
+  overflow: visible;
+}
+
+/* Each line "draws" left-to-right via stroke-dashoffset, with a small
+   stagger so they feel typed in sequence. */
+.wp-line {
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: wpLineFill 3.6s ease-in-out infinite;
+}
+.wp-line-2 { animation-delay: 0.15s; }
+.wp-line-3 { animation-delay: 0.30s; }
+@keyframes wpLineFill {
+  0%  { stroke-dashoffset: 40; }
+  18% { stroke-dashoffset: 0; }
+  75% { stroke-dashoffset: 0; }
+  88% { stroke-dashoffset: 40; }
+  100% { stroke-dashoffset: 40; }
+}
+
+/* Check draws on once the third line is in, holds while everything is
+   complete, then clears with the rest of the cycle. */
+.wp-check {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  opacity: 0;
+  animation: wpCheckDraw 3.6s ease-in-out infinite;
+}
+@keyframes wpCheckDraw {
+  0%, 15% { stroke-dashoffset: 22; opacity: 0; }
+  25%     { stroke-dashoffset: 0;  opacity: 1; }
+  72%     { stroke-dashoffset: 0;  opacity: 1; }
+  85%     { stroke-dashoffset: 0;  opacity: 0; }
+  100%    { stroke-dashoffset: 22; opacity: 0; }
+}
+
+/* Pen tip traces over each data line as it fills, then parks. */
+.wp-pen {
+  transform-box: fill-box;
+  animation: wpPenTrace 3.6s ease-in-out infinite;
+  opacity: 0.92;
+}
+@keyframes wpPenTrace {
+  0%   { transform: translate(63px, 20px); }
+  18%  { transform: translate(29px, 20px); }
+  25%  { transform: translate(57px, 27px); }
+  40%  { transform: translate(29px, 27px); }
+  47%  { transform: translate(61px, 34px); }
+  62%  { transform: translate(29px, 34px); }
+  72%  { transform: translate(56px, 37px); opacity: 0.92; }
+  85%  { opacity: 0; }
+  100% { transform: translate(63px, 20px); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wp-line, .wp-check, .wp-pen { animation: none; }
+  .wp-line { stroke-dashoffset: 0; }
+  .wp-check { stroke-dashoffset: 0; opacity: 1; }
+  .wp-pen { opacity: 0; }
+}
+
 /* Long free-text fields (title, area, location) need to wrap rather
    than truncate at ~15 chars. Stack the value under the label and let
    it use the full 224px content width, clamped at 2 lines. */
