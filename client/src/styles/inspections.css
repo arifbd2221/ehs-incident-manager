@@ -1999,7 +1999,9 @@
   border-top: 1px solid var(--sds-border);
   position: sticky;
   bottom: 0;
-  background: rgba(242,245,247,0.92);
+  /* Translucent version of the page background so the sticky footer
+     blends with the surface underneath in either theme. */
+  background: color-mix(in srgb, var(--sds-bg-page) 92%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   z-index: 10;

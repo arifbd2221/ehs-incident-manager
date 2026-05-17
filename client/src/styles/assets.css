@@ -2682,7 +2682,7 @@ select.am-input {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255,255,255,0.92);
+  background: color-mix(in srgb, var(--sds-bg-surface) 92%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--sds-border);
