@@ -10,6 +10,33 @@ import { renderGenericIncidentPdf, ALL_SECTIONS as GENERIC_ALL_SECTIONS } from '
 import { renderSafeworkNswPdf } from '../services/pdf/safework_nsw.js';
 import { resolveOrgLogoPath } from '../services/pdf/logo.js';
 import { listAffectedPersons } from '../services/affected_persons.js';
+import { PART_LABELS } from '../services/body_parts.js';
+
+// Body-part values live in two shapes across the data model: injuries.body_part
+// is a comma-joined string ("l_hand, r_hand") while type_data.body_parts is a
+// JSON array (["l_hand", "r_hand"]). Both store the same canonical region IDs.
+// This helper accepts either and produces a human-readable label string suitable
+// for 301 field 16, 300 column E, and the Reports-tab on-screen preview.
+function labelBodyParts(input) {
+  if (!input) return '';
+  let ids;
+  if (Array.isArray(input)) {
+    ids = input;
+  } else {
+    const raw = String(input);
+    try {
+      const parsed = JSON.parse(raw);
+      ids = Array.isArray(parsed) ? parsed : raw.split(',');
+    } catch {
+      ids = raw.split(',');
+    }
+  }
+  return ids
+    .map(id => String(id).trim())
+    .filter(Boolean)
+    .map(id => PART_LABELS[id] || id)
+    .join(', ');
+}
 import {
   listSevereNotificationsForIncident,
   getSevereNotification,
@@ -596,15 +623,19 @@ router.get('/osha-301/:incidentId', (req, res) => {
       what_happened: incident.description || incident.title || '',
       description: incident.description || '',
       injury_summary: [
-        (primaryInj?.body_part || (td.body_parts || []).join(', ')) || '',
+        labelBodyParts(primaryInj?.body_part || td.body_parts),
         primaryInj?.injury_type || td.injury_type || td.illness_category || '',
       ].filter(Boolean).join(' — '),
       object_substance: primaryInj?.object_substance || td.object_substance || td.substance?.name || '',
       date_of_death: primaryInj?.date_of_death || incident.osha_date_of_death || '',
     };
+    // 301 field "Completed by · Title" expects the human job title (e.g.
+    // "Chief Operating Officer"), not the system role (e.g. "admin"). JWT
+    // omits job_title to keep the token lean, so look it up directly.
+    const completer = db.prepare('SELECT job_title FROM users WHERE id = ?').get(req.user.id);
     const completedBy = {
       name: req.user.name || '',
-      title: req.user.role || '',
+      title: completer?.job_title || '',
       phone: '',
       date: new Date().toISOString().slice(0, 10),
     };
@@ -671,10 +702,10 @@ router.get('/osha-301/:incidentId', (req, res) => {
       title: incident.title,
     },
     injury: {
-      type: td.injury_type || td.illness_category || '',
-      body_part: (td.body_parts || []).join(', '),
-      object_substance: td.object_substance || td.substance?.name || '',
-      mechanism: td.mechanism || '',
+      type: primaryInj?.injury_type || td.injury_type || td.illness_category || '',
+      body_part: labelBodyParts(primaryInj?.body_part || td.body_parts),
+      object_substance: primaryInj?.object_substance || td.object_substance || td.substance?.name || '',
+      mechanism: primaryInj?.mechanism || td.mechanism || '',
     },
     classification: {
       type: incident.osha_recordability_type,
