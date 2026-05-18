@@ -962,6 +962,8 @@ function Osha301Report({ siteId }) {
   const [selectedId, setSelectedId] = useState('');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     const params = { limit: 200 };
@@ -983,6 +985,39 @@ function Osha301Report({ siteId }) {
 
   const incidentOpts = incidents.map(i => ({ value: String(i.id), label: `${i.incident_number} — ${i.title}` }));
 
+  const downloadPdf = async () => {
+    if (!selectedId || downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`/api/reports/osha-301/${selectedId}?format=pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `Download failed: ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      let filename = `osha-301-${data?.incident_number || selectedId}.pdf`;
+      const cd = resp.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      if (m) filename = m[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setToast(e.message || 'Download failed');
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   return (
     <div className="rpt-panel">
       <div className="rpt-panel-header">
@@ -990,7 +1025,18 @@ function Osha301Report({ siteId }) {
           <div className="rpt-panel-title">OSHA 301 · Injury and Illness Incident Report</div>
           <div className="rpt-panel-sub">Individual incident form per 29 CFR 1904.29</div>
         </div>
+        {selectedId && data && !loading && (
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={downloadPdf}
+            disabled={downloadingPdf}
+            title="Download the OSHA 301 Injury and Illness Incident Report (29 CFR 1904.29(b)(2))"
+          >
+            <Icon name="download" size={13}/>{downloadingPdf ? 'Generating…' : 'Download PDF'}
+          </button>
+        )}
       </div>
+      {toast && <div className="toast"><Icon name="warning" size={14}/>{toast}</div>}
       <div style={{ padding: '16px 20px' }}>
         <div className="field" style={{ maxWidth: 480 }}>
           <label className="label">Select a recordable incident</label>

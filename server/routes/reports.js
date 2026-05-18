@@ -565,9 +565,15 @@ router.get('/osha-301/:incidentId', (req, res) => {
   const primaryInj = primaryAp?.injuries?.[0] || null;
 
   if (req.query.format === 'pdf') {
-    // Form 301 is per-recordable case per 29 CFR 1904.29(b)(2). We don't
-    // hard-block non-recordable PDFs (the FE hides the button instead) so
-    // an inspector can still pull a "draft" 301 if needed during triage.
+    // Form 301 is per-recordable case per 29 CFR 1904.29(b)(2) — only
+    // generate the PDF for cases that have been verified recordable. The
+    // JSON branch (below) still serves any incident so EHS officers can
+    // review case details on-screen during recordability triage.
+    if (incident.osha_recordable !== 1) {
+      return res.status(409).json({
+        error: 'OSHA 301 is only generated for recordable cases. Complete recordability verification first.',
+      });
+    }
 
     // Build the renderer payload from the same shape the JSON branch
     // returns below — keeps the two surfaces in lockstep.
