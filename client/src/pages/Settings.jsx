@@ -1,12 +1,35 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { changePassword, getSites } from '../api/auth';
 import Icon from '../components/shared/Icon';
 import ComboBox from '../components/shared/ComboBox';
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: 'person' },
+  { id: 'appearance', label: 'Appearance', icon: 'eye' },
   { id: 'security', label: 'Security', icon: 'shield' },
+];
+
+const THEME_OPTIONS = [
+  {
+    id: 'light',
+    label: 'Light',
+    desc: 'Bright surfaces, default look.',
+    swatches: ['#FFFFFF', '#F2F5F7', '#626DF9', '#1A1A1A'],
+  },
+  {
+    id: 'dark',
+    label: 'Dark',
+    desc: 'Easier on the eyes in low light.',
+    swatches: ['#1A1D24', '#0F1218', '#7A85FF', '#F2F4F8'],
+  },
+  {
+    id: 'system',
+    label: 'System',
+    desc: 'Match your operating system preference.',
+    swatches: ['#FFFFFF', '#1A1D24', '#626DF9', '#7A85FF'],
+  },
 ];
 
 const FRAMEWORK_LABELS = {
@@ -73,6 +96,7 @@ const InfoRow = ({ icon, color, label, children }) => (
 
 export default function Profile() {
   const { user, updateUser, logout } = useAuth();
+  const { theme, resolved, setTheme } = useTheme();
   const [sites, setSites] = useState([]);
   const [tab, setTab] = useState('profile');
   const [editing, setEditing] = useState(false);
@@ -290,6 +314,48 @@ export default function Profile() {
               {user.naics_code && <InfoRow icon="info" color="#7C3AED" label="NAICS">{user.naics_code}</InfoRow>}
             </div>
             {user.role === 'admin' && <OrgLogoWidget user={user} />}
+          </section>
+        </div>
+      )}
+
+      {/* Appearance tab */}
+      {tab === 'appearance' && (
+        <div className="prof-tab-content" key="appearance">
+          <section className="prof-section">
+            <div className="prof-sec-h">
+              <div className="prof-sec-icon" style={{ '--si-color': '#626DF9' }}><Icon name="eye" size={18} /></div>
+              <div className="prof-sec-title">
+                <span>Theme</span>
+                <span className="prof-sec-sub">
+                  Choose how the app looks. {theme === 'system' && <em>Currently following system ({resolved}).</em>}
+                </span>
+              </div>
+            </div>
+
+            <div className="theme-grid">
+              {THEME_OPTIONS.map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`theme-tile ${theme === opt.id ? 'is-active' : ''}`}
+                  onClick={() => setTheme(opt.id)}
+                  aria-pressed={theme === opt.id}
+                >
+                  <div className="theme-tile-preview" data-preview={opt.id}>
+                    {opt.swatches.map((c, i) => (
+                      <span key={i} className="theme-tile-swatch" style={{ background: c }} />
+                    ))}
+                  </div>
+                  <div className="theme-tile-body">
+                    <div className="theme-tile-title">
+                      {opt.label}
+                      {theme === opt.id && <span className="theme-tile-check"><Icon name="check" size={12} /></span>}
+                    </div>
+                    <div className="theme-tile-desc">{opt.desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
           </section>
         </div>
       )}

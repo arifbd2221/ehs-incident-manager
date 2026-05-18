@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Icon from '../../../components/shared/Icon';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 
 // UX-D: dual-purpose witness modal. Pass `witness` to edit; omit to add.
 export default function WitnessModal({ incident, witness, onCancel, onConfirm }) {
@@ -54,7 +55,13 @@ export default function WitnessModal({ incident, witness, onCancel, onConfirm })
           </div>
           <div className="form-group">
             <label className="form-label">Statement <span className="optional">(optional)</span></label>
-            <textarea className="form-textarea" rows={4} value={statement} onChange={e => setStatement(e.target.value)} placeholder="What did they observe?"/>
+            <SmartTextarea
+              value={statement}
+              onChange={setStatement}
+              rows={4}
+              inputClassName="form-textarea"
+              placeholder="What did they observe?"
+            />
           </div>
         </div>
         <div className="idet-modal-footer">

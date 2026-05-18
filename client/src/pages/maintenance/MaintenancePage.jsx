@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
+import Pagination from '../../components/shared/Pagination';
 import { listSchedules, getSchedule, deleteSchedule } from '../../api/maintenance';
 import { getSites } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
@@ -19,6 +20,7 @@ import ScheduleModal from '../../components/maintenance/ScheduleModal';
 import CompleteModal from '../../components/maintenance/CompleteModal';
 import EscalateModal from '../../components/maintenance/EscalateModal';
 import ScheduleDetailModal from '../../components/maintenance/ScheduleDetailModal';
+import { useConfirm, useAlert } from '../../components/shared/Dialog';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
@@ -70,6 +72,8 @@ export default function MaintenancePage() {
   const { refreshKey, activeSiteId } = useApp();
   const canEdit = ELEVATED.has(user?.role);
   const [searchParams, setSearchParams] = useSearchParams();
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
 
   const [sites, setSites] = useState([]);
   const [siteFilter, setSiteFilter] = useState('');
@@ -77,6 +81,9 @@ export default function MaintenancePage() {
   const [tab, setTab] = useState('overdue');
 
   const [schedules, setSchedules] = useState([]);
+  const [schedulesTotal, setSchedulesTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
   const [loading, setLoading] = useState(true);
 
   const [counts, setCounts] = useState({ overdue: 0, due7: 0, due30: 0 });
@@ -107,16 +114,21 @@ export default function MaintenancePage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    const params = { status: tab, limit: 200 };
+    const params = { status: tab, page, limit: PAGE_SIZE };
     if (siteFilter) params.site_id = siteFilter;
     if (typeFilter) params.schedule_type = typeFilter;
     listSchedules(params)
-      .then(d => setSchedules(d.schedules || []))
-      .catch(() => setSchedules([]))
+      .then(d => {
+        setSchedules(d.schedules || []);
+        setSchedulesTotal(d.total ?? (d.schedules?.length || 0));
+      })
+      .catch(() => { setSchedules([]); setSchedulesTotal(0); })
       .finally(() => setLoading(false));
-  }, [tab, siteFilter, typeFilter, refreshKey]);
+  }, [tab, siteFilter, typeFilter, page, refreshKey]);
 
   useEffect(load, [load]);
+  // Reset to page 1 on any filter change.
+  useEffect(() => { setPage(1); }, [tab, siteFilter, typeFilter]);
 
   // Refresh the top KPI counts independently — these stay stable regardless
   // of the active tab. Bulk fetches per status so the FE doesn't re-implement
@@ -155,9 +167,21 @@ export default function MaintenancePage() {
   };
 
   const handleArchive = async (schedule) => {
-    if (!window.confirm(`Archive "${schedule.title}"? Existing completion history stays in the audit log.`)) return;
+    const ok = await confirmDialog({
+      title: `Archive "${schedule.title}"?`,
+      body: 'Existing completion history stays in the audit log. The schedule will be hidden from active views but can be restored later.',
+      confirmLabel: 'Archive',
+      danger: true,
+    });
+    if (!ok) return;
     try { await deleteSchedule(schedule.id); load(); refreshCounts(); }
-    catch (e) { alert(e.response?.data?.error || 'Archive failed'); }
+    catch (e) {
+      await alertDialog({
+        title: 'Archive failed',
+        body: e.response?.data?.error || 'Could not archive this schedule.',
+        tone: 'error',
+      });
+    }
   };
 
   const handleAfterAction = () => {
@@ -247,8 +271,8 @@ export default function MaintenancePage() {
 
       {/* Tabs + filters */}
       <div className="card card-pad" style={{ marginBottom: 0, padding: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid var(--sds-border)' }}>
-          <div style={{ display: 'flex', gap: 4 }}>
+        <div className="mnt-filter-bar">
+          <div className="mnt-status-tabs">
             {TABS.map(t => {
               const badge = tabBadge(t.id);
               return (
@@ -265,17 +289,15 @@ export default function MaintenancePage() {
               );
             })}
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <select
+            className="mnt-type-select"
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+          >
             {TYPE_FILTERS.map(t => (
-              <button
-                key={t.id}
-                className={`btn btn-sm ${typeFilter === t.id ? 'btn-primary' : 'btn-tertiary'}`}
-                onClick={() => setTypeFilter(t.id)}
-              >
-                {t.label}
-              </button>
+              <option key={t.id} value={t.id}>{t.label}</option>
             ))}
-          </div>
+          </select>
         </div>
 
         {loading ? (
@@ -419,6 +441,15 @@ export default function MaintenancePage() {
           </table>
         )}
       </div>
+
+      <Pagination
+        page={page}
+        limit={PAGE_SIZE}
+        total={schedulesTotal}
+        loading={loading}
+        label="schedule"
+        onPageChange={setPage}
+      />
 
       {/* Modals */}
       {completeTarget && (

@@ -13,7 +13,10 @@ import {
   setSafeworkNswPcbu,
 } from '../../api/safework_nsw';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyAttachmentsIllustration, EmptyWitnessesIllustration } from '../../components/shared/EmptyState';
+import { useConfirm, usePrompt } from '../../components/shared/Dialog';
 import { TypePill, SevBadge, TrackBadge, typeOf } from '../../components/shared/Badges';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import RecordabilityVerifyCard from '../../components/incidents/RecordabilityVerifyCard';
 import DeadlineBadge from '../../components/incidents/DeadlineBadge';
 import { useAuth } from '../../context/AuthContext';
@@ -111,7 +114,13 @@ function FactEdit({ label, value, onSave, allowed, placeholder = '—' }) {
   if (editing) return (
     <div className="idet-fact is-editing">
       <span className="idet-fact-label">{label}</span>
-      <input className="input" value={draft} autoFocus onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel(); }}/>
+      <SmartTextarea
+        value={draft}
+        onChange={setDraft}
+        multiline={false}
+        autoFocus
+        onKeyDown={e => { if (e.key === 'Escape') cancel(); }}
+      />
       <div className="idet-edit-row">
         <button className="btn btn-secondary btn-sm" onClick={cancel} disabled={saving}>Cancel</button>
         <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || draft.trim() === (value || '')}>{saving ? 'Saving…' : 'Save'}</button>
@@ -125,7 +134,7 @@ function FactEdit({ label, value, onSave, allowed, placeholder = '—' }) {
       <span className="idet-fact-val">
         {value || <span className="idet-edit-empty">{placeholder}</span>}
         {allowed && (
-          <button className="idet-edit-trigger" onClick={start} title={`Edit ${label.toLowerCase()}`}>
+          <button className="idet-edit-trigger" onClick={start} title={`Edit ${label.toLowerCase()}`} aria-label={`Edit ${label.toLowerCase()}`}>
             <Icon name="edit" size={11}/>edit
           </button>
         )}
@@ -154,7 +163,14 @@ function DescEdit({ value, fallback, onSave, allowed }) {
 
   if (editing) return (
     <>
-      <textarea className="textarea" value={draft} autoFocus rows={5} placeholder="Describe what happened…" onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') cancel(); }}/>
+      <SmartTextarea
+        value={draft}
+        onChange={setDraft}
+        rows={5}
+        autoFocus
+        placeholder="Describe what happened…"
+        onKeyDown={e => { if (e.key === 'Escape') cancel(); }}
+      />
       <div className="idet-edit-row">
         <button className="btn btn-secondary btn-sm" onClick={cancel} disabled={saving}>Cancel</button>
         <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || draft.trim() === (value || '')}>{saving ? 'Saving…' : 'Save'}</button>
@@ -166,7 +182,7 @@ function DescEdit({ value, fallback, onSave, allowed }) {
     <p className="idet-desc-text">
       {value || fallback}
       {allowed && (
-        <button className="idet-edit-trigger" onClick={start} title="Edit description">
+        <button className="idet-edit-trigger" onClick={start} title="Edit description" aria-label="Edit description">
           <Icon name="edit" size={11}/>edit
         </button>
       )}
@@ -188,6 +204,7 @@ const RIDDOR_PHONE_CATEGORIES = new Set([
 function RiddorActionsCard({ incident, canAct, onChange }) {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
+  const promptDialog = usePrompt();
   const rows = incident.riddor_reports || [];
 
   const doPhone = async (rid) => {
@@ -197,7 +214,14 @@ function RiddorActionsCard({ incident, canAct, onChange }) {
     finally { setBusyId(null); }
   };
   const doWritten = async (rid) => {
-    const hseRef = window.prompt('HSE reference number from F2508 receipt (optional):', '') || '';
+    const hseRef = await promptDialog({
+      title: 'Log F2508 submission',
+      body: 'Record the HSE reference number from the F2508 receipt. You can leave this blank if not yet assigned.',
+      label: 'HSE reference number',
+      placeholder: 'Optional — e.g. HSE/123456',
+      confirmLabel: 'Log submission',
+    });
+    if (hseRef === null) return; // user cancelled
     setBusyId(rid); setError(null);
     try { await logRiddorWrittenSubmitted(rid, hseRef.trim() ? { hse_ref: hseRef.trim() } : {}); onChange?.(); }
     catch (e) { setError(e?.response?.data?.error || 'Failed to log submission.'); }
@@ -309,17 +333,18 @@ function RiddorActionsCard({ incident, canAct, onChange }) {
 const fileTypeInfo = (a) => {
   const name = a.filename || '';
   const mime = a.mime_type || '';
-  if (mime.startsWith('image/')) return { type: 'image', color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', label: 'Image' };
-  if (mime === 'application/pdf' || name.endsWith('.pdf')) return { type: 'pdf', color: '#ef4444', bg: 'rgba(239,68,68,0.08)', label: 'PDF' };
-  if (mime.includes('word') || /\.docx?$/.test(name)) return { type: 'doc', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', label: 'Document' };
-  if (mime.includes('sheet') || mime.includes('excel') || /\.xlsx?$/.test(name)) return { type: 'sheet', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', label: 'Spreadsheet' };
-  return { type: 'text', color: '#6b7280', bg: 'rgba(107,114,128,0.08)', label: 'File' };
+  if (mime.startsWith('image/')) return { type: 'image', color: 'var(--sds-info-blue)', bg: 'rgba(59,130,246,0.08)', label: 'Image' };
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return { type: 'pdf', color: 'var(--sds-error)', bg: 'rgba(239,68,68,0.08)', label: 'PDF' };
+  if (mime.includes('word') || /\.docx?$/.test(name)) return { type: 'doc', color: 'var(--sds-warning)', bg: 'rgba(245,158,11,0.08)', label: 'Document' };
+  if (mime.includes('sheet') || mime.includes('excel') || /\.xlsx?$/.test(name)) return { type: 'sheet', color: 'var(--sds-success)', bg: 'rgba(34,197,94,0.08)', label: 'Spreadsheet' };
+  return { type: 'text', color: 'var(--sds-fg-tertiary)', bg: 'rgba(107,114,128,0.08)', label: 'File' };
 };
 
 export default function IncidentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
   const { showOsha, showRiddor, showNsw } = frameworkVisibility(user);
   const canVerify = ELEVATED_ROLES.has(user?.role);
   const canVerifyRecordability = RECORDABILITY_VERIFY_ROLES.has(user?.role);
@@ -328,6 +353,11 @@ export default function IncidentDetail() {
   const [incident, setIncident] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
+  // Phase 7: single-flight hero action. Holds the in-flight action name
+  // ('assign' | 'escalate' | 'close' | 'reopen' | 'forceClose' | 'requestClosure')
+  // or null. Disables the rest of the action bar to prevent double-fire on
+  // slow networks and surfaces a "working" label on the originating button.
+  const [submitting, setSubmitting] = useState(null);
   const [witnessModal, setWitnessModal] = useState(null); // null | 'add' | witness object
   const [toast, setToast] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, index: 0 });
@@ -426,23 +456,28 @@ export default function IncidentDetail() {
   };
 
   const handleAssign = async (form) => {
+    setSubmitting('assign');
     try {
       const updated = await assignIncident(r.id, form);
       setIncident({ ...incident, ...updated, witnesses: incident.witnesses, attachments: incident.attachments, activity: incident.activity });
       showToast('Incident assigned for triage.');
       load();
     } catch { showToast('Failed to assign.'); }
+    finally { setSubmitting(null); }
   };
 
   const handleEscalate = async (form) => {
+    setSubmitting('escalate');
     try {
       await escalateIncident(r.id, form);
       showToast('Escalated to investigation.');
       load();
     } catch { showToast('Failed to escalate.'); }
+    finally { setSubmitting(null); }
   };
 
   const handleClose = async (form) => {
+    setSubmitting('close');
     try {
       const updated = await closeIncident(r.id, form);
       setIncident({ ...incident, ...updated, witnesses: incident.witnesses, attachments: incident.attachments, activity: incident.activity });
@@ -450,15 +485,18 @@ export default function IncidentDetail() {
       setModal(null);
       load();
     } catch (err) { showToast(err.response?.data?.error || 'Failed to close.'); }
+    finally { setSubmitting(null); }
   };
 
   const handleRequestClosure = async (form) => {
+    setSubmitting('requestClosure');
     try {
       await requestClosure(r.id, form);
       showToast('Closure request submitted for approval.');
       setModal(null);
       load();
     } catch (err) { showToast(err.response?.data?.error || 'Failed to submit closure request.'); }
+    finally { setSubmitting(null); }
   };
 
   const handleApproveClosure = async (requestId, form) => {
@@ -480,21 +518,25 @@ export default function IncidentDetail() {
   };
 
   const handleReopen = async (form) => {
+    setSubmitting('reopen');
     try {
       await reopenIncident(r.id, form);
       showToast('Incident reopened.');
       setModal(null);
       load();
     } catch (err) { showToast(err.response?.data?.error || 'Failed to reopen.'); }
+    finally { setSubmitting(null); }
   };
 
   const handleForceClose = async (form) => {
+    setSubmitting('forceClose');
     try {
       await forceCloseIncident(r.id, form);
       showToast('Incident force-closed.');
       setModal(null);
       load();
     } catch (err) { showToast(err.response?.data?.error || 'Failed to force-close.'); }
+    finally { setSubmitting(null); }
   };
 
   // WI-03: OSHA 301 PDF download. Per 29 CFR 1904.29(b)(2) Form 301 is
@@ -641,7 +683,13 @@ export default function IncidentDetail() {
   };
 
   const handleDeleteAffectedPerson = async (ap) => {
-    if (!window.confirm(`Remove ${ap.name || 'this person'} from the incident? Audit trail keeps the record.`)) return;
+    const ok = await confirmDialog({
+      title: `Remove ${ap.name || 'this person'}?`,
+      body: 'They will be removed from the incident. The audit trail keeps the record of who was originally listed.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteAffectedPerson(r.id, ap.id);
       showToast(ap.name ? `${ap.name} removed.` : 'Person removed.');
@@ -652,7 +700,13 @@ export default function IncidentDetail() {
   };
 
   const handleDeleteWitness = async (witness) => {
-    if (!window.confirm(`Remove witness ${witness.name}? This is logged for audit.`)) return;
+    const ok = await confirmDialog({
+      title: `Remove witness ${witness.name}?`,
+      body: 'The witness statement will be removed from this incident. This action is logged for audit.',
+      confirmLabel: 'Remove witness',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteWitness(r.id, witness.id);
       showToast('Witness removed.');
@@ -663,13 +717,14 @@ export default function IncidentDetail() {
   };
 
   const handleSeverityOverride = async (form) => {
+    setSubmitting('severity');
     try {
       await updateIncident(r.id, form);
       showToast(`Severity overridden to ${form.severity === 1 ? 'S1 Critical' : form.severity === 2 ? 'S2 Major' : form.severity === 3 ? 'S3 Moderate' : form.severity === 4 ? 'S4 Minor' : 'S5 Insignificant'}.`);
       load();
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to override severity.');
-    }
+    } finally { setSubmitting(null); }
   };
 
   const handleUpload = async (e) => {
@@ -724,8 +779,8 @@ export default function IncidentDetail() {
 
   const alertType = recommendedAction === 'closed' ? 'alert-closed' : recommendedAction === 'investigating' ? 'alert-investigating' : 'alert-triage';
 
-  const sevColors = { 1: '#dc2626', 2: '#ea580c', 3: '#f59e0b', 4: '#22c55e', 5: '#8b5cf6' };
-  const heroColor = sevColors[r.severity] || '#626DF9';
+  const sevColors = { 1: 'var(--sds-error)', 2: 'var(--sds-warning)', 3: 'var(--sds-warning)', 4: 'var(--sds-success)', 5: 'var(--sds-brand-primary)' };
+  const heroColor = sevColors[r.severity] || 'var(--sds-brand-primary)';
 
   return (
     <div className="page idet">
@@ -749,41 +804,90 @@ export default function IncidentDetail() {
               <span className="idet-date">Reported {formatDate(r.created_at)}</span>
             </div>
             <div className="idet-header-actions">
-            {recommendedAction === 'closed' ? (
+            {/* Phase 7: single-flight semantics. While ANY mutation is in
+                flight (`submitting` truthy), every other hero button is
+                disabled; the originating button swaps to spinner + working
+                label so the user can see why nothing else is clickable. The
+                "Close incident" button can route through three handlers
+                (close / requestClosure / forceClose) via ClosureChecklistModal,
+                so we treat all three as the close button's in-flight state. */}
+            {(() => {
+              const busy = !!submitting;
+              const closing = submitting === 'close' || submitting === 'requestClosure' || submitting === 'forceClose';
+              const Spin = () => <span className="idet-attach-spinner" aria-hidden="true"/>;
+              return (
+            recommendedAction === 'closed' ? (
               <>
                 <button className="idet-act-btn" disabled>Closed</button>
                 {['ehs_manager', 'admin'].includes(user?.role) && (
-                  <button className="idet-act-btn" onClick={() => setModal('reopen')}>
-                    <Icon name="edit" size={15}/>Reopen
+                  <button
+                    className="idet-act-btn"
+                    onClick={() => setModal('reopen')}
+                    disabled={busy && submitting !== 'reopen' ? true : submitting === 'reopen'}
+                  >
+                    {submitting === 'reopen'
+                      ? <><Spin/>Reopening…</>
+                      : <><Icon name="edit" size={15}/>Reopen</>}
                   </button>
                 )}
               </>
             ) : (
               <>
                 {ELEVATED_ROLES.has(user?.role) && (
-                  <button className="idet-act-btn" onClick={() => setModal('severity')} title="Override auto-classified severity (logged for audit)">
-                    <Icon name="warning" size={15}/>Override severity
+                  <button
+                    className="idet-act-btn"
+                    onClick={() => setModal('severity')}
+                    title="Override auto-classified severity (logged for audit)"
+                    disabled={busy && submitting !== 'severity' ? true : submitting === 'severity'}
+                  >
+                    {submitting === 'severity'
+                      ? <><Spin/>Saving…</>
+                      : <><Icon name="warning" size={15}/>Override severity</>}
                   </button>
                 )}
                 {recommendedAction === 'investigating' ? (
-                  <button className="idet-act-btn primary" onClick={() => navigate('/investigations')}>
+                  <button
+                    className="idet-act-btn primary"
+                    onClick={() => navigate('/investigations')}
+                    disabled={busy}
+                  >
                     <Icon name="investigation" size={15}/>Open investigation
                   </button>
                 ) : ELEVATED_ROLES.has(user?.role) && (
                   <>
-                    <button className="idet-act-btn" onClick={() => setModal('close')}>
-                      {r.track === 'C' ? 'Close — no action' : 'Close incident'}
+                    <button
+                      className="idet-act-btn"
+                      onClick={() => setModal('close')}
+                      disabled={busy && !closing ? true : closing}
+                    >
+                      {closing
+                        ? <><Spin/>Closing…</>
+                        : (r.track === 'C' ? 'Close — no action' : 'Close incident')}
                     </button>
-                    <button className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`} onClick={() => setModal('assign')}>
-                      <Icon name="person" size={15}/>Assign
+                    <button
+                      className={`idet-act-btn ${recommendedAction === 'assign' ? 'primary' : ''}`}
+                      onClick={() => setModal('assign')}
+                      disabled={busy && submitting !== 'assign' ? true : submitting === 'assign'}
+                    >
+                      {submitting === 'assign'
+                        ? <><Spin/>Assigning…</>
+                        : <><Icon name="person" size={15}/>Assign</>}
                     </button>
-                    <button className={`idet-act-btn ${recommendedAction === 'escalate' ? 'primary' : ''}`} onClick={() => setModal('escalate')}>
-                      <Icon name="investigation" size={15}/>Escalate
+                    <button
+                      className={`idet-act-btn ${recommendedAction === 'escalate' ? 'primary' : ''}`}
+                      onClick={() => setModal('escalate')}
+                      disabled={busy && submitting !== 'escalate' ? true : submitting === 'escalate'}
+                    >
+                      {submitting === 'escalate'
+                        ? <><Spin/>Escalating…</>
+                        : <><Icon name="investigation" size={15}/>Escalate</>}
                     </button>
                   </>
                 )}
               </>
-            )}
+            )
+              );
+            })()}
           </div>
           </div>
 
@@ -796,15 +900,21 @@ export default function IncidentDetail() {
               <span className={`inc-card-status ${r.status === 'Closed' ? 'st-closed' : r.status === 'Investigating' ? 'st-investigating' : 'st-new'}`}>
                 <span className="st-dot"/>{r.status}
               </span>
-              {showOsha && r.osha_recordable === 1 && <span className="inc-card-status st-triage"><span className="st-dot"/>OSHA</span>}
+              {showOsha && r.osha_recordable === 1 && (
+                <span className="inc-card-status st-triage">
+                  <span className="st-dot" aria-hidden="true"/>OSHA
+                  <span className="sr-only"> recordable</span>
+                </span>
+              )}
               {showRiddor && r.riddor_reportable === 1 && (
                 <span
                   className="inc-card-status"
-                  style={{ background: '#fef2f2', color: '#dc2626' }}
+                  style={{ background: 'var(--sds-error-bg)', color: 'var(--sds-error)' }}
                   title={r.riddor_category ? `RIDDOR ${riddorCategoryReg(r.riddor_category)} · ${riddorCategoryLabel(r.riddor_category)}` : 'RIDDOR reportable'}
                 >
-                  <span className="st-dot" style={{ background: '#dc2626' }}/>
+                  <span className="st-dot" style={{ background: 'var(--sds-error)' }} aria-hidden="true"/>
                   RIDDOR{r.riddor_category ? ` · ${riddorCategoryLabel(r.riddor_category)}` : ''}
+                  <span className="sr-only"> reportable</span>
                 </span>
               )}
               {(r.pending_deadlines || []).map((d, i) => (
@@ -955,6 +1065,7 @@ export default function IncidentDetail() {
                               className="idet-attach-del idet-attach-del-thumb"
                               onClick={(e) => { e.stopPropagation(); handleDeleteAttachment(a); }}
                               title="Remove attachment"
+                              aria-label={`Delete attachment ${a.filename}`}
                             >
                               <Icon name="close" size={12}/>
                             </button>
@@ -987,6 +1098,7 @@ export default function IncidentDetail() {
                                 className="idet-attach-del idet-attach-del-file"
                                 onClick={() => handleDeleteAttachment(a)}
                                 title="Remove attachment"
+                                aria-label={`Delete attachment ${a.filename}`}
                               >
                                 <Icon name="close" size={14}/>
                               </button>
@@ -998,16 +1110,22 @@ export default function IncidentDetail() {
                   )}
                 </>
               ) : (
-                <div className="idet-attach-empty">
-                  <p>No attachments yet.</p>
-                  <button
-                    className="idet-attach-add-empty"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
-                  >
-                    {uploading ? 'Uploading…' : 'Attach a file'}
-                  </button>
-                </div>
+                <EmptyState
+                  compact
+                  illustration={<EmptyAttachmentsIllustration />}
+                  title="No attachments yet"
+                  body="Photos, statements, sketches, and reports give the investigator the fastest path to root cause."
+                  action={
+                    <button
+                      className="idet-attach-add-empty"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      aria-label="Attach a file"
+                    >
+                      {uploading ? 'Uploading…' : 'Attach a file'}
+                    </button>
+                  }
+                />
               )}
             </div>
           </div>
@@ -1022,12 +1140,12 @@ export default function IncidentDetail() {
               {/* Add-note composer — anyone authenticated can leave an
                   observation. Notes interleave with system events below. */}
               <div className="idet-note-composer">
-                <textarea
-                  className="idet-note-input"
-                  rows={2}
-                  placeholder="Add a note to the timeline — context, side conversations, things you noticed…"
+                <SmartTextarea
                   value={noteText}
-                  onChange={e => setNoteText(e.target.value)}
+                  onChange={setNoteText}
+                  rows={2}
+                  inputClassName="idet-note-input"
+                  placeholder="Add a note to the timeline — context, side conversations, things you noticed…"
                   onKeyDown={e => {
                     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handlePostNote(); }
                   }}
@@ -1268,10 +1386,10 @@ export default function IncidentDetail() {
                           </div>
                           {canEdit && (
                             <div className="idet-witness-actions">
-                              <button className="idet-edit-trigger" onClick={() => setApEditTarget(ap)} title="Edit person">
+                              <button className="idet-edit-trigger" onClick={() => setApEditTarget(ap)} title="Edit person" aria-label={`Edit person ${ap.name || ''}`.trim()}>
                                 <Icon name="edit" size={11}/>edit
                               </button>
-                              <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteAffectedPerson(ap)} title="Remove person">
+                              <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteAffectedPerson(ap)} title="Remove person" aria-label={`Remove person ${ap.name || ''}`.trim()}>
                                 <Icon name="close" size={11}/>remove
                               </button>
                             </div>
@@ -1300,6 +1418,8 @@ export default function IncidentDetail() {
                               className="idet-edit-trigger"
                               onClick={() => setExpandedApIdx(expanded ? -1 : idx)}
                               title={expanded ? 'Hide regulatory fields' : 'Show all regulatory fields'}
+                              aria-label={expanded ? 'Hide regulatory fields' : 'Show all regulatory fields'}
+                              aria-expanded={expanded}
                             >
                               <Icon name={expanded ? 'arrow' : 'arrow'} size={11}/>
                               {expanded ? 'Hide details' : 'Show details'}
@@ -1338,9 +1458,14 @@ export default function IncidentDetail() {
             </div>
             <div className="idet-card-body">
               {(r.witnesses || []).length === 0 ? (
-                <div className="idet-witness-empty">
-                  No witnesses recorded yet.{canEdit ? ' Add a statement when one is collected.' : ''}
-                </div>
+                <EmptyState
+                  compact
+                  illustration={<EmptyWitnessesIllustration />}
+                  title="No witnesses recorded"
+                  body={canEdit
+                    ? 'Add a statement when one is collected. Witness accounts are the strongest evidence for an incident timeline.'
+                    : 'Witness statements have not been recorded for this incident.'}
+                />
               ) : (
                 <div className="idet-witnesses">
                   {r.witnesses.map(w => (
@@ -1352,10 +1477,10 @@ export default function IncidentDetail() {
                         </div>
                         {canEdit && (
                           <div className="idet-witness-actions">
-                            <button className="idet-edit-trigger" onClick={() => setWitnessModal(w)} title="Edit witness">
+                            <button className="idet-edit-trigger" onClick={() => setWitnessModal(w)} title="Edit witness" aria-label={`Edit witness ${w.name || ''}`.trim()}>
                               <Icon name="edit" size={11}/>edit
                             </button>
-                            <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteWitness(w)} title="Remove witness">
+                            <button className="idet-edit-trigger idet-witness-del" onClick={() => handleDeleteWitness(w)} title="Remove witness" aria-label={`Remove witness ${w.name || ''}`.trim()}>
                               <Icon name="close" size={11}/>remove
                             </button>
                           </div>
@@ -1382,13 +1507,14 @@ export default function IncidentDetail() {
       {/* Lightbox — portal to escape .page transform */}
       {lightbox.open && imageAttachments.length > 0 && createPortal(
         <div className="idet-lightbox" onClick={() => setLightbox({ open: false, index: 0 })}>
-          <button className="idet-lb-close" onClick={() => setLightbox({ open: false, index: 0 })}>
+          <button className="idet-lb-close" aria-label="Close lightbox" onClick={() => setLightbox({ open: false, index: 0 })}>
             <Icon name="close" size={18}/>
           </button>
           {imageAttachments.length > 1 && (
             <>
               <button
                 className="idet-lb-nav idet-lb-prev"
+                aria-label="Previous image"
                 disabled={lightbox.index === 0}
                 onClick={e => { e.stopPropagation(); setLightbox(prev => ({ ...prev, index: prev.index - 1 })); }}
               >
@@ -1396,6 +1522,7 @@ export default function IncidentDetail() {
               </button>
               <button
                 className="idet-lb-nav idet-lb-next"
+                aria-label="Next image"
                 disabled={lightbox.index === imageAttachments.length - 1}
                 onClick={e => { e.stopPropagation(); setLightbox(prev => ({ ...prev, index: prev.index + 1 })); }}
               >
@@ -1540,10 +1667,9 @@ function LogOshaSevereModal({ target, onClose, onSaved }) {
           </div>
           <div className="field">
             <label className="label">Notes</label>
-            <textarea
-              className="textarea"
+            <SmartTextarea
               value={notes}
-              onChange={e => setNotes(e.target.value)}
+              onChange={setNotes}
               placeholder="Who you spoke with, what you reported, follow-up agreed."
             />
           </div>
@@ -1585,7 +1711,7 @@ function SafeworkNswCardRows({ notification, lookups, canVerify, onAction, onDow
       <div className="idet-triage-row">
         <span className="idet-triage-label">SafeWork NSW</span>
         <span className="inc-card-status st-capa">
-          <span className="st-dot" style={{ background: '#dc2626' }}/>
+          <span className="st-dot" style={{ background: 'var(--sds-error)' }}/>
           {n.nsw_number}
         </span>
       </div>
@@ -1825,7 +1951,7 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
               </div>
               <div className="field">
                 <label className="label">Notes</label>
-                <textarea className="textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Who you spoke with, what you reported."/>
+                <SmartTextarea value={notes} onChange={setNotes} placeholder="Who you spoke with, what you reported."/>
               </div>
             </>
           )}
@@ -1846,7 +1972,7 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
               </div>
               <div className="field">
                 <label className="label">Notes</label>
-                <textarea className="textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Method (email / portal), recipient, attachments."/>
+                <SmartTextarea value={notes} onChange={setNotes} placeholder="Method (email / portal), recipient, attachments."/>
               </div>
             </>
           )}
@@ -1859,7 +1985,7 @@ function SafeworkNswModal({ mode, notification, onClose, onSaved }) {
               </div>
               <div className="field">
                 <label className="label">Notes</label>
-                <textarea className="textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Reason for any disturbance; actions taken."/>
+                <SmartTextarea value={notes} onChange={setNotes} placeholder="Reason for any disturbance; actions taken."/>
               </div>
               <div className="field">
                 <label className="label">Inspector arrived at (optional)</label>

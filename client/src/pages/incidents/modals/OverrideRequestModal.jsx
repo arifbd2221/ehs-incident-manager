@@ -10,6 +10,7 @@
 
 import { useState } from 'react';
 import Icon from '../../../components/shared/Icon';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 import { createOverrideRequest } from '../../../api/override_requests';
 
 const FIELD_LABELS = {
@@ -80,12 +81,12 @@ export default function OverrideRequestModal({ incident, field, onCancel, onSubm
 
           <div className="form-group">
             <label className="form-label">Justification <span className="req">*</span></label>
-            <textarea
-              className="form-textarea"
-              rows={4}
-              placeholder="What new evidence or judgment supports this change? e.g. HCP records confirm medical treatment beyond first aid, expected days away exceed threshold, etc."
+            <SmartTextarea
               value={reason}
-              onChange={e => setReason(e.target.value)}
+              onChange={setReason}
+              rows={4}
+              inputClassName="form-textarea"
+              placeholder="What new evidence or judgment supports this change? e.g. HCP records confirm medical treatment beyond first aid, expected days away exceed threshold, etc."
             />
             <span className="helper">Minimum 4 characters. Recorded in the audit log alongside your name and the decider's name.</span>
           </div>

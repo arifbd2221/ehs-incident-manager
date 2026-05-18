@@ -5,6 +5,7 @@ import { listLinksTouching } from '../services/entity_links.js';
 import { writeActivity } from '../services/activity_log.js';
 import { notifyUser } from '../services/notifications.js';
 import { requireAssigneeOrElevated } from '../services/permissions.js';
+import { suggestNextWhy } from '../services/gemini_five_why.js';
 
 const router = Router();
 
@@ -243,12 +244,45 @@ router.patch('/:id', (req, res) => {
   res.json(updated);
 });
 
+router.post('/:id/five-whys/suggest', async (req, res) => {
+  const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
+  if (!inv) return res.status(404).json({ error: 'Investigation not found' });
+  if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
+
+  const incident = db.prepare('SELECT title, description, type FROM incidents WHERE id = ?').get(inv.incident_id);
+  const previousWhys = db.prepare('SELECT level, question, answer FROM five_whys WHERE investigation_id = ? ORDER BY level').all(inv.id);
+  const nextLevel = previousWhys.length + 1;
+
+  try {
+    const suggestion = await suggestNextWhy({
+      incidentTitle: incident?.title || 'Unknown incident',
+      incidentDescription: incident?.description || '',
+      incidentType: incident?.type || 'unknown',
+      previousWhys,
+    });
+    res.json({ ...suggestion, level: nextLevel });
+  } catch (e) {
+    const lastAnswer = previousWhys.length > 0 ? previousWhys[previousWhys.length - 1].answer : '';
+    const fallbackQ = lastAnswer
+      ? `Why did "${lastAnswer.length > 80 ? lastAnswer.substring(0, 80) + '…' : lastAnswer}" occur?`
+      : 'Why did this incident occur?';
+    res.json({
+      next_question: fallbackQ,
+      likely_root_cause: false,
+      root_cause_category: null,
+      reasoning: null,
+      level: nextLevel,
+      ai_unavailable: true,
+    });
+  }
+});
+
 router.post('/:id/five-whys', (req, res) => {
   const inv = db.prepare('SELECT * FROM investigations WHERE id = ? AND org_id = ?').get(req.params.id, req.user.org_id);
   if (!inv) return res.status(404).json({ error: 'Investigation not found' });
   if (!requireAssigneeOrElevated(req, res, inv, 'lead_investigator', 'this investigation')) return;
 
-  const { level, question, answer, is_root_cause } = req.body;
+  const { level, question, answer, is_root_cause, ai_suggested, root_cause_category } = req.body;
   if (!question || !answer) return res.status(400).json({ error: 'Question and answer are required' });
 
   if (is_root_cause) {
@@ -260,8 +294,18 @@ router.post('/:id/five-whys', (req, res) => {
   const result = db.prepare('INSERT INTO five_whys (investigation_id, level, question, answer, is_root_cause, created_by) VALUES (?, ?, ?, ?, ?, ?)')
     .run(inv.id, autoLevel, question, answer, is_root_cause ? 1 : 0, req.user.id);
 
+  const aiTag = ai_suggested ? ' (AI-assisted)' : '';
   db.prepare(`INSERT INTO activity_log (org_id, entity_type, entity_id, action, description, user_id) VALUES (?, 'investigation', ?, 'five_why_added', ?, ?)`)
-    .run(inv.org_id, inv.id, `added Why #${autoLevel}${is_root_cause ? ' (root cause)' : ''}`, req.user.id);
+    .run(inv.org_id, inv.id, `added Why #${autoLevel}${is_root_cause ? ' (root cause)' : ''}${aiTag}`, req.user.id);
+
+  if (is_root_cause && root_cause_category) {
+    const existing = JSON.parse(inv.root_cause_categories || '[]');
+    if (!existing.includes(root_cause_category)) {
+      existing.push(root_cause_category);
+      db.prepare('UPDATE investigations SET root_cause_categories = ?, root_cause_summary = COALESCE(root_cause_summary, ?), updated_at = datetime(\'now\') WHERE id = ?')
+        .run(JSON.stringify(existing), answer, inv.id);
+    }
+  }
 
   const whys = db.prepare('SELECT * FROM five_whys WHERE investigation_id = ? ORDER BY level').all(inv.id);
   res.status(201).json(whys);

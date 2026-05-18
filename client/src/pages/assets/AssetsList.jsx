@@ -11,6 +11,9 @@ import { listAssetCategories, createAssetCategory, listCategoryFields } from '..
 import Icon from '../../components/shared/Icon';
 import AssetTypesModal from '../../components/modals/AssetTypesModal';
 import CustomFieldsForm from '../../components/assets/CustomFieldsForm';
+import AssetIllustration, { illustrationKind } from '../../components/assets/AssetIllustration';
+import EmptyState, { EmptyCAPAsIllustration } from '../../components/shared/EmptyState';
+import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import '../../styles/assets.css';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
@@ -38,8 +41,15 @@ export default function AssetsList() {
   const { user } = useAuth();
   const { refreshKey, activeSiteId } = useApp();
   const canEdit = ELEVATED.has(user?.role);
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
 
   const [assets, setAssets] = useState([]);
+  // Server-computed counts that honour every active filter EXCEPT the
+  // active/archived tab — drives tab badges and the hero stat strip so they
+  // stay correct regardless of which tab is selected.
+  const [activeCounts, setActiveCounts] = useState({ active: 0, archived: 0 });
+  const [typesCount, setTypesCount] = useState(0);
   const [sites, setSites] = useState([]);
   const [categories, setCategories] = useState([]);
   const [showAssetTypes, setShowAssetTypes] = useState(false);
@@ -53,6 +63,7 @@ export default function AssetsList() {
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef(null);
 
+  const [previewAsset, setPreviewAsset] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
@@ -80,8 +91,16 @@ export default function AssetsList() {
     if (siteFilter) params.site_id = siteFilter;
     if (catFilter) params.asset_category_id = catFilter;
     listAssets(params)
-      .then(d => setAssets(d.assets || []))
-      .catch(() => setAssets([]))
+      .then(d => {
+        setAssets(d.assets || []);
+        setActiveCounts(d.active_counts || { active: 0, archived: 0 });
+        setTypesCount(d.types_count || 0);
+      })
+      .catch(() => {
+        setAssets([]);
+        setActiveCounts({ active: 0, archived: 0 });
+        setTypesCount(0);
+      })
       .finally(() => setLoading(false));
     // Bulk overdue lookup so the dot doesn't fire N requests on a 200-asset list.
     listSchedules({ status: 'overdue', limit: 500 })
@@ -104,6 +123,13 @@ export default function AssetsList() {
     return () => document.removeEventListener('mousedown', handler);
   }, [filterOpen]);
 
+  useEffect(() => {
+    if (!previewAsset) return;
+    const onKey = (e) => { if (e.key === 'Escape') setPreviewAsset(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [previewAsset]);
+
   const activeFilterCount = (!activeSiteId && siteFilter ? 1 : 0) + (catFilter ? 1 : 0);
   const activeSiteName = sites.find(s => String(s.id) === String(siteFilter))?.name;
   const activeCatObj = categories.find(c => String(c.id) === String(catFilter));
@@ -121,12 +147,10 @@ export default function AssetsList() {
   }, [assets, search]);
 
   const stats = useMemo(() => {
-    const total = assets.length;
-    const active = assets.filter(a => a.active).length;
-    const archived = total - active;
-    const types = new Set(assets.map(a => a.asset_type).filter(Boolean)).size;
-    return { total, active, archived, types };
-  }, [assets]);
+    const active = activeCounts.active || 0;
+    const archived = activeCounts.archived || 0;
+    return { total: active + archived, active, archived, types: typesCount };
+  }, [activeCounts, typesCount]);
 
   const openNew = () => {
     setEditing('new');
@@ -265,12 +289,22 @@ export default function AssetsList() {
 
   const handleDelete = async (asset, e) => {
     e?.stopPropagation();
-    if (!window.confirm(`Archive "${asset.name}"? It will be hidden from active views.`)) return;
+    const ok = await confirmDialog({
+      title: `Archive asset "${asset.name}"?`,
+      body: 'The asset will be hidden from active views but retained for audit history. You can restore it later from the Archived tab.',
+      confirmLabel: 'Archive asset',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteAsset(asset.id);
       refreshAssets();
     } catch (err) {
-      alert(err.response?.data?.error || 'Archive failed');
+      await alertDialog({
+        title: "Couldn't archive asset",
+        body: err.response?.data?.error || 'Archive failed',
+        tone: 'error',
+      });
     }
   };
 
@@ -280,7 +314,11 @@ export default function AssetsList() {
       await updateAsset(asset.id, { active: 1 });
       refreshAssets();
     } catch (err) {
-      alert(err.response?.data?.error || 'Restore failed');
+      await alertDialog({
+        title: "Couldn't restore asset",
+        body: err.response?.data?.error || 'Restore failed',
+        tone: 'error',
+      });
     }
   };
 
@@ -353,27 +391,38 @@ export default function AssetsList() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="assets-tabs">
-        {[
-          { id: 'active', label: 'Active', count: stats.active },
-          { id: 'archived', label: 'Archived', count: stats.archived },
-          { id: 'all', label: 'All', count: stats.total },
-        ].map(t => (
-          <div key={t.id} className={`assets-tab ${activeTab === t.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(t.id)}>
-            {t.label}
-            <span className="assets-tab-count">{t.count}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Toolbar */}
+      {/* Toolbar — status chips + search + filters + view toggle */}
       <div className="assets-toolbar">
+        <div className="assets-status-chips">
+          {[
+            { id: 'active', label: 'Active', count: stats.active },
+            { id: 'archived', label: 'Archived', count: stats.archived },
+            { id: 'all', label: 'All', count: stats.total },
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              className={`assets-status-chip ${activeTab === t.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(t.id)}
+            >
+              <span>{t.label}</span>
+              <span className="assets-status-chip-count">{t.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="assets-toolbar-right">
         <div className="assets-search">
-          <Icon name="search" size={16} />
-          <input className="input" placeholder="Search assets..."
-            value={search} onChange={e => setSearch(e.target.value)} />
+          <Icon name="search" size={15} />
+          <input
+            placeholder="Search assets..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className="assets-search-clear" onClick={() => setSearch('')} title="Clear search">
+              <Icon name="close" size={12} />
+            </button>
+          )}
         </div>
         <div className="af-wrap" ref={filterRef}>
           <button
@@ -460,6 +509,7 @@ export default function AssetsList() {
             <Icon name="sort" size={15} />
           </button>
         </div>
+        </div>
       </div>
 
       {/* Active filter chips */}
@@ -497,104 +547,171 @@ export default function AssetsList() {
       )}
 
       {/* Empty state */}
-      {!loading && filtered.length === 0 && (
-        <div className="card card-pad empty-state">
-          <div className="empty-state-icon">
-            <Icon name="factory" size={28} />
-          </div>
-          <div className="empty-state-title">
-            {assets.length === 0 ? 'No assets registered yet' : 'No assets match your filters'}
-          </div>
-          <div className="empty-state-desc">
-            {assets.length === 0
-              ? 'Register equipment, vehicles, and areas to track them across incidents and inspections.'
-              : 'Try adjusting your search or filter criteria.'}
-          </div>
-          {assets.length === 0 && canEdit && (
-            <button className="btn btn-primary" onClick={openNew}>
-              <Icon name="plus" size={16} /> Add your first asset
+      {!loading && filtered.length === 0 && (() => {
+        const filtersActive = activeFilterCount > 0 || search.trim();
+        const noneAnywhere = stats.total === 0;
+        // Three distinct empty cases:
+        //   1. No assets exist at all → onboarding CTA (any tab).
+        //   2. Tab-scoped subset is empty (e.g. Archived tab, no archives) → soft message, no CTA.
+        //   3. Filters/search hide everything → "no results" + clear button.
+        let title, desc, action = null;
+        if (noneAnywhere) {
+          title = 'No assets registered yet';
+          desc = 'Register equipment, vehicles, and areas to track them across incidents and inspections.';
+          if (canEdit) {
+            action = (
+              <button className="btn btn-primary" onClick={openNew}>
+                <Icon name="plus" size={16} /> Add your first asset
+              </button>
+            );
+          }
+        } else if (filtersActive) {
+          title = 'No assets match your filters';
+          desc = 'Try adjusting your search or filter criteria.';
+          action = (
+            <button className="btn btn-secondary" onClick={() => { setSearch(''); setSiteFilter(''); setCatFilter(''); }}>
+              <Icon name="close" size={14} /> Clear filters
             </button>
-          )}
-        </div>
-      )}
+          );
+        } else if (activeTab === 'archived') {
+          title = 'No archived assets';
+          desc = 'Assets you archive will appear here. Restoring an archived asset moves it back to Active.';
+        } else if (activeTab === 'active') {
+          title = 'No active assets';
+          desc = `All ${stats.archived} of your assets are archived. Switch to the Archived tab to view or restore them.`;
+        } else {
+          title = 'No assets to show';
+          desc = 'Try a different tab or adjust your filters.';
+        }
+        return (
+          <EmptyState
+            illustration={<EmptyCAPAsIllustration />}
+            title={title}
+            body={desc}
+            action={action}
+          />
+        );
+      })()}
 
       {/* Grid view */}
       {!loading && filtered.length > 0 && viewMode === 'grid' && (
         <div className="assets-grid">
           {filtered.map(a => {
-            const color = a.category_color || '#90A4AE';
-            const initials = (a.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+            const color = a.category_color || '#626DF9';
+            const kind = illustrationKind(a);
+            const isOverdue = overdueAssetIds.has(a.id);
+            const health = !a.active ? 'archived' : isOverdue ? 'crit' : 'ok';
             return (
-              <div key={a.id}
-                className={`asset-card ${!a.active ? 'archived' : ''} ${!canEdit ? 'asset-card-bottom-pad' : ''}`}
+              <article
+                key={a.id}
+                className={`asset-card asset-card-h-${health}`}
                 style={{ '--ac-color': color }}
-                onClick={() => navigate(`/assets/${a.id}`)}
+                onClick={() => setPreviewAsset(a)}
+                onKeyDown={(e) => { if (e.key === 'Enter') setPreviewAsset(a); }}
+                tabIndex={0}
+                role="button"
               >
-                <div className="asset-card-top">
-                  <div className="asset-card-avatar">{initials || '?'}</div>
-                  <div className="asset-card-info">
-                    <div className="asset-card-name">
-                      {a.name}
-                      {overdueAssetIds.has(a.id) && (
-                        <span
-                          title="One or more maintenance schedules are overdue"
-                          style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--sds-error)', marginLeft: 8, verticalAlign: 'middle' }}
-                        />
-                      )}
-                    </div>
-                    <div className="asset-card-id">{a.display_id || a.asset_number}</div>
+                <div className="asset-card-banner">
+                  <AssetIllustration kind={kind} tint={color} />
+                  <div className="asset-card-banner-top">
+                    <span className="asset-card-type-pill" style={{ borderColor: color }}>
+                      <span className="asset-card-type-dot" style={{ background: color }} />
+                      {a.asset_type || 'Asset'}
+                    </span>
+                    {!a.active && <span className="asset-card-badge-archived">archived</span>}
                   </div>
-                  <div className="asset-card-h">
-                    <div className="asset-type-pill" style={{ background: color }}>
-                      {a.asset_type || '—'}
-                    </div>
-                    {!a.active && <span className="asset-badge-archived">archived</span>}
+                  <div className="asset-card-banner-bottom">
+                    <span className="asset-card-code">
+                      <Icon name="shield" size={11} />
+                      {a.display_id || a.asset_number || `#${a.id}`}
+                    </span>
                   </div>
                 </div>
 
-                <div className="asset-card-meta">
-                  <span className="asset-card-meta-item"><Icon name="factory" size={12} /> {a.site_name || '—'}</span>
-                  {a.location_description && (
-                    <span className="asset-card-meta-item"><Icon name="location" size={12} /> {a.location_description}</span>
-                  )}
-                  {a.serial_number && (
-                    <span className="asset-card-meta-item"><Icon name="shield" size={12} /> {a.serial_number}</span>
-                  )}
-                </div>
-
-                {/* Hover-expand details */}
-                <div className="asset-card-expand">
-                  <div className="asset-card-expand-inner">
-                    <div className="asset-card-expand-sep" />
-                    {a.description && (
-                      <div className="asset-card-desc">{a.description}</div>
+                <div className="asset-card-body">
+                  <div className="asset-card-title-row">
+                    <h3 className="asset-card-title">{a.name}</h3>
+                    {isOverdue && (
+                      <span
+                        className="asset-card-health-dot"
+                        title="One or more maintenance schedules are overdue"
+                      />
                     )}
-                    <div className="asset-card-detail-row">
-                      <div className="asset-card-detail">
-                        <Icon name="clock" size={11} /> Created {a.created_at?.slice(0, 10) || '—'}
-                      </div>
-                      {a.updated_at && a.updated_at !== a.created_at && (
-                        <div className="asset-card-detail">
-                          <Icon name="edit" size={11} /> Updated {a.updated_at?.slice(0, 10)}
-                        </div>
+                  </div>
+
+                  <div className="asset-card-meta">
+                    <span className="asset-card-meta-item">
+                      <Icon name="factory" size={12} />
+                      <span>{a.site_name || '—'}</span>
+                    </span>
+                    {a.location_description && (
+                      <>
+                        <span className="asset-card-meta-sep">·</span>
+                        <span className="asset-card-meta-item">
+                          <Icon name="location" size={12} />
+                          <span>{a.location_description}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {a.serial_number && (
+                    <div className="asset-card-serial">
+                      <Icon name="shield" size={11} />
+                      <span>{a.serial_number}</span>
+                    </div>
+                  )}
+
+                  {a.description && (
+                    <p className="asset-card-desc">{a.description}</p>
+                  )}
+
+                  {canEdit && (
+                    <div className="asset-card-actions">
+                      <button
+                        className="asset-card-action"
+                        onClick={(e) => { e.stopPropagation(); openEdit(a); }}
+                      >
+                        <Icon name="edit" size={13} />
+                        <span>Edit</span>
+                      </button>
+                      {a.active ? (
+                        <button
+                          className="asset-card-action asset-card-action-danger"
+                          onClick={(e) => handleDelete(a, e)}
+                        >
+                          <Icon name="close" size={13} />
+                          <span>Archive</span>
+                        </button>
+                      ) : (
+                        <button
+                          className="asset-card-action"
+                          onClick={(e) => handleRestore(a, e)}
+                        >
+                          <Icon name="check" size={13} />
+                          <span>Restore</span>
+                        </button>
                       )}
                     </div>
-                  </div>
+                  )}
                 </div>
-
-                {canEdit && (
-                  <div className="asset-actions">
-                    <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); openEdit(a); }}>
-                      <Icon name="edit" size={13} /> Edit
-                    </button>
-                    {a.active
-                      ? <button className="btn btn-ghost btn-sm asset-archive" onClick={(e) => handleDelete(a, e)}>Archive</button>
-                      : <button className="btn btn-ghost btn-sm" onClick={(e) => handleRestore(a, e)}>Restore</button>}
-                  </div>
-                )}
-              </div>
+              </article>
             );
           })}
+
+          {canEdit && activeTab !== 'archived' && (
+            <button
+              className="asset-add-card"
+              onClick={openNew}
+              title="Register a new asset"
+            >
+              <div className="asset-add-card-circle">
+                <Icon name="plus" size={24} />
+              </div>
+              <div className="asset-add-card-label">Register new asset</div>
+              <div className="asset-add-card-sub">Add equipment, vehicles, or areas to your registry</div>
+            </button>
+          )}
         </div>
       )}
 
@@ -615,7 +732,7 @@ export default function AssetsList() {
             </thead>
             <tbody>
               {filtered.map(a => (
-                <tr key={a.id} onClick={() => navigate(`/assets/${a.id}`)} style={{ opacity: a.active ? 1 : 0.6 }}>
+                <tr key={a.id} onClick={() => setPreviewAsset(a)} style={{ opacity: a.active ? 1 : 0.6 }}>
                   <td>
                     <span className="asset-tbl-name">
                       {a.name}
@@ -664,6 +781,141 @@ export default function AssetsList() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {previewAsset && createPortal(
+        (() => {
+          const a = previewAsset;
+          const color = a.category_color || '#626DF9';
+          const kind = illustrationKind(a);
+          const isOverdue = overdueAssetIds.has(a.id);
+          const close = () => setPreviewAsset(null);
+          let customFields = a.custom_fields;
+          if (typeof customFields === 'string') {
+            try { customFields = JSON.parse(customFields); } catch { customFields = {}; }
+          }
+          const cfEntries = Object.entries(customFields || {}).filter(([, v]) => v !== '' && v != null);
+          return (
+            <>
+              <div className="asset-drawer-bd" onClick={close} />
+              <aside className="asset-drawer" role="dialog" aria-label={`Asset preview: ${a.name}`}>
+                <div className="asset-drawer-banner">
+                  <AssetIllustration kind={kind} tint={color} />
+                  <button className="asset-drawer-close" onClick={close} title="Close (Esc)">
+                    <Icon name="close" size={18} />
+                  </button>
+                </div>
+
+                <div className="asset-drawer-body">
+                  <div className="asset-drawer-type-row">
+                    <span className="asset-drawer-type-pill" style={{ '--type-color': color }}>
+                      <span className="asset-drawer-type-dot" />
+                      {a.asset_type || 'Asset'}
+                    </span>
+                    {!a.active && <span className="asset-drawer-badge-archived">Archived</span>}
+                    {isOverdue && (
+                      <span className="asset-drawer-overdue" title="One or more maintenance schedules are overdue">
+                        <Icon name="warning" size={12} /> Maintenance overdue
+                      </span>
+                    )}
+                  </div>
+
+                  <h2 className="asset-drawer-title">{a.name}</h2>
+
+                  <div className="asset-drawer-meta">
+                    <span className="asset-card-meta-item">
+                      <Icon name="factory" size={13} />
+                      <span>{a.site_name || '—'}</span>
+                    </span>
+                    {a.location_description && (
+                      <>
+                        <span className="asset-card-meta-sep">·</span>
+                        <span className="asset-card-meta-item">
+                          <Icon name="location" size={13} />
+                          <span>{a.location_description}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="asset-drawer-stat-row">
+                    <div className="asset-drawer-mini">
+                      <div className="asset-drawer-mini-label">Asset ID</div>
+                      <div className="asset-drawer-mini-val mono">{a.display_id || a.asset_number || `#${a.id}`}</div>
+                    </div>
+                    {a.serial_number && (
+                      <div className="asset-drawer-mini">
+                        <div className="asset-drawer-mini-label">Serial</div>
+                        <div className="asset-drawer-mini-val mono">{a.serial_number}</div>
+                      </div>
+                    )}
+                    <div className="asset-drawer-mini">
+                      <div className="asset-drawer-mini-label">Status</div>
+                      <div className={`asset-drawer-mini-val ${a.active ? 'is-active' : 'is-archived'}`}>
+                        <span className="asset-drawer-status-dot" />
+                        {a.active ? 'Active' : 'Archived'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {a.description && (
+                    <div className="asset-drawer-section">
+                      <h4>Description</h4>
+                      <p className="asset-drawer-desc">{a.description}</p>
+                    </div>
+                  )}
+
+                  {cfEntries.length > 0 && (
+                    <div className="asset-drawer-section">
+                      <h4>Details</h4>
+                      <dl className="asset-drawer-cf">
+                        {cfEntries.map(([k, v]) => (
+                          <div key={k} className="asset-drawer-cf-row">
+                            <dt>{k}</dt>
+                            <dd>{String(v)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  )}
+
+                  <div className="asset-drawer-section">
+                    <h4>Created</h4>
+                    <div className="asset-drawer-timestamps">
+                      <span><Icon name="clock" size={12} /> {a.created_at?.slice(0, 10) || '—'}</span>
+                      {a.updated_at && a.updated_at !== a.created_at && (
+                        <span><Icon name="edit" size={12} /> Updated {a.updated_at.slice(0, 10)}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="asset-drawer-footer">
+                  {canEdit && (
+                    a.active ? (
+                      <button className="btn btn-ghost asset-archive" onClick={(e) => { close(); handleDelete(a, e); }}>
+                        <Icon name="close" size={14} /> Archive
+                      </button>
+                    ) : (
+                      <button className="btn btn-ghost" onClick={(e) => { close(); handleRestore(a, e); }}>
+                        <Icon name="check" size={14} /> Restore
+                      </button>
+                    )
+                  )}
+                  {canEdit && (
+                    <button className="btn btn-secondary" onClick={() => { close(); openEdit(a); }}>
+                      <Icon name="edit" size={14} /> Edit
+                    </button>
+                  )}
+                  <button className="btn btn-primary" onClick={() => { close(); navigate(`/assets/${a.id}`); }}>
+                    Open full page <Icon name="arrow" size={14} />
+                  </button>
+                </div>
+              </aside>
+            </>
+          );
+        })(),
+        document.body
       )}
 
       {editing !== null && createPortal(

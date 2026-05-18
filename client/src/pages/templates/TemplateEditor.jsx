@@ -5,6 +5,8 @@ import { getTemplate, updateTemplate, publishTemplate, updateTemplateItems, uplo
 import { getAnswerSets, createAnswerSet } from '../../api/answer_sets';
 import Icon from '../../components/shared/Icon';
 import ComboBox from '../../components/shared/ComboBox';
+import SmartTextarea from '../../components/shared/SmartTextarea';
+import EmptyState, { EmptyCAPAsIllustration } from '../../components/shared/EmptyState';
 import '../../styles/templates.css';
 
 let keyCounter = 0;
@@ -370,10 +372,14 @@ export default function TemplateEditor() {
   if (!template) {
     return (
       <div className="page te-page">
-        <div className="tp-empty">
-          <div className="tp-empty-title">Template not found</div>
-          <button className="btn btn-primary" onClick={() => navigate('/templates')}>Back to Templates</button>
-        </div>
+        <EmptyState
+          illustration={<EmptyCAPAsIllustration />}
+          title="Template not found"
+          accent="warning"
+          action={(
+            <button className="btn btn-primary" onClick={() => navigate('/templates')}>Back to Templates</button>
+          )}
+        />
       </div>
     );
   }
@@ -420,7 +426,7 @@ export default function TemplateEditor() {
                   <Icon name="settings" size={14} /> Answer Sets
                 </button>
                 {isDraft && (
-                  <button className="tp-btn-create" onClick={() => setShowPublish(true)} disabled={questionCount === 0}>
+                  <button className="btn btn-primary" onClick={() => setShowPublish(true)} disabled={questionCount === 0}>
                     <Icon name="check" size={16} /> Publish{latestVersion > 0 ? ` v${nextVersion}` : ''}
                   </button>
                 )}
@@ -457,7 +463,7 @@ export default function TemplateEditor() {
             </div>
             <div className="te-hero-meta">
               <input className="te-title-input" value={template.name || ''} onChange={e => handleNameChange(e.target.value)} placeholder="Untitled template..." disabled={isArchived} />
-              <input className="te-desc-input" value={template.description || ''} onChange={e => handleDescChange(e.target.value)} placeholder="Add a description..." disabled={isArchived} />
+              <SmartTextarea multiline={false} inputClassName="te-desc-input" value={template.description || ''} onChange={handleDescChange} placeholder="Add a description..." disabled={isArchived} />
             </div>
           </div>
           {/* Ungrouped items */}
@@ -585,11 +591,11 @@ export default function TemplateEditor() {
 
           {/* Empty state */}
           {sections.length === 0 && ungrouped.length === 0 && (
-            <div className="tp-empty" style={{ padding: '60px 20px' }}>
-              <div className="tp-empty-icon"><Icon name="file" size={28} /></div>
-              <div className="tp-empty-title">Start building your template</div>
-              <div className="tp-empty-desc">Add a section, then use the toolbar on the right to add questions</div>
-            </div>
+            <EmptyState
+              illustration={<EmptyCAPAsIllustration />}
+              title="Start building your template"
+              body="Add a section, then use the toolbar on the right to add questions."
+            />
           )}
 
           {/* Add section */}

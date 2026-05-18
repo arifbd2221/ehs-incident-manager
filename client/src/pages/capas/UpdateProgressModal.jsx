@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import Icon from '../../components/shared/Icon';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import { updateCapa } from '../../api/capas';
 import { uploadAttachments } from '../../api/incidents';
 
@@ -68,12 +69,11 @@ export default function UpdateProgressModal({ capa, onCancel, onSaved }) {
 
           <div className="field">
             <label className="label">What was done <span className="req">*</span></label>
-            <textarea
-              className="textarea"
+            <SmartTextarea
+              value={note}
+              onChange={setNote}
               rows={3}
               placeholder="e.g. Installed machine guard, completed training for shift B..."
-              value={note}
-              onChange={e => setNote(e.target.value)}
             />
           </div>
 

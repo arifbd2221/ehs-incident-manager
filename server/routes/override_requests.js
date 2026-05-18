@@ -86,7 +86,8 @@ globalRouter.get('/', (req, res) => {
   if (!isElevated(req.user)) {
     return res.status(403).json({ error: 'Only elevated roles can view the global approval queue.' });
   }
-  const rows = listPendingForOrg(req.user.org_id);
+  const siteId = req.query.site_id ? Number(req.query.site_id) : null;
+  const rows = listPendingForOrg(req.user.org_id, siteId);
   res.json({ requests: rows });
 });
 

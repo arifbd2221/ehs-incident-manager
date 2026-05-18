@@ -6,8 +6,10 @@ import { getSites, getUsers } from '../../api/users';
 import { getIncidents } from '../../api/incidents';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import { useAlert, usePrompt } from '../../components/shared/Dialog';
 import ComboBox from '../../components/shared/ComboBox';
 import DatePicker from '../../components/shared/DatePicker';
+import Pagination from '../../components/shared/Pagination';
 import CertifyOsha300AModal from '../../components/modals/CertifyOsha300AModal';
 import { formatDateShort, formatDate } from '../../utils/time';
 import { riddorCategoryLabel, riddorCategoryReg } from '../../utils/riddor';
@@ -119,14 +121,48 @@ export default function ReportsPage() {
 
       {/* Report type selector */}
       {visibleReports.length > 0 ? (
-        <div className="rpt-type-grid">
-          {visibleReports.map(r => (
-            <div key={r.id} className={`rpt-type-card ${r.cls} ${tab === r.id ? 'active' : ''}`} onClick={() => setTab(r.id)}>
-              <div className="rpt-type-badge">{r.badge}</div>
-              <div className="rpt-type-title">{r.title}</div>
-              <div className="rpt-type-desc">{r.desc}</div>
-            </div>
-          ))}
+        <div
+          className="rpt-type-grid"
+          role="tablist"
+          aria-label="Report types"
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+            const tabs = Array.from(e.currentTarget.querySelectorAll('[role="tab"]'));
+            const currentIndex = tabs.indexOf(document.activeElement);
+            if (currentIndex < 0) return;
+            e.preventDefault();
+            let nextIndex = currentIndex;
+            if (e.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+            else if (e.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
+            else if (e.key === 'Home') nextIndex = 0;
+            else if (e.key === 'End') nextIndex = tabs.length - 1;
+            const nextTab = tabs[nextIndex];
+            const id = nextTab.getAttribute('data-tab-id');
+            if (id) {
+              setTab(id);
+              nextTab.focus();
+            }
+          }}
+        >
+          {visibleReports.map(r => {
+            const isActive = tab === r.id;
+            return (
+              <button
+                key={r.id}
+                type="button"
+                role="tab"
+                data-tab-id={r.id}
+                aria-selected={isActive}
+                tabIndex={isActive ? 0 : -1}
+                className={`rpt-type-card ${r.cls} ${isActive ? 'active' : ''}`}
+                onClick={() => setTab(r.id)}
+              >
+                <div className="rpt-type-badge">{r.badge}</div>
+                <div className="rpt-type-title">{r.title}</div>
+                <div className="rpt-type-desc">{r.desc}</div>
+              </button>
+            );
+          })}
         </div>
       ) : (
         <div className="rpt-panel">
@@ -581,7 +617,14 @@ function AuditLogReport() {
                   {chips.map((c, i) => (
                     <span key={i} className="al-chip" style={{ animationDelay: `${i * 40}ms` }}>
                       <span className="al-chip-label">{c.label}:</span> {c.display}
-                      <button type="button" className="al-chip-close" onClick={c.onClear}><Icon name="close" size={10}/></button>
+                      <button
+                        type="button"
+                        className="al-chip-close"
+                        onClick={c.onClear}
+                        aria-label={`Remove filter: ${c.label}`}
+                      >
+                        <Icon name="close" size={10}/>
+                      </button>
                     </span>
                   ))}
                   <button type="button" className="al-chips-clear" onClick={clearAll}>Clear all</button>
@@ -639,18 +682,33 @@ function AuditLogReport() {
           <table className="rpt-table">
             <thead>
               <tr>
-                <th style={{ width: 50 }}>ID</th>
-                <th style={{ width: 145 }}>When</th>
-                <th style={{ width: 110 }}>Entity</th>
-                <th style={{ width: 70 }}>#</th>
-                <th style={{ width: 170 }}>Action</th>
-                <th>Description</th>
-                <th style={{ width: 130 }}>Actor</th>
+                <th scope="col" style={{ width: 50 }}>ID</th>
+                <th scope="col" style={{ width: 145 }}>When</th>
+                <th scope="col" style={{ width: 110 }}>Entity</th>
+                <th scope="col" style={{ width: 70 }}>#</th>
+                <th scope="col" style={{ width: 170 }}>Action</th>
+                <th scope="col">Description</th>
+                <th scope="col" style={{ width: 130 }}>Actor</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={7} className="al-loading">Loading…</td></tr>
+                <>
+                  <tr className="sr-only" role="status" aria-live="polite" aria-busy="true">
+                    <td colSpan={7}>Loading audit log…</td>
+                  </tr>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <tr key={`skel-${i}`} className="al-skel-row" aria-hidden="true">
+                      <td><div className="skel skel-line" style={{ width: '70%', animationDelay: `${i * 60}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '85%', animationDelay: `${i * 60 + 20}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '60%', animationDelay: `${i * 60 + 40}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '50%', animationDelay: `${i * 60 + 60}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '75%', animationDelay: `${i * 60 + 80}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '92%', animationDelay: `${i * 60 + 100}ms` }} /></td>
+                      <td><div className="skel skel-line" style={{ width: '40%', animationDelay: `${i * 60 + 120}ms` }} /></td>
+                    </tr>
+                  ))}
+                </>
               )}
               {!loading && data.rows.length === 0 && (
                 <tr><td colSpan={7} className="al-empty">No audit-log rows match these filters.</td></tr>
@@ -670,17 +728,14 @@ function AuditLogReport() {
           </table>
         </div>
 
-        {data.total > data.limit && (
-          <div className="al-pager">
-            <button className="btn btn-secondary btn-sm" disabled={data.page <= 1 || loading} onClick={() => fetchPage(data.page - 1)}>
-              <Icon name="arrowL" size={12}/> Prev
-            </button>
-            <span className="al-pager-meta">Page {data.page} of {totalPages}</span>
-            <button className="btn btn-secondary btn-sm" disabled={data.page >= totalPages || loading} onClick={() => fetchPage(data.page + 1)}>
-              Next <Icon name="arrow" size={12}/>
-            </button>
-          </div>
-        )}
+        <Pagination
+          page={data.page}
+          limit={data.limit}
+          total={data.total}
+          loading={loading}
+          label="entry"
+          onPageChange={fetchPage}
+        />
       </div>
     </div>
   );
@@ -688,6 +743,7 @@ function AuditLogReport() {
 
 function Osha300Report({ siteId }) {
   const { user } = useAuth();
+  const alertDialog = useAlert();
   const canAdd = ELEVATED_ROLES.has(user?.role);
   const [data, setData] = useState(null);
   const [showManual, setShowManual] = useState(false);
@@ -732,7 +788,11 @@ function Osha300Report({ siteId }) {
     } catch (e) {
       // Surface failure but keep the UI usable.
       console.error('OSHA 300 PDF download failed:', e);
-      alert(e.message || 'Download failed');
+      alertDialog({
+        title: 'Download failed',
+        body: e.message || 'The PDF could not be generated. Please try again or contact support.',
+        tone: 'error',
+      });
     } finally {
       setDownloading(false);
     }
@@ -761,12 +821,17 @@ function Osha300Report({ siteId }) {
           <span className="rpt-auto-badge"><span className="auto-dot"/>Auto-updates</span>
         </div>
       </div>
-      <div style={{ overflowX: 'auto' }}>
+      <div
+        className="rpt-table-scroll"
+        tabIndex={0}
+        role="region"
+        aria-label="OSHA 300 Log table, scroll horizontally to see more"
+      >
         <table className="rpt-table" style={{ minWidth: 1100 }}>
           <thead>
             <tr>
-              <th>Case #</th><th>Employee</th><th>Date</th><th>Where</th><th>Description</th>
-              <th>Death</th><th>Days away</th><th>Restrict.</th><th>Other</th><th>Days away</th><th>Days restr.</th><th>Type</th>
+              <th scope="col">Case #</th><th scope="col">Employee</th><th scope="col">Date</th><th scope="col">Where</th><th scope="col">Description</th>
+              <th scope="col">Death</th><th scope="col">Days away</th><th scope="col">Restrict.</th><th scope="col">Other</th><th scope="col" className="num">Days away</th><th scope="col" className="num">Days restr.</th><th scope="col">Type</th>
             </tr>
           </thead>
           <tbody>
@@ -780,10 +845,22 @@ function Osha300Report({ siteId }) {
                 <td>{formatDateShort(e.injury_date)}</td>
                 <td>{e.location}</td>
                 <td>{e.description}</td>
-                <td className="cell-check">{e.classification_death ? <span className="check-mark">✓</span> : ''}</td>
-                <td className="cell-check">{e.classification_days_away ? <span className="check-mark">✓</span> : ''}</td>
-                <td className="cell-check">{e.classification_job_transfer ? <span className="check-mark">✓</span> : ''}</td>
-                <td className="cell-check">{e.classification_other ? <span className="check-mark">✓</span> : ''}</td>
+                <td className="cell-check">
+                  {e.classification_death ? <span className="check-mark" aria-hidden="true">✓</span> : ''}
+                  <span className="sr-only">Death: {e.classification_death ? 'Recorded' : 'Not recorded'}</span>
+                </td>
+                <td className="cell-check">
+                  {e.classification_days_away ? <span className="check-mark" aria-hidden="true">✓</span> : ''}
+                  <span className="sr-only">Days away: {e.classification_days_away ? 'Recorded' : 'Not recorded'}</span>
+                </td>
+                <td className="cell-check">
+                  {e.classification_job_transfer ? <span className="check-mark" aria-hidden="true">✓</span> : ''}
+                  <span className="sr-only">Job transfer or restriction: {e.classification_job_transfer ? 'Recorded' : 'Not recorded'}</span>
+                </td>
+                <td className="cell-check">
+                  {e.classification_other ? <span className="check-mark" aria-hidden="true">✓</span> : ''}
+                  <span className="sr-only">Other: {e.classification_other ? 'Recorded' : 'Not recorded'}</span>
+                </td>
                 <td className="cell-num">{e.days_away_count || ''}</td>
                 <td className="cell-num">{e.days_restricted_count || ''}</td>
                 <td>{e.injury_type}</td>
@@ -841,7 +918,7 @@ function Manual300Modal({ siteId, onClose, onSaved }) {
             <div className="modal-title">Manual OSHA 300 Entry</div>
             <div className="modal-sub">Add a recordable case not linked to an incident in the system.</div>
           </div>
-          <button className="icon-btn" onClick={onClose}><Icon name="close" size={18}/></button>
+          <button className="icon-btn" onClick={onClose} aria-label="Close dialog"><Icon name="close" size={18}/></button>
         </div>
         <div className="modal-body">
           {error && <div style={{ color: 'var(--sds-error)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
@@ -1254,6 +1331,7 @@ const RIDDOR_ACTION_ROLES = new Set(['ehs_officer', 'ehs_manager', 'admin']);
 
 function RiddorReport({ siteId }) {
   const { user } = useAuth();
+  const promptDialog = usePrompt();
   const canEdit = RIDDOR_ACTION_ROLES.has(user?.role);
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(null);     // riddor row id while a POST is in-flight
@@ -1288,7 +1366,14 @@ function RiddorReport({ siteId }) {
   };
 
   const doWritten = async (rid) => {
-    const hseRef = window.prompt('HSE reference number from F2508 receipt (optional):', '') || '';
+    const hseRef = await promptDialog({
+      title: 'Log F2508 submission',
+      body: 'Record the HSE reference number from the F2508 receipt. You can leave this blank if not yet assigned.',
+      label: 'HSE reference number',
+      placeholder: 'Optional — e.g. HSE/123456',
+      confirmLabel: 'Log submission',
+    });
+    if (hseRef === null) return; // user cancelled
     setBusy(rid);
     try {
       await logRiddorWrittenSubmitted(rid, hseRef.trim() ? { hse_ref: hseRef.trim() } : {});
@@ -1321,10 +1406,15 @@ function RiddorReport({ siteId }) {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div
+          className="rpt-table-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="RIDDOR F2508 reports table, scroll horizontally to see more"
+        >
           <table className="rpt-table">
             <thead>
-              <tr><th>RIDDOR ref</th><th>Source</th><th>Date</th><th>Category</th><th>Description</th><th>HSE ref</th><th>Status</th>{canEdit && <th>Actions</th>}</tr>
+              <tr><th scope="col">RIDDOR ref</th><th scope="col">Source</th><th scope="col">Date</th><th scope="col">Category</th><th scope="col">Description</th><th scope="col">HSE ref</th><th scope="col">Status</th>{canEdit && <th scope="col">Actions</th>}</tr>
             </thead>
             <tbody>
               {(data.reports || []).map(r => {
@@ -1394,7 +1484,7 @@ function RiddorReport({ siteId }) {
             </tbody>
           </table>
         </div>
-        {toast && <div className="toast">{toast}</div>}
+        {toast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
 
         {data.stats && (
           <div className="rpt-riddor-stats">
@@ -1505,17 +1595,22 @@ function SafeworkNswReport({ siteId }) {
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div
+          className="rpt-table-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="SafeWork NSW notifications table, scroll horizontally to see more"
+        >
           <table className="rpt-table">
             <thead>
               <tr>
-                <th>NSW ref</th>
-                <th>Source</th>
-                <th>Event date</th>
-                <th>Site</th>
-                <th>s.35 category</th>
-                <th>Sub-category (verbatim)</th>
-                <th>s.38 status</th>
+                <th scope="col">NSW ref</th>
+                <th scope="col">Source</th>
+                <th scope="col">Event date</th>
+                <th scope="col">Site</th>
+                <th scope="col">s.35 category</th>
+                <th scope="col">Sub-category (verbatim)</th>
+                <th scope="col">s.38 status</th>
               </tr>
             </thead>
             <tbody>

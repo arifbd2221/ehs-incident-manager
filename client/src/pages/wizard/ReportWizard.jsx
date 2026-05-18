@@ -9,6 +9,7 @@ import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import DatePicker from '../../components/shared/DatePicker';
 import { TYPES, typeOf } from '../../components/shared/Badges';
+import { useConfirm } from '../../components/shared/Dialog';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { frameworkVisibility, jurisdictionForContext } from '../../utils/frameworks';
@@ -29,6 +30,14 @@ const STEPS = [
   { title: 'Review & submit', desc: 'Confirm details and route the incident' },
 ];
 
+// Phase 7: localStorage key for autosaved in-progress drafts.
+// The wizard writes a snapshot here on every form-state change so that
+// a refresh / accidental Esc / accidental backdrop click does not blow
+// away the user's work. File objects aren't JSON-serializable, so we
+// persist only their metadata (name, size, type) — on restore we warn
+// the user that attachments need re-adding.
+const DRAFT_KEY = 'ehs:wizard:draft';
+
 const TYPE_FORMS = {
   injury: InjuryForm, illness: IllnessForm, nearmiss: NearMissForm,
   property: PropertyDamageForm, env: EnvironmentalReleaseForm,
@@ -46,27 +55,42 @@ const TRACK_DESC = {
   C: 'Log & close — recorded for trend analysis, no investigation needed',
 };
 
+// Severity colour map for the gauge SVG + inline text colour. The design
+// system has no per-severity tokens, so we route to the closest semantic
+// tokens (error → S1, warning → S2/S3, success → S4, brand-primary → S5).
+// Values are applied via `style` (not SVG attributes) so the CSS parser
+// resolves the var() references.
 const SEV_COLORS = {
-  5: '#6b7280', 4: '#16a34a', 3: '#ca8a04', 2: '#ea580c', 1: '#dc2626',
+  5: 'var(--sds-brand-primary)',
+  4: 'var(--sds-success)',
+  3: 'var(--sds-warning)',
+  2: 'var(--sds-warning)',
+  1: 'var(--sds-error)',
 };
 
 function SevGauge({ sev }) {
   const pct = ((5 - sev) / 4) * 100;
-  const color = SEV_COLORS[sev] || '#6b7280';
+  const color = SEV_COLORS[sev] || 'var(--sds-fg-tertiary)';
   const r = 44;
   const circ = 2 * Math.PI * r;
   const dashLen = (pct / 100) * circ * 0.75;
 
   return (
+    // CSS `var(...)` is not valid inside SVG stroke/fill *attributes* —
+    // it must be applied through `style`. We set `stroke` via inline
+    // style (which CSS does resolve) and the centre text colour the same
+    // way. The track stroke uses a separate var.
     <div className="wiz-gauge">
       <svg width="110" height="110" viewBox="0 0 110 110">
-        <circle cx="55" cy="55" r={r} fill="none" stroke="#f1f5f9" strokeWidth="8"
+        <circle cx="55" cy="55" r={r} fill="none" strokeWidth="8"
           strokeDasharray={`${circ * 0.75} ${circ * 0.25}`}
-          strokeLinecap="round" transform="rotate(135 55 55)" />
-        <circle cx="55" cy="55" r={r} fill="none" stroke={color} strokeWidth="8"
+          strokeLinecap="round" transform="rotate(135 55 55)"
+          style={{ stroke: 'var(--sds-bg-surface-alt)' }} />
+        <circle cx="55" cy="55" r={r} fill="none" strokeWidth="8"
           strokeDasharray={`${dashLen} ${circ - dashLen}`}
           strokeLinecap="round" transform="rotate(135 55 55)"
-          className="wiz-gauge-fill" style={{ '--gauge-dash': dashLen, '--gauge-circ': circ }} />
+          className="wiz-gauge-fill"
+          style={{ '--gauge-dash': dashLen, '--gauge-circ': circ, stroke: color }} />
       </svg>
       <div className="wiz-gauge-center">
         <div className="wiz-gauge-val" style={{ color }}>S{sev}</div>
@@ -102,20 +126,25 @@ const EXAMPLE_DESCRIPTIONS = [
 ];
 
 
+// File-type colours map to semantic tokens — info-blue for images, error
+// for PDFs (matches the "red" cultural cue), warning for documents,
+// success for spreadsheets, fg-tertiary for fallback. Values are passed
+// inline (icon stroke, bg tint), so we use raw CSS variable strings.
 const fileTypeInfo = (file) => {
   const name = file.name || file.filename || '';
   const mime = file.type || file.mime_type || '';
-  if (mime.startsWith('image/')) return { type: 'image', color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', label: 'Image' };
-  if (mime === 'application/pdf' || name.endsWith('.pdf')) return { type: 'pdf', color: '#ef4444', bg: 'rgba(239,68,68,0.08)', label: 'PDF' };
-  if (mime.includes('word') || /\.docx?$/.test(name)) return { type: 'doc', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', label: 'Document' };
-  if (mime.includes('sheet') || mime.includes('excel') || /\.xlsx?$/.test(name)) return { type: 'sheet', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', label: 'Spreadsheet' };
-  return { type: 'text', color: '#6b7280', bg: 'rgba(107,114,128,0.08)', label: 'File' };
+  if (mime.startsWith('image/')) return { type: 'image', color: 'var(--sds-info)', bg: 'rgba(13,180,240,0.08)', label: 'Image' };
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return { type: 'pdf', color: 'var(--sds-error)', bg: 'rgba(211,47,47,0.08)', label: 'PDF' };
+  if (mime.includes('word') || /\.docx?$/.test(name)) return { type: 'doc', color: 'var(--sds-warning)', bg: 'rgba(237,108,2,0.08)', label: 'Document' };
+  if (mime.includes('sheet') || mime.includes('excel') || /\.xlsx?$/.test(name)) return { type: 'sheet', color: 'var(--sds-success)', bg: 'rgba(46,125,50,0.08)', label: 'Spreadsheet' };
+  return { type: 'text', color: 'var(--sds-fg-tertiary)', bg: 'rgba(102,106,114,0.08)', label: 'File' };
 };
 
-export default function ReportWizard({ onClose, onSubmit }) {
+export default function ReportWizard({ onClose, onSubmit, prefill }) {
   const { user } = useAuth();
   const { voiceSheetData, setVoiceSheetData, activeSiteId } = useApp();
   const { showOsha, showRiddor } = frameworkVisibility(user);
+  const confirm = useConfirm();
   const [step, setStep] = useState(0);
   const [type, setType] = useState('injury');
   const [title, setTitle] = useState('');
@@ -135,6 +164,14 @@ export default function ReportWizard({ onClose, onSubmit }) {
   const fileInputRef = useRef(null);
   const [removingIdx, setRemovingIdx] = useState(null);
   const [imageUrls, setImageUrls] = useState({});
+  const [submitError, setSubmitError] = useState('');
+  const typeGroupRef = useRef(null);
+
+  // Phase 7: gate autosave-on-change until the restore decision has been
+  // made. Without this gate, the first render would immediately overwrite
+  // any existing draft with empty initial state before the user could
+  // choose to restore it.
+  const restoreSettledRef = useRef(false);
 
   // Anonymous reporting toggle (per locked decision #10).
   // Disabled when type is injury/illness — those identify a person and
@@ -212,6 +249,135 @@ export default function ReportWizard({ onClose, onSubmit }) {
     }
   }, [voiceSheetData, handleVoiceExtracted, setVoiceSheetData]);
 
+  // Phase 7 — Restore in-progress draft on mount.
+  // Runs exactly once; reads any snapshot the previous session wrote to
+  // localStorage and asks the user whether to rehydrate. We do NOT block
+  // initial render — the prompt is async, so the wizard appears with
+  // default state while we wait. Once the user decides, we either
+  // hydrate state-by-state or wipe the stored draft.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let snapshot = null;
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) snapshot = JSON.parse(raw);
+      } catch {
+        // Corrupt JSON — nuke and continue.
+        localStorage.removeItem(DRAFT_KEY);
+      }
+      // A snapshot is "interesting" only if it actually contains data the
+      // user typed. Otherwise we silently skip the prompt to avoid
+      // pestering users who just opened+closed the wizard.
+      const hasContent = snapshot && (
+        snapshot.title?.trim() ||
+        snapshot.description?.trim() ||
+        snapshot.area?.trim() ||
+        (snapshot.typeData && Object.keys(snapshot.typeData).length > 0) ||
+        (snapshot.fileMeta && snapshot.fileMeta.length > 0)
+      );
+      if (!hasContent) {
+        if (snapshot) localStorage.removeItem(DRAFT_KEY);
+        restoreSettledRef.current = true;
+        return;
+      }
+      const fileNote = snapshot.fileMeta?.length
+        ? ` Note: ${snapshot.fileMeta.length} attached file${snapshot.fileMeta.length > 1 ? 's' : ''} can't be restored and will need to be re-added.`
+        : '';
+      const ok = await confirm({
+        title: 'Restore your in-progress report?',
+        body: `We saved a draft from your last session. Continue where you left off, or start fresh.${fileNote}`,
+        confirmLabel: 'Restore draft',
+        cancelLabel: 'Start fresh',
+      });
+      if (cancelled) return;
+      if (ok) {
+        // Hydrate. Each field is set only if present so we don't trample
+        // sensible defaults (e.g. datetime).
+        if (typeof snapshot.step === 'number') setStep(snapshot.step);
+        if (snapshot.type) setType(snapshot.type);
+        if (snapshot.title != null) setTitle(snapshot.title);
+        if (snapshot.siteId != null) setSiteId(snapshot.siteId);
+        if (snapshot.assetId != null) setAssetId(snapshot.assetId);
+        if (snapshot.area != null) setArea(snapshot.area);
+        if (snapshot.datetime) setDatetime(snapshot.datetime);
+        if (snapshot.description != null) setDescription(snapshot.description);
+        if (typeof snapshot.likelihood === 'number') setLikelihood(snapshot.likelihood);
+        if (typeof snapshot.consequence === 'number') setConsequence(snapshot.consequence);
+        if (snapshot.typeData && typeof snapshot.typeData === 'object') setTypeData(snapshot.typeData);
+        if (typeof snapshot.isAnonymous === 'boolean') setIsAnonymous(snapshot.isAnonymous);
+      } else {
+        localStorage.removeItem(DRAFT_KEY);
+      }
+      restoreSettledRef.current = true;
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Phase 7 — Autosave on every form-state change.
+  // Skipped until restore has settled so we don't overwrite a real draft
+  // with empty defaults. File objects are not JSON-serializable, so we
+  // persist file *metadata* only (name/size/type) — on restore the user
+  // is told their attachments need re-adding.
+  useEffect(() => {
+    if (!restoreSettledRef.current) return;
+    try {
+      const snapshot = {
+        step,
+        type,
+        title,
+        siteId,
+        assetId,
+        area,
+        datetime,
+        description,
+        likelihood,
+        consequence,
+        typeData,
+        isAnonymous,
+        fileMeta: files.map(f => ({ name: f.name, size: f.size, type: f.type })),
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(snapshot));
+    } catch {
+      // Quota / private-mode failure — silent. Worst case the user loses
+      // autosave; the wizard continues to function.
+    }
+  }, [step, type, title, siteId, assetId, area, datetime, description, likelihood, consequence, typeData, isAnonymous, files]);
+
+  // Phase 7 — Dirty-check guarded close.
+  // Esc, backdrop click, the X button, and the Cancel button all route
+  // through this. If the user has typed *anything*, we make them
+  // confirm before dismissing — and we reassure them that the autosave
+  // will bring it back next time unless they explicitly Discard.
+  const isDirty = (
+    title.trim().length > 0 ||
+    description.trim().length > 0 ||
+    area.trim().length > 0 ||
+    files.length > 0 ||
+    Object.keys(typeData || {}).length > 0
+  );
+
+  const requestClose = useCallback(async () => {
+    if (!isDirty) {
+      localStorage.removeItem(DRAFT_KEY);
+      onClose();
+      return;
+    }
+    const ok = await confirm({
+      title: 'Discard your in-progress report?',
+      body: 'Your draft is autosaved and will be restored next time you open the wizard. To discard it permanently, choose "Discard".',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      danger: true,
+    });
+    if (ok) {
+      localStorage.removeItem(DRAFT_KEY);
+      onClose();
+    }
+  }, [isDirty, confirm, onClose]);
+
   // After site-change effect reloads assets, apply the AI-suggested asset
   // (if any) once the option is actually present in the dropdown.
   useEffect(() => {
@@ -226,13 +392,28 @@ export default function ReportWizard({ onClose, onSubmit }) {
     getSites().then(data => {
       setSites(data);
       if (data.length > 0) {
-        const defaultId = activeSiteId && data.some(s => s.id === activeSiteId)
-          ? String(activeSiteId)
-          : String(data[0].id);
+        // Honour caller prefill (e.g. asset detail "Report incident") first,
+        // then the active site filter, then the first site as fallback.
+        const prefillSite = prefill?.siteId && data.some(s => String(s.id) === String(prefill.siteId))
+          ? String(prefill.siteId)
+          : null;
+        const defaultId = prefillSite
+          || (activeSiteId && data.some(s => s.id === activeSiteId) ? String(activeSiteId) : String(data[0].id));
         setSiteId(defaultId);
       }
     });
-  }, [activeSiteId]);
+  }, [activeSiteId, prefill?.siteId]);
+
+  // Apply caller asset prefill once assets for the chosen site finish loading.
+  // The site-change effect clears assetId, so this fires after that reset and
+  // only sets the value if the asset actually exists in the loaded list.
+  useEffect(() => {
+    const target = prefill?.assetId ? String(prefill.assetId) : null;
+    if (!target) return;
+    if (assets.some(a => String(a.id) === target)) {
+      setAssetId(target);
+    }
+  }, [assets, prefill?.assetId]);
 
   // Reload assets when the site changes; reset asset selection
   useEffect(() => {
@@ -268,10 +449,10 @@ export default function ReportWizard({ onClose, onSubmit }) {
   }, [siteId, assetId, area, type, typeData]);
 
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    const handler = (e) => { if (e.key === 'Escape') requestClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
+  }, [requestClose]);
 
   useEffect(() => {
     const urls = {};
@@ -335,6 +516,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setSubmitError('');
     try {
       // Bridge: type-specific forms (InjuryForm, IllnessForm) store body_parts
       // inside type_data. The backend reads body_parts_affected from the
@@ -447,59 +629,118 @@ export default function ReportWizard({ onClose, onSubmit }) {
       if (files.length > 0 && incident?.id) {
         await uploadAttachments('incident', incident.id, files);
       }
+      // Phase 7 — wipe the autosaved draft once the incident is safely
+      // persisted on the server. We do this before onSubmit() in case
+      // the parent unmounts us synchronously.
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
       onSubmit();
-    } catch {
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.message || 'Submission failed — please try again.';
+      setSubmitError(msg);
       setSubmitting(false);
     }
   };
 
-  return (
-    <div className="wiz-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+  // Phase 7 — render via createPortal(document.body). The .page parent
+  // applies a CSS transform during its pageEnter animation, which breaks
+  // position: fixed on descendants (CLAUDE.md modal rule). Portaling
+  // also keeps focus management, Esc, and backdrop click working
+  // because the dialog is no longer trapped inside an animated subtree.
+  return createPortal(
+    <div
+      className="wiz-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wiz-title"
+      onClick={e => { if (e.target === e.currentTarget) requestClose(); }}
+    >
       <div className="wiz-shell" onClick={e => e.stopPropagation()}>
         {/* Left sidebar */}
         <div className="wiz-sidebar">
           <div className="wiz-brand">
             <div className="wiz-brand-icon"><Icon name="incidents" size={18} /></div>
             <div>
-              <div className="wiz-brand-text">Report incident</div>
+              <div id="wiz-title" className="wiz-brand-text">Report incident</div>
               <div className="wiz-brand-sub">EHS Module</div>
             </div>
           </div>
 
-          <div className="wiz-steps">
-            {STEPS.map((s, i) => (
-              <div key={i} className={`wiz-step ${i < step ? 'done' : i === step ? 'active' : ''}`}>
-                <div className="wiz-step-num">
-                  {i < step ? <Icon name="check" size={14} /> : i + 1}
-                </div>
-                <div className="wiz-step-text">
-                  <div className="wiz-step-title">{s.title}</div>
-                  <div className="wiz-step-desc">{s.desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ol className="wiz-steps" role="list">
+            {STEPS.map((s, i) => {
+              const isDone = i < step;
+              const isActive = i === step;
+              const status = isDone ? 'Completed' : isActive ? 'Current step' : 'Upcoming';
+              return (
+                <li
+                  key={i}
+                  className={`wiz-step ${isDone ? 'done' : isActive ? 'active' : ''}`}
+                  aria-current={isActive ? 'step' : undefined}
+                >
+                  <div className="wiz-step-num" aria-hidden="true">
+                    {isDone ? <Icon name="check" size={14} /> : i + 1}
+                  </div>
+                  <div className="wiz-step-text">
+                    <div className="wiz-step-title">
+                      {s.title}
+                      <span className="sr-only"> — {status}</span>
+                    </div>
+                    <div className="wiz-step-desc">{s.desc}</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
 
           <div className="wiz-preview">
             <div className="wiz-preview-h">Live preview</div>
+            <div className="wiz-preview-illust" aria-hidden="true">
+              <svg viewBox="0 0 96 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Clipboard body */}
+                <rect x="22" y="8" width="52" height="40" rx="3"
+                      fill="rgba(255,255,255,0.06)"
+                      stroke="rgba(255,255,255,0.50)" strokeWidth="1.4" />
+                {/* Clip at the top */}
+                <rect x="38" y="3" width="20" height="8" rx="1.6"
+                      fill="rgba(255,255,255,0.22)"
+                      stroke="rgba(255,255,255,0.60)" strokeWidth="1.4" />
+                {/* Three data lines that fill in sequentially */}
+                <line className="wp-line wp-line-1" x1="29" y1="20" x2="63" y2="20"
+                      stroke="#FFC93C" strokeWidth="2" strokeLinecap="round" />
+                <line className="wp-line wp-line-2" x1="29" y1="27" x2="57" y2="27"
+                      stroke="#FFC93C" strokeWidth="2" strokeLinecap="round" />
+                <line className="wp-line wp-line-3" x1="29" y1="34" x2="61" y2="34"
+                      stroke="#FFC93C" strokeWidth="2" strokeLinecap="round" />
+                {/* Check that draws in once the rows settle */}
+                <path className="wp-check" d="M41 41 L46 45 L56 37"
+                      stroke="#9be3a0" strokeWidth="2.2" strokeLinecap="round"
+                      strokeLinejoin="round" fill="none" />
+                {/* Pen tip — quietly orbits while data is being captured */}
+                <g className="wp-pen">
+                  <line x1="0" y1="0" x2="7" y2="-7"
+                        stroke="rgba(255,255,255,0.85)" strokeWidth="2"
+                        strokeLinecap="round" />
+                  <circle cx="0" cy="0" r="1.5" fill="#FFC93C" />
+                </g>
+              </svg>
+            </div>
             {title && (
-              <div className="wiz-preview-row">
+              <div className="wiz-preview-row is-stacked">
                 <span className="lbl">Title</span>
-                <span className="val">{title}</span>
+                <span className="val" title={title}>{title}</span>
               </div>
             )}
             <div className="wiz-preview-row">
               <span className="lbl">Type</span>
-              <span className="val">{typeName}</span>
+              <span className="val" title={typeName}>{typeName}</span>
             </div>
             <div className="wiz-preview-row">
               <span className="lbl">Site</span>
-              <span className="val">{siteName}</span>
+              <span className="val" title={siteName}>{siteName}</span>
             </div>
             {area && (
-              <div className="wiz-preview-row">
+              <div className="wiz-preview-row is-stacked">
                 <span className="lbl">Area</span>
-                <span className="val">{area}</span>
+                <span className="val" title={area}>{area}</span>
               </div>
             )}
             <div className="wiz-preview-row">
@@ -526,7 +767,14 @@ export default function ReportWizard({ onClose, onSubmit }) {
               <div className="wiz-h-title">{STEPS[step].title}</div>
               <div className="wiz-h-sub">Step {step + 1} of {STEPS.length}</div>
             </div>
-            <button className="wiz-close" onClick={onClose}><Icon name="close" size={16} /></button>
+            <button
+              type="button"
+              className="wiz-close"
+              onClick={requestClose}
+              aria-label="Close wizard"
+            >
+              <Icon name="close" size={16} />
+            </button>
           </div>
 
           <div className="wiz-body">
@@ -576,20 +824,62 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     Incident type
                     {aiSuggestedFields.has('type') && <span className="wiz-ai-pill" style={{ marginLeft: 8 }}>✨ AI</span>}
                   </div>
-                  <div className="wiz-type-grid">
-                    {TYPES.map(t => (
-                      <div key={t.id}
-                        className={`wiz-type-card ${type === t.id ? 'selected' : ''}`}
-                        onClick={() => { setType(t.id); setTypeData({}); clearAiBadge('type'); }}
-                      >
-                        <div className="wiz-tc-icon" style={{ background: `${t.color}18` }}>
-                          <Icon name={TYPE_ICONS[t.id] || 'warning'} size={20} color={t.color} />
-                        </div>
-                        <div className="wiz-tc-name">{t.name}</div>
-                        <div className="wiz-tc-desc">{t.desc}</div>
-                        <div className="wiz-tc-check"><Icon name="check" size={11} /></div>
-                      </div>
-                    ))}
+                  <div
+                    ref={typeGroupRef}
+                    className="wiz-type-grid"
+                    role="radiogroup"
+                    aria-label="Incident type"
+                    onKeyDown={(e) => {
+                      const keys = ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End'];
+                      if (!keys.includes(e.key)) return;
+                      e.preventDefault();
+                      const idx = TYPES.findIndex(t => t.id === type);
+                      let next = idx;
+                      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % TYPES.length;
+                      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + TYPES.length) % TYPES.length;
+                      else if (e.key === 'Home') next = 0;
+                      else if (e.key === 'End') next = TYPES.length - 1;
+                      const nextType = TYPES[next];
+                      setType(nextType.id);
+                      setTypeData({});
+                      clearAiBadge('type');
+                      // Move focus to newly selected card
+                      requestAnimationFrame(() => {
+                        const el = typeGroupRef.current?.querySelector(`[data-type-id="${nextType.id}"]`);
+                        el?.focus();
+                      });
+                    }}
+                  >
+                    {TYPES.map(t => {
+                      const selected = type === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          tabIndex={selected ? 0 : -1}
+                          data-type-id={t.id}
+                          className={`wiz-type-card ${selected ? 'selected' : ''}`}
+                          onClick={() => { setType(t.id); setTypeData({}); clearAiBadge('type'); }}
+                          onKeyDown={(e) => {
+                            if (e.key === ' ' || e.key === 'Spacebar') {
+                              e.preventDefault();
+                              setType(t.id);
+                              setTypeData({});
+                              clearAiBadge('type');
+                            }
+                          }}
+                        >
+                          <div className="wiz-tc-icon" style={{ background: `${t.color}18` }}>
+                            <Icon name={TYPE_ICONS[t.id] || 'warning'} size={20} color={t.color} />
+                          </div>
+                          <div className="wiz-tc-name">{t.name}</div>
+                          <div className="wiz-tc-desc">{t.desc}</div>
+                          <div className="wiz-tc-check" aria-hidden="true"><Icon name="check" size={11} /></div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -600,12 +890,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
                   </div>
                   <div className="field-row-3">
                     <div className="field">
-                      <label className="label">Date &amp; time <span className="req">*</span></label>
+                      <label className="label">Date &amp; time <span className="req" aria-label="required">*</span></label>
                       <DatePicker value={datetime} onChange={setDatetime} showTime placeholder="Select date & time" />
                     </div>
                     <div className="field">
                       <label className="label">
-                        Site <span className="req">*</span>
+                        Site <span className="req" aria-label="required">*</span>
                         {aiSuggestedFields.has('site') && <span className="wiz-ai-pill" style={{ marginLeft: 6 }}>✨ AI</span>}
                       </label>
                       <ComboBox options={siteOpts} value={siteId} onChange={v => { setSiteId(v); clearAiBadge('site'); }} placeholder="Search sites…" />
@@ -729,7 +1019,12 @@ export default function ReportWizard({ onClose, onSubmit }) {
                               </div>
                             </div>
                             {isOversized && <span className="wiz-fi-warn">Too large</span>}
-                            <button className="wiz-fi-remove" onClick={(e) => { e.stopPropagation(); removeFile(i); }}>
+                            <button
+                              type="button"
+                              className="wiz-fi-remove"
+                              aria-label={`Remove file ${f.name}`}
+                              onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                            >
                               <Icon name="close" size={12} />
                             </button>
                           </div>
@@ -874,7 +1169,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                         <span className="val">{assets.find(a => String(a.id) === String(assetId))?.name || '—'}</span>
                       </div>
                     )}
-                    <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 8, paddingTop: 8 }}>
+                    <div style={{ borderTop: '1px solid var(--sds-bg-surface-alt)', marginTop: 8, paddingTop: 8 }}>
                       <div className="wiz-review-row">
                         <span className="lbl">Severity</span>
                         <span className="val">
@@ -889,7 +1184,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
                       </div>
                     </div>
                     {(showOsha || showRiddor) && (
-                      <div style={{ borderTop: '1px solid #f1f5f9', marginTop: 8, paddingTop: 8 }}>
+                      <div style={{ borderTop: '1px solid var(--sds-bg-surface-alt)', marginTop: 8, paddingTop: 8 }}>
                         {showOsha && (
                           <div className="wiz-review-row">
                             <span className="lbl">OSHA recordable</span>
@@ -947,9 +1242,9 @@ export default function ReportWizard({ onClose, onSubmit }) {
                       </div>
                       {showRiddor && type === 'dangerous' && (
                         <div className="wiz-next-item">
-                          <div className="wiz-next-dot" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}><Icon name="phone" size={14} /></div>
+                          <div className="wiz-next-dot" style={{ background: 'rgba(211,47,47,0.1)', color: 'var(--sds-error)' }}><Icon name="phone" size={14} /></div>
                           <div className="wiz-next-body">
-                            <div className="wiz-nb-when" style={{ color: '#ef4444' }}>Immediately</div>
+                            <div className="wiz-nb-when" style={{ color: 'var(--sds-error)' }}>Immediately</div>
                             <div className="wiz-nb-what">RIDDOR — phone HSE without delay, written report within 10 days</div>
                           </div>
                         </div>
@@ -957,14 +1252,14 @@ export default function ReportWizard({ onClose, onSubmit }) {
                     </div>
 
                     {description && (
-                      <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                      <div style={{ marginTop: 16, padding: 12, background: 'var(--sds-bg-surface)', borderRadius: 8, border: '1px solid var(--sds-border)' }}>
                         <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sds-fg-tertiary)', marginBottom: 6 }}>Description</div>
                         <div style={{ fontSize: 12, color: 'var(--sds-fg-secondary)', lineHeight: 1.55 }}>{description}</div>
                       </div>
                     )}
 
                     {files.length > 0 && (
-                      <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                      <div style={{ marginTop: 16, padding: 12, background: 'var(--sds-bg-surface)', borderRadius: 8, border: '1px solid var(--sds-border)' }}>
                         <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sds-fg-tertiary)', marginBottom: 8 }}>Attachments · {files.length} file{files.length > 1 ? 's' : ''}</div>
                         {Object.keys(imageUrls).length > 0 && (
                           <div className="wiz-review-thumbs">
@@ -997,27 +1292,54 @@ export default function ReportWizard({ onClose, onSubmit }) {
             </div>
           </div>
 
+          {/* Live status region for submission + errors */}
+          <div className="sr-only" role="status" aria-live="polite">
+            {submitting ? 'Submitting incident report, please wait.' : ''}
+          </div>
+          {submitError && (
+            <div className="wiz-submit-error" role="alert" aria-live="assertive">
+              <Icon name="warning" size={14} /> {submitError}
+            </div>
+          )}
+
           {/* Footer */}
           <div className="wiz-footer">
-            <button className="btn btn-text" onClick={onClose} style={{ color: 'var(--sds-fg-tertiary)' }}>Cancel</button>
+            <button type="button" className="btn btn-text wiz-cancel" onClick={requestClose} style={{ color: 'var(--sds-fg-tertiary)' }}>Cancel</button>
             <div className="wiz-f-tip">
               {step === 0 && 'Fill in the basics — you can always add more detail later.'}
               {step === 1 && 'Click cells in the risk matrix to set likelihood vs. consequence.'}
               {step === 2 && 'Review everything before submitting. This action cannot be undone.'}
             </div>
             {step > 0 && (
-              <button className="btn btn-tertiary" onClick={() => { setStepDir('back'); setStep(s => s - 1); }}>
+              <button type="button" className="btn btn-tertiary wiz-back" onClick={() => { setStepDir('back'); setStep(s => s - 1); }}>
                 <Icon name="arrowL" size={14} />Back
               </button>
             )}
             {step < 2 && (
-              <button className="btn btn-primary" disabled={!canContinue} onClick={() => { setStepDir('forward'); setStep(s => s + 1); }}>
-                Continue<Icon name="arrow" size={14} />
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primary wiz-continue"
+                  disabled={!canContinue}
+                  aria-describedby={!canContinue ? 'wiz-continue-hint' : undefined}
+                  onClick={() => { setStepDir('forward'); setStep(s => s + 1); }}
+                >
+                  Continue<Icon name="arrow" size={14} />
+                </button>
+                <span id="wiz-continue-hint" className="sr-only">
+                  {canContinue ? '' : 'Continue is disabled until required fields are filled'}
+                </span>
+              </>
             )}
             {step === 2 && (
-              <button className="btn btn-primary btn-lg" disabled={submitting} onClick={handleSubmit}
-                style={{ background: submitting ? '#94a3b8' : 'linear-gradient(135deg, var(--sds-brand-primary), #8b5cf6)' }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-lg wiz-continue"
+                disabled={submitting}
+                aria-busy={submitting || undefined}
+                onClick={handleSubmit}
+                style={{ background: submitting ? 'var(--sds-gray-400)' : 'linear-gradient(135deg, var(--sds-brand-primary), var(--sds-brand-primary))' }}
+              >
                 <Icon name="check" size={16} />{submitting ? 'Submitting...' : 'Submit & route'}
               </button>
             )}
@@ -1025,6 +1347,7 @@ export default function ReportWizard({ onClose, onSubmit }) {
         </div>
       </div>
 
-    </div>
+    </div>,
+    document.body
   );
 }

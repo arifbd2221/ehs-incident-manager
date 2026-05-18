@@ -22,27 +22,42 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [activeDemo, setActiveDemo] = useState(null);
+  const [success, setSuccess] = useState(false);
 
   if (user) return <Navigate to="/" replace />;
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const doLogin = async (creds, demo = null) => {
     setError('');
     setLoading(true);
+    if (demo) setActiveDemo(demo);
     try {
-      await login(email, password);
+      await login(creds.email, creds.password);
+      setSuccess(true);
+      // Hold the success animation briefly so it lands before navigation
+      await new Promise((r) => setTimeout(r, 600));
       navigate('/', { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed');
-    } finally {
       setLoading(false);
+      setActiveDemo(null);
+      setSuccess(false);
     }
   };
 
-  const quickLogin = (d) => {
-    setEmail(d.email);
-    setPassword(d.pw || 'password123');
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    doLogin({ email, password });
   };
+
+  const quickLogin = (d) => {
+    const creds = { email: d.email, password: d.pw || 'password123' };
+    setEmail(creds.email);
+    setPassword(creds.password);
+    doLogin(creds, d);
+  };
+
+  const demoFirstName = activeDemo ? activeDemo.label.split(' ')[0] : '';
 
   return (
     <div className="auth-page">
@@ -90,7 +105,40 @@ export default function Login() {
       </div>
 
       <div className="auth-form-side">
-        <div className="auth-card">
+        <div className={`auth-card ${loading ? 'auth-card-busy' : ''}`}>
+          {loading && (
+            <div className={`auth-overlay ${success ? 'is-success' : ''}`} aria-live="polite">
+              <div className="auth-overlay-content">
+                <svg className="auth-overlay-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" aria-hidden="true">
+                  <g fill="#FFC93C">
+                    <rect className="logo-diamond logo-d1" x="14" y="14" width="14" height="14" transform="rotate(45 21 21)" />
+                    <rect className="logo-diamond logo-d2" x="36" y="18" width="18" height="18" transform="rotate(45 45 27)" />
+                    <rect className="logo-diamond logo-d3" x="58" y="14" width="14" height="14" transform="rotate(45 65 21)" />
+                    <rect className="logo-diamond logo-d4" x="36" y="40" width="14" height="14" transform="rotate(45 43 47)" />
+                  </g>
+                  <path className="logo-check" d="M 18 62 L 42 86 L 92 36 L 82 26 L 42 66 L 28 52 Z" fill="#626DF9" />
+                </svg>
+                <div className="auth-overlay-text">
+                  {success
+                    ? (activeDemo ? `Welcome, ${demoFirstName}!` : 'Welcome back!')
+                    : (activeDemo ? `Signing you in as ${demoFirstName}` : 'Signing you in')}
+                </div>
+                {!success && (
+                  <div className="auth-overlay-dots" aria-hidden="true">
+                    <span /><span /><span />
+                  </div>
+                )}
+                {success && (
+                  <div className="auth-overlay-check" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="auth-card-header">
             <h2>Welcome back</h2>
             <p>Sign in to your account</p>
@@ -140,9 +188,16 @@ export default function Login() {
 
           <div className="auth-demo-grid">
             {DEMO.map(d => (
-              <button key={d.email} className="auth-demo-btn" onClick={() => quickLogin(d)}>
+              <button
+                key={d.email}
+                className={`auth-demo-btn ${activeDemo?.email === d.email ? 'is-active' : ''}`}
+                onClick={() => quickLogin(d)}
+                disabled={loading}
+                type="button"
+              >
                 <Icon name={d.icon} size={14} />
                 <span>{d.label}</span>
+                {activeDemo?.email === d.email && <span className="auth-demo-spinner" />}
               </button>
             ))}
             <div className="auth-demo-hint">Password: password123</div>

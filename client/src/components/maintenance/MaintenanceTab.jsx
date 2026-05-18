@@ -12,6 +12,7 @@ import ScheduleModal from './ScheduleModal';
 import CompleteModal from './CompleteModal';
 import EscalateModal from './EscalateModal';
 import ScheduleDetailModal from './ScheduleDetailModal';
+import { useConfirm, useAlert } from '../shared/Dialog';
 
 const ELEVATED = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
@@ -51,6 +52,8 @@ const OUTCOME_DOT = {
 export default function MaintenanceTab({ asset, user, onRefresh }) {
   const navigate = useNavigate();
   const canEdit = ELEVATED.has(user?.role);
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
 
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -105,9 +108,21 @@ export default function MaintenanceTab({ asset, user, onRefresh }) {
   };
 
   const handleArchive = async (schedule) => {
-    if (!window.confirm(`Archive "${schedule.title}"? Existing completion history stays in the audit log.`)) return;
+    const ok = await confirmDialog({
+      title: `Archive "${schedule.title}"?`,
+      body: 'Existing completion history stays in the audit log. The schedule will be hidden from active views but can be restored later.',
+      confirmLabel: 'Archive',
+      danger: true,
+    });
+    if (!ok) return;
     try { await deleteSchedule(schedule.id); load(); }
-    catch (e) { alert(e.response?.data?.error || 'Archive failed'); }
+    catch (e) {
+      await alertDialog({
+        title: 'Archive failed',
+        body: e.response?.data?.error || 'Could not archive this schedule.',
+        tone: 'error',
+      });
+    }
   };
 
   return (
@@ -351,7 +366,13 @@ export default function MaintenanceTab({ asset, user, onRefresh }) {
                               link.href = url; link.download = a.filename;
                               document.body.appendChild(link); link.click(); link.remove();
                               URL.revokeObjectURL(url);
-                            } catch { alert('Download failed'); }
+                            } catch {
+                              await alertDialog({
+                                title: 'Download failed',
+                                body: 'Could not download the attachment. Please try again.',
+                                tone: 'error',
+                              });
+                            }
                           }}
                           style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'var(--sds-bg-surface-alt)', borderRadius: 'var(--sds-radius-sm)', fontSize: 11, color: 'var(--sds-fg-secondary)', textDecoration: 'none' }}
                           title={`${a.filename} · ${Math.round((a.size_bytes || 0) / 1024)} KB`}

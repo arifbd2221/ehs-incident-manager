@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getUsers, getSites, createUser, updateUser, resetUserPassword, importUsers, userImportTemplateUrl } from '../../api/users';
 import Icon from '../../components/shared/Icon';
+import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import ComboBox from '../../components/shared/ComboBox';
 import ImportModal from '../../components/shared/ImportModal';
 import { TeamIllustration } from '../../components/shared/OnboardingIllustrations';
@@ -296,6 +297,8 @@ function PasswordResetModal({ member, onClose, onSaved }) {
 
 export default function Members() {
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
   const isAdmin = user?.role === 'admin';
 
   const [users, setUsers] = useState([]);
@@ -336,14 +339,27 @@ export default function Members() {
   const onPwSaved = () => { flashToast('Password reset'); closePwModal(); };
 
   const toggleActive = async (u) => {
-    const verb = u.is_active ? 'Deactivate' : 'Reactivate';
-    if (!window.confirm(`${verb} ${u.name}?`)) return;
+    const deactivating = u.is_active;
+    const verb = deactivating ? 'Deactivate' : 'Reactivate';
+    const ok = await confirmDialog({
+      title: `${verb} ${u.name}?`,
+      body: deactivating
+        ? 'They will lose access immediately but their history, assignments, and audit trail are preserved. You can reactivate them later.'
+        : 'They will regain access with their existing role and site assignment. Their history is unchanged.',
+      confirmLabel: verb,
+      danger: deactivating,
+    });
+    if (!ok) return;
     try {
       await updateUser(u.id, { is_active: !u.is_active });
-      flashToast(u.is_active ? 'Member deactivated' : 'Member reactivated');
+      flashToast(deactivating ? 'Member deactivated' : 'Member reactivated');
       refresh();
     } catch (err) {
-      alert(err.response?.data?.error || `${verb} failed`);
+      await alertDialog({
+        title: `Couldn't ${verb.toLowerCase()} member`,
+        body: err.response?.data?.error || `${verb} failed`,
+        tone: 'error',
+      });
     }
   };
 
@@ -401,28 +417,28 @@ export default function Members() {
       {/* Stat cards */}
       <div className="mbr-stats">
         <div className="mbr-stat" style={{ animationDelay: '50ms' }}>
-          <div className="mbr-stat-icon" style={{ background: 'rgba(98,109,249,0.1)', color: '#626DF9' }}>
+          <div className="mbr-stat-icon" style={{ background: 'var(--sds-brand-primary-tint)', color: 'var(--sds-brand-primary)' }}>
             <Icon name="person" size={16} />
           </div>
           <div className="mbr-stat-val">{users.length}</div>
           <div className="mbr-stat-lbl">Total</div>
         </div>
         <div className="mbr-stat" style={{ animationDelay: '100ms' }}>
-          <div className="mbr-stat-icon" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+          <div className="mbr-stat-icon" style={{ background: 'var(--sds-success-bg)', color: 'var(--sds-success)' }}>
             <Icon name="check" size={16} />
           </div>
           <div className="mbr-stat-val">{activeCount}</div>
           <div className="mbr-stat-lbl">Active</div>
         </div>
         <div className="mbr-stat" style={{ animationDelay: '150ms' }}>
-          <div className="mbr-stat-icon" style={{ background: 'rgba(98,109,249,0.1)', color: '#626DF9' }}>
+          <div className="mbr-stat-icon" style={{ background: 'var(--sds-brand-primary-tint)', color: 'var(--sds-brand-primary)' }}>
             <Icon name="shield" size={16} />
           </div>
           <div className="mbr-stat-val">{(roleCounts.admin || 0) + (roleCounts.ehs_manager || 0) + (roleCounts.ehs_officer || 0)}</div>
           <div className="mbr-stat-lbl">Elevated</div>
         </div>
         <div className="mbr-stat" style={{ animationDelay: '200ms' }}>
-          <div className="mbr-stat-icon" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316' }}>
+          <div className="mbr-stat-icon" style={{ background: 'var(--sds-warning-bg)', color: 'var(--sds-warning)' }}>
             <Icon name="factory" size={16} />
           </div>
           <div className="mbr-stat-val">{sites.length}</div>

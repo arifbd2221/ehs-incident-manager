@@ -7,12 +7,13 @@
 // a single empty-state line. Any error from the BE collapses to a
 // non-fatal empty card so a missing link doesn't break the page.
 import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
+import Drawer from './Drawer';
 import { getReferences, deleteLink } from '../../api/links';
 import { useAuth } from '../../context/AuthContext';
 import AddLinkModal from './AddLinkModal';
+import { useConfirm } from './Dialog';
 
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
@@ -40,7 +41,8 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const confirmDialog = useConfirm();
 
   useEffect(() => {
     if (!entityType || !entityId) return;
@@ -56,7 +58,13 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
   const unlink = async (linkId, e) => {
     e.stopPropagation();
     if (!linkId) return;
-    if (!window.confirm('Remove this link? The two records will no longer be connected.')) return;
+    const ok = await confirmDialog({
+      title: 'Remove this link?',
+      body: 'The two records will no longer be connected. You can re-link them later if needed.',
+      confirmLabel: 'Remove link',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteLink(linkId);
       refresh();
@@ -84,14 +92,59 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
     (refs.risks?.length || 0)
   );
 
+  const inlineEmpty = (
+    <div className="refby-empty">
+      Nothing references this {labelFor[entityType] || entityType} yet.{canEdit ? ' Use "+ Link" to attach one.' : ''}
+    </div>
+  );
+
+  const drawerEmpty = (
+    <div className="refby-empty-hero">
+      <svg viewBox="0 0 200 140" className="refby-empty-svg" aria-hidden="true">
+        <g className="refby-empty-lines" stroke="var(--sds-brand-primary)" strokeWidth="1.2" strokeDasharray="2 3" strokeLinecap="round" fill="none" opacity="0.35">
+          <line x1="100" y1="70" x2="40" y2="36" />
+          <line x1="100" y1="70" x2="160" y2="36" />
+          <line x1="100" y1="70" x2="100" y2="118" />
+        </g>
+
+        <g className="refby-empty-ghost refby-empty-ghost-1">
+          <rect x="22" y="22" width="36" height="28" rx="6" fill="rgba(98,109,249,0.08)" stroke="rgba(98,109,249,0.32)" strokeWidth="1" strokeDasharray="3 2" />
+          <rect x="28" y="29" width="20" height="2.5" rx="1.25" fill="rgba(98,109,249,0.55)" />
+          <rect x="28" y="34" width="14" height="2" rx="1" fill="rgba(98,109,249,0.32)" />
+          <rect x="28" y="38" width="16" height="2" rx="1" fill="rgba(98,109,249,0.32)" />
+        </g>
+        <g className="refby-empty-ghost refby-empty-ghost-2">
+          <rect x="142" y="22" width="36" height="28" rx="6" fill="rgba(98,109,249,0.08)" stroke="rgba(98,109,249,0.32)" strokeWidth="1" strokeDasharray="3 2" />
+          <rect x="148" y="29" width="20" height="2.5" rx="1.25" fill="rgba(98,109,249,0.55)" />
+          <rect x="148" y="34" width="14" height="2" rx="1" fill="rgba(98,109,249,0.32)" />
+          <rect x="148" y="38" width="16" height="2" rx="1" fill="rgba(98,109,249,0.32)" />
+        </g>
+        <g className="refby-empty-ghost refby-empty-ghost-3">
+          <rect x="82" y="104" width="36" height="28" rx="6" fill="rgba(98,109,249,0.08)" stroke="rgba(98,109,249,0.32)" strokeWidth="1" strokeDasharray="3 2" />
+          <rect x="88" y="111" width="20" height="2.5" rx="1.25" fill="rgba(98,109,249,0.55)" />
+          <rect x="88" y="116" width="14" height="2" rx="1" fill="rgba(98,109,249,0.32)" />
+          <rect x="88" y="120" width="16" height="2" rx="1" fill="rgba(98,109,249,0.32)" />
+        </g>
+
+        <circle cx="100" cy="70" r="28" fill="none" stroke="var(--sds-brand-primary)" strokeWidth="1.2" className="refby-empty-pulse" />
+        <circle cx="100" cy="70" r="22" fill="rgba(98,109,249,0.12)" />
+        <circle cx="100" cy="70" r="16" fill="var(--sds-brand-primary)" />
+        <path d="M100 63 V77 M93 70 H107" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+      </svg>
+      <div className="refby-empty-title">No links yet</div>
+      <div className="refby-empty-sub">
+        Connect this {labelFor[entityType] || entityType} to incidents, CAPAs, documents, or other records to give it context.
+      </div>
+      {canEdit && (
+        <button className="btn btn-primary refby-empty-cta" onClick={() => setAddOpen(true)}>
+          <Icon name="plus" size={13}/> Link a record
+        </button>
+      )}
+    </div>
+  );
+
   const fullContent = (
     <>
-      {total === 0 && (
-        <div className="refby-empty">
-          Nothing references this {labelFor[entityType] || entityType} yet.{canEdit ? ' Use "+ Link" to attach one.' : ''}
-        </div>
-      )}
-
       {refs.incidents && refs.incidents.length > 0 && (
         <div className="refby-group">
           <div className="refby-group-h">
@@ -293,7 +346,7 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
   if (compact) {
     return (
       <>
-        <div className="refby-compact" onClick={() => setModalOpen(true)}>
+        <div className="refby-compact" onClick={() => setDrawerOpen(true)}>
           <span className="refby-compact-label">
             <Icon name="pulse" size={13}/>Referenced by
           </span>
@@ -307,31 +360,27 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
             <Icon name="arrow" size={12} color="var(--sds-fg-tertiary)"/>
           </span>
         </div>
-        {modalOpen && createPortal(
-          <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-            <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
-              <div className="modal-h">
-                <div>
-                  <div className="modal-title">Referenced by</div>
-                  <div className="modal-sub">{total} linked record{total !== 1 ? 's' : ''}</div>
-                </div>
-                <button className="icon-btn" onClick={() => setModalOpen(false)}><Icon name="close" size={18}/></button>
+        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} width={560} className="refby-drawer">
+          <div className="drawer-h">
+            <div>
+              <div className="drawer-title">
+                <Icon name="pulse" size={16} color="var(--sds-brand-primary)"/> Referenced by
               </div>
-              <div className="modal-body refby-modal-body">
-                {fullContent}
-              </div>
-              <div className="modal-f">
-                {canEdit && (
-                  <button className="btn btn-secondary" onClick={() => { setModalOpen(false); setAddOpen(true); }}>
-                    <Icon name="plus" size={12}/> Link record
-                  </button>
-                )}
-                <button className="btn btn-primary" onClick={() => setModalOpen(false)}>Done</button>
-              </div>
+              <div className="drawer-sub">{total} linked record{total !== 1 ? 's' : ''}</div>
             </div>
-          </div>,
-          document.body
-        )}
+            <button className="icon-btn" onClick={() => setDrawerOpen(false)} aria-label="Close"><Icon name="close" size={18}/></button>
+          </div>
+          <div className="drawer-body refby-drawer-body">
+            {total === 0 ? drawerEmpty : fullContent}
+          </div>
+          {canEdit && (
+            <div className="drawer-f">
+              <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
+                <Icon name="plus" size={12}/> Link record
+              </button>
+            </div>
+          )}
+        </Drawer>
         {addLinkPortal}
       </>
     );
@@ -348,7 +397,7 @@ export default function ReferencedByCard({ entityType, entityId, compact = false
           </button>
         )}
       </div>
-      {fullContent}
+      {total === 0 ? inlineEmpty : fullContent}
       {addLinkPortal}
     </div>
   );

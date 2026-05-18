@@ -16,6 +16,7 @@ import api from '../../api/client';
 import { getSite } from '../../api/sites';
 import { getWorkHours, deleteWorkHours, workHoursExportUrl } from '../../api/workHours';
 import Icon from '../../components/shared/Icon';
+import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import WorkHoursModal from './WorkHoursModal';
 import { timeAgo } from '../../utils/time';
 import '../../styles/sites.css';
@@ -103,6 +104,8 @@ export default function SiteDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
   const canEdit = ELEVATED.has(user?.role);
 
   const [site, setSite] = useState(null);
@@ -184,13 +187,23 @@ export default function SiteDetail() {
   };
   const handleDelete = async (row) => {
     const range = `${row.period_start} → ${row.period_end}`;
-    if (!window.confirm(`Delete work hours for ${range}? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: `Delete work hours for ${range}?`,
+      body: 'This permanently removes the period and recalculates any TRIR/DART/LTIR figures that depended on it. The audit log entry is preserved.',
+      confirmLabel: 'Delete period',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteWorkHours(row.id);
       refreshPeriods();
       refreshSite();
     } catch (e) {
-      window.alert(e.response?.data?.error || 'Failed to delete');
+      await alertDialog({
+        title: "Couldn't delete period",
+        body: e.response?.data?.error || 'Failed to delete',
+        tone: 'error',
+      });
     }
   };
   const handleSaved = () => {
@@ -221,7 +234,11 @@ export default function SiteDetail() {
       // Export writes a work_hours_exported audit row — refresh timeline.
       refreshSite();
     } catch (e) {
-      window.alert(e.message || 'Export failed');
+      await alertDialog({
+        title: "Couldn't export work hours",
+        body: e.message || 'Export failed',
+        tone: 'error',
+      });
     }
   };
 

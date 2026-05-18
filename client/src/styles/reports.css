@@ -13,10 +13,17 @@
   font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 50%, #626DF9 100%);
+  background: linear-gradient(135deg, var(--sds-brand-primary) 0%, var(--sds-brand-primary-hover) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+@media (forced-colors: active) {
+  .rpt-hero .rpt-heading {
+    -webkit-text-fill-color: CanvasText;
+    background: none;
+    color: CanvasText;
+  }
 }
 .rpt-hero .rpt-subtitle {
   font-size: 13px;
@@ -30,13 +37,13 @@
 }
 .rpt-site-select .cb-trigger {
   border-color: var(--sds-border);
-  background: #fff;
+  background: var(--sds-bg-surface);
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 .rpt-site-select .cb-trigger:hover {
   border-color: var(--sds-brand-primary);
-  box-shadow: 0 2px 8px rgba(98, 109, 249, 0.1);
+  box-shadow: 0 2px 8px var(--sds-brand-primary-light);
 }
 .rpt-site-select .cb-label {
   font-weight: 600;
@@ -49,7 +56,7 @@
 .rpt-year-select .cb-trigger {
   min-height: 32px;
   border-color: var(--sds-border);
-  background: #fff;
+  background: var(--sds-bg-surface);
   border-radius: 8px;
 }
 .rpt-year-select .cb-label {
@@ -67,13 +74,32 @@
 }
 .rpt-type-card {
   position: relative;
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 14px;
   padding: 18px 18px 16px;
   cursor: pointer;
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  /* Native <button> resets — preserve the original card visuals. */
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  display: block;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.rpt-type-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+}
+/* Keep the active+focus state distinct from default active. */
+.rpt-type-card.active:focus-visible {
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light),
+              0 8px 24px var(--sds-brand-primary-light);
 }
 .rpt-type-card:hover {
   transform: translateY(-2px);
@@ -81,7 +107,7 @@
 }
 .rpt-type-card.active {
   border-color: transparent;
-  box-shadow: 0 0 0 2px var(--sds-brand-primary), 0 8px 24px rgba(98, 109, 249, 0.12);
+  box-shadow: 0 0 0 2px var(--sds-brand-primary), 0 8px 24px var(--sds-brand-primary-light);
 }
 .rpt-type-card::before {
   content: '';
@@ -89,11 +115,11 @@
   top: 0; left: 0; right: 0;
   height: 3px;
 }
-.rpt-type-card.rt-osha300::before { background: linear-gradient(90deg, #2563eb, #3b82f6); }
-.rpt-type-card.rt-osha300a::before { background: linear-gradient(90deg, #0ea5e9, #06b6d4); }
-.rpt-type-card.rt-riddor::before { background: linear-gradient(90deg, #dc2626, #ef4444); }
-.rpt-type-card.rt-safework::before { background: linear-gradient(90deg, #0d9488, #14b8a6); }
-.rpt-type-card.rt-metrics::before { background: linear-gradient(90deg, #8b5cf6, #a855f7); }
+.rpt-type-card.rt-osha300::before { background: var(--sds-info-blue); }
+.rpt-type-card.rt-osha300a::before { background: linear-gradient(90deg, var(--sds-info-blue), var(--sds-info)); }
+.rpt-type-card.rt-riddor::before { background: var(--sds-error); }
+.rpt-type-card.rt-safework::before { background: var(--sds-info); }
+.rpt-type-card.rt-metrics::before { background: var(--sds-brand-primary); }
 
 .rpt-type-badge {
   display: inline-flex;
@@ -106,11 +132,11 @@
   text-transform: uppercase;
   margin-bottom: 10px;
 }
-.rt-osha300 .rpt-type-badge { background: rgba(37, 99, 235, 0.08); color: #2563eb; }
-.rt-osha300a .rpt-type-badge { background: rgba(14, 165, 233, 0.08); color: #0ea5e9; }
-.rt-riddor .rpt-type-badge { background: rgba(220, 38, 38, 0.08); color: #dc2626; }
-.rt-safework .rpt-type-badge { background: rgba(13, 148, 136, 0.08); color: #0d9488; }
-.rt-metrics .rpt-type-badge { background: rgba(139, 92, 246, 0.08); color: #8b5cf6; }
+.rt-osha300 .rpt-type-badge { background: var(--sds-info-bg); color: var(--sds-info-blue); }
+.rt-osha300a .rpt-type-badge { background: var(--sds-info-bg); color: var(--sds-info-blue); }
+.rt-riddor .rpt-type-badge { background: var(--sds-error-bg); color: var(--sds-error); }
+.rt-safework .rpt-type-badge { background: var(--sds-info-bg); color: var(--sds-info); }
+.rt-metrics .rpt-type-badge { background: var(--sds-brand-primary-tint); color: var(--sds-brand-primary); }
 
 .rpt-type-title {
   font-size: 14px;
@@ -134,12 +160,12 @@
   height: 8px;
   border-radius: 50%;
   background: var(--sds-brand-primary);
-  box-shadow: 0 0 0 3px rgba(98, 109, 249, 0.2);
+  box-shadow: 0 0 0 3px var(--sds-brand-primary-glow);
 }
 
 /* Report panel (wraps all report types) */
 .rpt-panel {
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 16px;
   overflow: hidden;
@@ -153,7 +179,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 18px 24px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--sds-gray-100);
 }
 .rpt-panel-title {
   font-size: 16px;
@@ -175,27 +201,27 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: #f0fdf4;
-  color: #16a34a;
+  background: var(--sds-success-bg);
+  color: var(--sds-success);
 }
 .rpt-auto-badge .auto-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #16a34a;
+  background: var(--sds-success);
   animation: autoPulse 2s infinite;
 }
 @keyframes autoPulse {
-  0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4); }
-  70% { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(46, 125, 50, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0); }
 }
 .rpt-panel-body {
   padding: 24px;
 }
 .rpt-panel-footer {
   padding: 14px 24px;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--sds-gray-100);
   display: flex;
   align-items: center;
   gap: 24px;
@@ -222,21 +248,37 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--sds-fg-tertiary);
-  border-bottom: 2px solid #f3f4f6;
+  border-bottom: 2px solid var(--sds-gray-100);
   white-space: nowrap;
+}
+/* Sticky header — keeps column labels visible while scrolling long tables.
+   Requires the scroll container (e.g. .rpt-table-wrap / .rpt-table-scroll)
+   to have overflow:auto, not overflow:hidden. Solid background avoids
+   bleed-through from rows scrolling underneath. */
+.rpt-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--sds-bg-surface-alt);
+}
+/* Right-align numeric columns (header + body) for visual consistency.
+   Pair with className="num" on <th> where the <td> uses .cell-num. */
+.rpt-table th.num,
+.rpt-table td.cell-num {
+  text-align: right;
 }
 .rpt-table td {
   padding: 12px 14px;
   font-size: 13px;
   color: var(--sds-fg-secondary);
-  border-bottom: 1px solid #f9fafb;
+  border-bottom: 1px solid var(--sds-bg-surface-alt);
   vertical-align: top;
 }
 .rpt-table tbody tr {
   transition: background 100ms;
 }
 .rpt-table tbody tr:hover {
-  background: #fafbfe;
+  background: var(--sds-bg-surface-alt);
 }
 .rpt-table tbody tr:last-child td {
   border-bottom: none;
@@ -267,8 +309,8 @@
   width: 20px;
   height: 20px;
   border-radius: 6px;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.1));
-  color: #22c55e;
+  background: var(--sds-success-bg);
+  color: var(--sds-success);
   font-size: 11px;
   font-weight: 800;
 }
@@ -296,9 +338,9 @@
   border-radius: 50%;
   background: currentColor;
 }
-.rpt-status.rs-submitted { background: #f0fdf4; color: #16a34a; }
-.rpt-status.rs-pending { background: #fffbeb; color: #d97706; }
-.rpt-status.rs-draft { background: #f3f4f6; color: #6b7280; }
+.rpt-status.rs-submitted { background: var(--sds-success-bg); color: var(--sds-success); }
+.rpt-status.rs-pending { background: var(--sds-warning-bg); color: var(--sds-warning); }
+.rpt-status.rs-draft { background: var(--sds-gray-100); color: var(--sds-gray-500); }
 
 /* Category pill */
 .rpt-cat-pill {
@@ -310,14 +352,14 @@
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--sds-error-bg);
+  color: var(--sds-error);
 }
 .rpt-cat-pill .cat-dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #dc2626;
+  background: var(--sds-error);
 }
 
 /* 300A two-column layout */
@@ -352,7 +394,7 @@
 .rpt-summary-table td {
   padding: 10px 14px;
   font-size: 13px;
-  border-bottom: 1px solid #f5f5f7;
+  border-bottom: 1px solid var(--sds-bg-surface-alt);
 }
 .rpt-summary-table td:first-child {
   color: var(--sds-fg-secondary);
@@ -367,7 +409,7 @@
   border-bottom: none;
 }
 .rpt-summary-table tr.total-row td {
-  background: linear-gradient(135deg, rgba(98, 109, 249, 0.04), rgba(139, 92, 246, 0.04));
+  background: var(--sds-brand-primary-tint);
   font-weight: 700;
   border-radius: 8px;
 }
@@ -436,16 +478,16 @@
   gap: 14px;
   padding: 16px 20px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #fef2f2, #fff1f2);
-  border: 1px solid #fecaca;
+  background: var(--sds-error-bg);
+  border: 1px solid var(--sds-error-bg);
   margin-bottom: 20px;
 }
 .rpt-riddor-icon {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: rgba(220, 38, 38, 0.1);
-  color: #dc2626;
+  background: var(--sds-error-bg);
+  color: var(--sds-error);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -485,7 +527,7 @@
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #dc2626, #ef4444);
+  background: var(--sds-error);
 }
 .rpt-riddor-stat-label {
   font-size: 11px;
@@ -511,7 +553,7 @@
 }
 .rpt-metric-card {
   position: relative;
-  background: #fff;
+  background: var(--sds-bg-surface);
   border: 1px solid var(--sds-border);
   border-radius: 14px;
   padding: 20px;
@@ -529,10 +571,10 @@
   top: 0; left: 0; right: 0;
   height: 3px;
 }
-.rpt-metric-card.rm-trir::before { background: linear-gradient(90deg, #626DF9, #8b5cf6); }
-.rpt-metric-card.rm-dart::before { background: linear-gradient(90deg, #0ea5e9, #06b6d4); }
-.rpt-metric-card.rm-sev::before { background: linear-gradient(90deg, #f59e0b, #ea580c); }
-.rpt-metric-card.rm-cases::before { background: linear-gradient(90deg, #22c55e, #16a34a); }
+.rpt-metric-card.rm-trir::before { background: var(--sds-brand-primary); }
+.rpt-metric-card.rm-dart::before { background: linear-gradient(90deg, var(--sds-info-blue), var(--sds-info)); }
+.rpt-metric-card.rm-sev::before { background: var(--sds-warning); }
+.rpt-metric-card.rm-cases::before { background: var(--sds-success); }
 
 .rpt-metric-label {
   font-size: 11px;
@@ -574,7 +616,7 @@
 .rpt-loading-bar {
   width: 200px;
   height: 4px;
-  background: #f3f4f6;
+  background: var(--sds-gray-100);
   border-radius: 4px;
   overflow: hidden;
   margin: 0 auto;
@@ -582,7 +624,7 @@
 .rpt-loading-fill {
   width: 40%;
   height: 100%;
-  background: linear-gradient(90deg, var(--sds-brand-primary), #8b5cf6);
+  background: var(--sds-brand-primary);
   border-radius: 4px;
   animation: rptLoad 1.2s ease-in-out infinite;
 }
@@ -618,18 +660,24 @@
   padding: 9px 18px;
   border-radius: 10px;
   border: none;
-  background: linear-gradient(135deg, #626DF9, #8b5cf6);
+  background: var(--sds-brand-primary);
   color: #fff;
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
   transition: all 200ms;
-  box-shadow: 0 2px 10px rgba(98, 109, 249, 0.25);
+  box-shadow: var(--sds-shadow-primary-glow);
   font-family: inherit;
 }
 .rpt-300a-cert-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(98, 109, 249, 0.35);
+  box-shadow: var(--sds-shadow-primary-glow);
+}
+.rpt-300a-cert-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light),
+              var(--sds-shadow-primary-glow);
 }
 .rpt-300a-cert-stamp {
   display: flex;
@@ -637,14 +685,14 @@
   gap: 10px;
   padding: 8px 14px 8px 10px;
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(16, 185, 129, 0.08));
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: var(--sds-success-bg);
+  border: 1px solid rgba(46, 125, 50, 0.3);
 }
 .rpt-300a-cert-stamp-icon {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #22c55e, #10b981);
+  background: var(--sds-success);
   color: #fff;
   display: flex;
   align-items: center;
@@ -654,7 +702,7 @@
 .rpt-300a-cert-stamp-title {
   font-size: 11px;
   font-weight: 700;
-  color: #15803d;
+  color: var(--sds-success);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -705,16 +753,16 @@
 .cert-name-warn {
   display: block;
   font-size: 11.5px;
-  color: #b91c1c;
+  color: var(--sds-error);
   margin-top: 4px;
 }
 .cert-error {
   margin-top: 4px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  color: #b91c1c;
+  background: var(--sds-error-bg);
+  border: 1px solid var(--sds-error-bg);
+  color: var(--sds-error);
   font-size: 12px;
 }
 
@@ -729,11 +777,11 @@
   gap: 8px;
   padding: 10px 18px;
   border-radius: 50px;
-  background: #15803d;
+  background: var(--sds-success);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
-  box-shadow: 0 8px 32px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 8px 32px rgba(46, 125, 50, 0.3);
   z-index: var(--sds-z-toast);
   animation: rpt300aToastIn 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -749,8 +797,8 @@
 
 /* Card color treatment — slate/gray for "internal forensic", visually
    distinct from the regulator-color cards (blue/red/purple). */
-.rpt-type-card.rt-audit::before { background: linear-gradient(90deg, #475569, #64748b); }
-.rt-audit .rpt-type-badge { background: rgba(71, 85, 105, 0.08); color: #475569; }
+.rpt-type-card.rt-audit::before { background: var(--sds-gray-700); }
+.rt-audit .rpt-type-badge { background: var(--sds-gray-100); color: var(--sds-gray-700); }
 
 /* ── Zone A: Filter Toolbar ── */
 .al-toolbar {
@@ -836,7 +884,7 @@
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 .al-selector-card:hover {
-  border-color: rgba(98, 109, 249, 0.3);
+  border-color: var(--sds-brand-primary);
 }
 .al-selector-card.has-value {
   border-color: var(--sds-brand-primary);
@@ -914,7 +962,12 @@
   padding: 0;
   transition: background 120ms ease;
 }
-.al-chip-close:hover { background: rgba(98, 109, 249, 0.15); }
+.al-chip-close:hover { background: var(--sds-brand-primary-light); }
+.al-chip-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+}
 .al-chips-clear {
   font-size: 12px;
   color: var(--sds-fg-tertiary);
@@ -926,6 +979,12 @@
   margin-left: 4px;
 }
 .al-chips-clear:hover { color: var(--sds-error); }
+.al-chips-clear:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sds-brand-primary),
+              0 0 0 5px var(--sds-brand-primary-light);
+  border-radius: var(--sds-radius-xs);
+}
 
 /* ── Zone D: Advanced Filters (collapsible) ── */
 .al-advanced-wrap {
@@ -1126,17 +1185,34 @@
 }
 
 /* Table refinements */
-.rpt-table-wrap { overflow-x: auto; }
+/* Scroll containers for wide / tall tables. Both axes so .rpt-table thead
+   can sticky-stick. max-height keeps the column headers visible without
+   forcing the page itself to scroll — the table scrolls inside its panel. */
+.rpt-table-wrap,
+.rpt-table-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 320px);
+}
 .al-mono {
   font-family: 'SF Mono', Menlo, monospace;
   font-size: 11px;
   color: var(--sds-fg-secondary);
+  font-variant-numeric: tabular-nums;
+}
+/* Tabular figures on reference IDs so columns align row-to-row. */
+.rpt-table .cell-ref {
+  font-variant-numeric: tabular-nums;
 }
 .al-loading, .al-empty {
   text-align: center;
   padding: 24px 8px !important;
   color: var(--sds-fg-tertiary);
   font-style: italic;
+}
+/* Skeleton rows shown while audit-log data is loading. The td padding
+ * matches a real row so the table doesn't visibly resize when data lands. */
+.al-skel-row td {
+  padding: 12px 8px;
 }
 
 /* Pager */
@@ -1204,5 +1280,5 @@
 }
 
 /* OSHA 301 report type card */
-.rt-osha301 { --rt-accent: #7c3aed; }
-.rt-osha301.active { border-color: #7c3aed; background: rgba(124, 58, 237, 0.04); }
+.rt-osha301 { --rt-accent: var(--sds-brand-primary); }
+.rt-osha301.active { border-color: var(--sds-brand-primary); background: var(--sds-brand-primary-tint); }

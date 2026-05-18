@@ -1408,6 +1408,19 @@ function resolveEntityNumber(orgId, raw) {
 function buildAuditWhere(orgId, query) {
   const where = ['al.org_id = ?'];
   const params = [orgId];
+  let siteJoins = '';
+
+  if (query.site_id) {
+    siteJoins = `
+      LEFT JOIN incidents _si ON al.entity_type = 'incident' AND _si.id = al.entity_id
+      LEFT JOIN investigations _sinv ON al.entity_type = 'investigation' AND _sinv.id = al.entity_id
+      LEFT JOIN incidents _sinv_i ON _sinv_i.id = _sinv.incident_id
+      LEFT JOIN capas _sc ON al.entity_type = 'capa' AND _sc.id = al.entity_id
+      LEFT JOIN incidents _sc_i ON _sc_i.id = _sc.incident_id
+      LEFT JOIN inspections _sins ON al.entity_type = 'inspection' AND _sins.id = al.entity_id`;
+    where.push('COALESCE(_si.site_id, _sinv_i.site_id, _sc_i.site_id, _sins.site_id) = ?');
+    params.push(Number(query.site_id));
+  }
 
   // entity_number takes precedence over entity_type + entity_id when present.
   // Resolves to a (type, id) pair; if the number doesn't exist we still apply
@@ -1496,7 +1509,7 @@ function buildAuditWhere(orgId, query) {
   if (query.to) { where.push('al.created_at < ?'); params.push(query.to); }
   if (query.q) { where.push('al.description LIKE ?'); params.push(`%${query.q}%`); }
 
-  return { where: where.join(' AND '), params };
+  return { where: where.join(' AND '), params, siteJoins };
 }
 
 // Catalog UNION distinct-from-DB pairs. The catalog ensures EVERY known
@@ -1555,9 +1568,9 @@ router.get('/audit-log', (req, res) => {
   const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
   const offset = (page - 1) * limit;
 
-  const { where, params } = buildAuditWhere(orgId, req.query);
+  const { where, params, siteJoins } = buildAuditWhere(orgId, req.query);
 
-  const total = db.prepare(`SELECT COUNT(*) as c FROM activity_log al WHERE ${where}`)
+  const total = db.prepare(`SELECT COUNT(*) as c FROM activity_log al ${siteJoins} WHERE ${where}`)
     .get(...params).c;
 
   const rows = db.prepare(`
@@ -1568,6 +1581,7 @@ router.get('/audit-log', (req, res) => {
            u.name AS user_name, u.initials AS user_initials, u.email AS user_email
     FROM activity_log al
     LEFT JOIN users u ON u.id = al.user_id
+    ${siteJoins}
     WHERE ${where}
     ORDER BY al.created_at DESC, al.id DESC
     LIMIT ? OFFSET ?
@@ -1593,7 +1607,7 @@ router.get('/audit-log/export.csv', (req, res) => {
     return res.status(403).json({ error: 'Audit log access is limited to EHS compliance roles.' });
   }
   const orgId = req.user.org_id;
-  const { where, params } = buildAuditWhere(orgId, req.query);
+  const { where, params, siteJoins } = buildAuditWhere(orgId, req.query);
 
   const rows = db.prepare(`
     SELECT al.id, al.created_at, al.entity_type, al.entity_id, al.action, al.description,
@@ -1602,6 +1616,7 @@ router.get('/audit-log/export.csv', (req, res) => {
            u.name AS user_name, u.email AS user_email
     FROM activity_log al
     LEFT JOIN users u ON u.id = al.user_id
+    ${siteJoins}
     WHERE ${where}
     ORDER BY al.created_at DESC, al.id DESC
     LIMIT ?

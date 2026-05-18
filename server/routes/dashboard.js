@@ -110,13 +110,27 @@ router.get('/', (req, res) => {
      ORDER BY i.created_at DESC LIMIT 5`
   ).all(orgId, ...sp);
 
-  const recentActivity = db.prepare(`
-    SELECT al.*, u.name as user_name, u.initials as user_initials
-    FROM activity_log al
-    LEFT JOIN users u ON u.id = al.user_id
-    WHERE al.org_id = ?
-    ORDER BY al.created_at DESC LIMIT 10
-  `).all(orgId);
+  const recentActivity = siteId
+    ? db.prepare(`
+        SELECT al.*, u.name as user_name, u.initials as user_initials
+        FROM activity_log al
+        LEFT JOIN users u ON u.id = al.user_id
+        LEFT JOIN incidents i ON al.entity_type = 'incident' AND i.id = al.entity_id
+        LEFT JOIN investigations inv ON al.entity_type = 'investigation' AND inv.id = al.entity_id
+        LEFT JOIN incidents inv_i ON inv_i.id = inv.incident_id
+        LEFT JOIN capas cap ON al.entity_type = 'capa' AND cap.id = al.entity_id
+        LEFT JOIN incidents cap_i ON cap_i.id = cap.incident_id
+        LEFT JOIN inspections ins ON al.entity_type = 'inspection' AND ins.id = al.entity_id
+        WHERE al.org_id = ? AND COALESCE(i.site_id, inv_i.site_id, cap_i.site_id, ins.site_id) = ?
+        ORDER BY al.created_at DESC LIMIT 10
+      `).all(orgId, siteId)
+    : db.prepare(`
+        SELECT al.*, u.name as user_name, u.initials as user_initials
+        FROM activity_log al
+        LEFT JOIN users u ON u.id = al.user_id
+        WHERE al.org_id = ?
+        ORDER BY al.created_at DESC LIMIT 10
+      `).all(orgId);
 
   const metrics = siteId
     ? calculateMetrics(siteId)

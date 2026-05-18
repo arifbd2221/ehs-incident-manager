@@ -16,7 +16,7 @@
   padding: 0 12px;
   border-radius: 10px;
   border: 1px solid var(--sds-border-input);
-  background: #fff;
+  background: var(--sds-bg-surface);
   cursor: pointer;
   transition: all 150ms ease;
   font-family: var(--sds-font-family);

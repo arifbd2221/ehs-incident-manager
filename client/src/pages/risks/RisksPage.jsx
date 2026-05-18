@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyWhysIllustration } from '../../components/shared/EmptyState';
+import Pagination from '../../components/shared/Pagination';
 import { SEV_GRID, LEVEL_NAMES } from '../../components/shared/RiskMatrix';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -72,6 +74,7 @@ export default function RisksPage() {
 
   const [matrixData, setMatrixData] = useState(null);
   const [matrixMode, setMatrixMode] = useState('inherent');
+  const [matrixFilter, setMatrixFilter] = useState(null);
 
   const limit = 50;
 
@@ -124,6 +127,20 @@ export default function RisksPage() {
     return cell?.count || 0;
   };
 
+  // Filter pipeline: server already applies tab/search → matrix cell filter
+  // is layered on top of that result client-side. Matrix filter uses the
+  // currently-selected matrixMode (inherent vs residual) so chip context
+  // matches the matrix the user just clicked.
+  const filteredRisks = useMemo(() => {
+    if (!matrixFilter) return risks;
+    const likeKey = matrixMode === 'inherent' ? 'inherent_likelihood' : 'residual_likelihood';
+    const consKey = matrixMode === 'inherent' ? 'inherent_consequence' : 'residual_consequence';
+    return risks.filter(r =>
+      r[likeKey] === matrixFilter.likelihood &&
+      r[consKey] === matrixFilter.consequence
+    );
+  }, [risks, matrixFilter, matrixMode]);
+
   return (
     <div className="page">
       {/* Hero */}
@@ -133,16 +150,26 @@ export default function RisksPage() {
           <p className="rsk-subtitle">Identify, assess, and control workplace hazards proactively</p>
         </div>
         <div className="rsk-hero-right">
-          <div className="rsk-view-toggle">
-            <button className={`rsk-view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
+          <div className="rsk-view-toggle" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={`rsk-view-btn ${view === 'list' ? 'active' : ''}`}
+              onClick={() => setView('list')}
+              aria-pressed={view === 'list'}
+            >
               <Icon name="sort" size={13} /> List
             </button>
-            <button className={`rsk-view-btn ${view === 'matrix' ? 'active' : ''}`} onClick={() => setView('matrix')}>
+            <button
+              type="button"
+              className={`rsk-view-btn ${view === 'matrix' ? 'active' : ''}`}
+              onClick={() => { setView('matrix'); setMatrixFilter(null); }}
+              aria-pressed={view === 'matrix'}
+            >
               <Icon name="dashboard" size={13} /> Matrix
             </button>
           </div>
           {canCreate && (
-            <button className="rsk-new-btn" onClick={() => setShowNew(true)}>
+            <button type="button" className="rsk-new-btn" onClick={() => setShowNew(true)}>
               <Icon name="plus" size={15} /> Register Risk
             </button>
           )}
@@ -193,9 +220,11 @@ export default function RisksPage() {
       <div className="rsk-tabs">
         {TABS.map(t => (
           <button
+            type="button"
             key={t.id}
             className={`rsk-tab ${tab === t.id ? 'active' : ''}`}
             onClick={() => { setTab(t.id); setPage(1); }}
+            aria-pressed={tab === t.id}
           >
             {t.label}
             <span className="tab-ct">{tabCount(stats, t.id)}</span>
@@ -206,31 +235,59 @@ export default function RisksPage() {
       {/* Controls */}
       <div className="rsk-controls">
         <div className="rsk-search">
-          <span className="rsk-search-icon"><Icon name="search" size={15} /></span>
+          <Icon name="search" size={15} />
           <input
-            className="input"
+            type="search"
             placeholder="Search risks..."
+            aria-label="Search risks"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
+          {search && (
+            <button className="rsk-search-clear" onClick={() => { setSearch(''); setPage(1); }} title="Clear search">
+              <Icon name="close" size={12} />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Content */}
       {loading ? (
-        <div className="rsk-loading">
-          <div className="rsk-spinner" />
-          <span style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>Loading risks...</span>
+        <div className="rsk-loading" role="status" aria-live="polite">
+          <div className="rsk-spinner" aria-hidden="true" />
+          <span className="sr-only">Loading risks...</span>
+          <span aria-hidden="true" style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>Loading risks...</span>
         </div>
       ) : view === 'list' ? (
-        risks.length === 0 ? (
-          <div className="rsk-empty-state">
-            <div className="rsk-empty-icon"><Icon name="fire" size={26} /></div>
-            <div className="rsk-empty-title">No risks found</div>
-            <div className="rsk-empty-sub">
-              {tab === 'all' ? 'Register your first risk to get started' : `No ${tab} risks`}
+        <>
+          {matrixFilter && (
+            <div className="rsk-matrix-chip" role="status" aria-live="polite">
+              <span>
+                {LIKELIHOOD_LABELS[matrixFilter.likelihood]} likelihood
+                {' × '}
+                {CONSEQUENCE_LABELS[matrixFilter.consequence]} consequence
+                <span className="rsk-matrix-chip-mode"> ({matrixMode})</span>
+              </span>
+              <button
+                type="button"
+                className="rsk-matrix-chip-clear"
+                onClick={() => setMatrixFilter(null)}
+                aria-label="Clear matrix filter"
+              >
+                <Icon name="close" size={12} />
+              </button>
             </div>
-          </div>
+          )}
+          {filteredRisks.length === 0 ? (
+          <EmptyState
+            illustration={<EmptyWhysIllustration />}
+            title="No risks found"
+            body={matrixFilter
+              ? 'No risks match the selected matrix cell.'
+              : tab === 'all'
+                ? 'Register your first risk to get started.'
+                : `No ${tab} risks.`}
+          />
         ) : (
           <div className="rsk-list">
             <table>
@@ -247,8 +304,21 @@ export default function RisksPage() {
                 </tr>
               </thead>
               <tbody>
-                {risks.map(r => (
-                  <tr key={r.id} onClick={() => navigate(`/risks/${r.id}`)}>
+                {filteredRisks.map(r => (
+                  <tr
+                    key={r.id}
+                    className="rsk-row"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open risk ${r.risk_number}: ${r.title}`}
+                    onClick={() => navigate(`/risks/${r.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        if (e.key === ' ') e.preventDefault();
+                        navigate(`/risks/${r.id}`);
+                      }
+                    }}
+                  >
                     <td className="id">{r.risk_number}</td>
                     <td className="rsk-title-cell">{r.title}</td>
                     <td><span className="rsk-cat">{CAT_LABELS[r.category] || r.category}</span></td>
@@ -261,27 +331,36 @@ export default function RisksPage() {
                 ))}
               </tbody>
             </table>
-            {totalPages > 1 && (
-              <div className="rsk-pagination">
-                <span>Page {page} of {totalPages} ({total} risks)</span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</button>
-                  <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
-                </div>
-              </div>
-            )}
+            <Pagination
+              page={page}
+              limit={limit}
+              total={total}
+              label="risk"
+              onPageChange={setPage}
+            />
           </div>
-        )
+        )}
+        </>
       ) : (
         /* Matrix heatmap */
         <div className="rsk-matrix-wrap">
           <div className="rsk-matrix-header">
             <div className="rsk-matrix-title">Risk Matrix Heatmap</div>
-            <div className="rsk-matrix-toggle">
-              <button className={matrixMode === 'inherent' ? 'active' : ''} onClick={() => setMatrixMode('inherent')}>
+            <div className="rsk-matrix-toggle" role="group" aria-label="Risk score mode">
+              <button
+                type="button"
+                className={`rsk-toggle-btn ${matrixMode === 'inherent' ? 'active' : ''}`}
+                onClick={() => setMatrixMode('inherent')}
+                aria-pressed={matrixMode === 'inherent'}
+              >
                 Inherent
               </button>
-              <button className={matrixMode === 'residual' ? 'active' : ''} onClick={() => setMatrixMode('residual')}>
+              <button
+                type="button"
+                className={`rsk-toggle-btn ${matrixMode === 'residual' ? 'active' : ''}`}
+                onClick={() => setMatrixMode('residual')}
+                aria-pressed={matrixMode === 'residual'}
+              >
                 Residual
               </button>
             </div>
@@ -290,22 +369,28 @@ export default function RisksPage() {
             <div className="rsk-matrix-ylabel">
               {LIKELIHOOD_LABELS.map((l, i) => <span key={i}>{l}</span>)}
             </div>
-            <div className="rsk-matrix-grid">
-              {LIKELIHOOD_LABELS.map((_, li) =>
-                CONSEQUENCE_LABELS.map((_, ci) => {
+            <div className="rsk-matrix-grid" role="grid" aria-label="Risk matrix">
+              {LIKELIHOOD_LABELS.map((likelihoodLabel, li) =>
+                CONSEQUENCE_LABELS.map((consequenceLabel, ci) => {
                   const level = SEV_GRID[li][ci];
                   const count = getMatrixCount(li, ci);
+                  // Diagonal wave reveal: cells with the same (li+ci) sum
+                  // appear together, sweeping from top-left to bottom-right.
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={`${li}-${ci}`}
-                      className={`rsk-matrix-cell rsk-cell-${level} ${count === 0 ? 'rsk-cell-empty' : ''}`}
+                      className={`rsk-matrix-cell rsk-cell rsk-cell-${level} ${count === 0 ? 'rsk-cell-empty' : ''}`}
+                      aria-label={`Likelihood ${likelihoodLabel}, Consequence ${consequenceLabel}, ${LEVEL_NAMES[level]} risk, ${count} risks`}
+                      style={{ animationDelay: `${(li + ci) * 40}ms` }}
                       onClick={() => {
+                        setMatrixFilter({ likelihood: li, consequence: ci });
                         setView('list');
                       }}
                     >
-                      <div className="rsk-cell-count">{count}</div>
-                      <div className="rsk-cell-label">{LEVEL_NAMES[level]}</div>
-                    </div>
+                      <div className="rsk-cell-count" aria-hidden="true">{count}</div>
+                      <div className="rsk-cell-label" aria-hidden="true">{LEVEL_NAMES[level]}</div>
+                    </button>
                   );
                 })
               )}

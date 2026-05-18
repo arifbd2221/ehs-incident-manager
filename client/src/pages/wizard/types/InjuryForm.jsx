@@ -3,6 +3,7 @@ import Icon from '../../../components/shared/Icon';
 import ComboBox from '../../../components/shared/ComboBox';
 import DatePicker from '../../../components/shared/DatePicker';
 import BodyMap3D from '../../../components/shared/BodyMap3D';
+import SmartTextarea from '../../../components/shared/SmartTextarea';
 import AffectedPersonModal from '../../incidents/modals/AffectedPersonModal';
 import { getUsers } from '../../../api/users';
 import { showField } from '../../../utils/frameworks';
@@ -302,7 +303,7 @@ export default function InjuryForm({ data, onChange, jurisdiction = ['US-OSHA', 
           </div>
           <div className="field">
             <label className="label">Object / substance that directly harmed</label>
-            <input className="input" value={data.object_substance || ''} onChange={e => onChange({ ...data, object_substance: e.target.value })} placeholder="e.g. conveyor belt, sulfuric acid, forklift"/>
+            <SmartTextarea multiline={false} value={data.object_substance || ''} onChange={v => onChange({ ...data, object_substance: v })} placeholder="e.g. conveyor belt, sulfuric acid, forklift"/>
           </div>
           <div className="field">
             <label className="label">Treatment required</label>

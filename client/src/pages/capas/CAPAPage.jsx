@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getCapas, updateCapa, completeCapa, verifyCapa, rejectCapa } from '../../api/capas';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyCAPAsIllustration } from '../../components/shared/EmptyState';
+import Pagination from '../../components/shared/Pagination';
+import { usePrompt } from '../../components/shared/Dialog';
 import NewCapaModal from '../../components/modals/NewCapaModal';
 import { formatDateShort } from '../../utils/time';
 import '../../styles/capas.css';
@@ -12,10 +15,10 @@ import '../../styles/capas.css';
 const ELEVATED_ROLES = new Set(['supervisor', 'ehs_officer', 'ehs_manager', 'admin']);
 
 const CAPA_LANES = [
-  { id: 'pending', title: 'Pending', color: '#7E7E8C', desc: 'Assigned, not started yet' },
-  { id: 'progress', title: 'In progress', color: '#626DF9', desc: 'Owner working on it' },
-  { id: 'verify', title: 'Pending verification', color: '#ED6C02', desc: 'Owner says complete · verifier required' },
-  { id: 'closed', title: 'Verified · Closed', color: '#2E7D32', desc: 'Verifier confirmed effectiveness' },
+  { id: 'pending', title: 'Pending', color: 'var(--sds-gray-500)', desc: 'Assigned, not started yet' },
+  { id: 'progress', title: 'In progress', color: 'var(--sds-brand-primary)', desc: 'Owner working on it' },
+  { id: 'verify', title: 'Pending verification', color: 'var(--sds-warning)', desc: 'Owner says complete · verifier required' },
+  { id: 'closed', title: 'Verified · Closed', color: 'var(--sds-success)', desc: 'Verifier confirmed effectiveness' },
 ];
 
 const LANE_LABELS = { pending: 'Pending', progress: 'In progress', verify: 'Pending verification', closed: 'Verified · Closed' };
@@ -32,12 +35,20 @@ export default function CAPAPage() {
   const { refreshKey } = useApp();
   const { user } = useAuth();
   const canCreate = ELEVATED_ROLES.has(user?.role);
+  const promptDialog = usePrompt();
   const [showNew, setShowNew] = useState(false);
   const [capas, setCapas] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('board');
   const [tab, setTab] = useState('all');
+
+  // Board needs every CAPA to populate lanes accurately; list view paginates
+  // 50 at a time. Server-side `tab` filter trims the result set further.
+  const LIST_LIMIT = 50;
+  const BOARD_LIMIT = 500;
 
   const [dragId, setDragId] = useState(null);
   const [overCol, setOverCol] = useState(null);
@@ -47,13 +58,20 @@ export default function CAPAPage() {
 
   const load = () => {
     setLoading(true);
-    getCapas()
-      .then(data => { setCapas(data.capas || []); setStats(data.stats || {}); })
+    const params = view === 'list'
+      ? { page, limit: LIST_LIMIT }
+      : { page: 1, limit: BOARD_LIMIT };
+    getCapas(params)
+      .then(data => {
+        setCapas(data.capas || []);
+        setStats(data.stats || {});
+        setTotal(data.total ?? (data.capas?.length || 0));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [refreshKey]);
+  useEffect(load, [refreshKey, view, page]);
 
   const rows = capas.filter(c => {
     if (tab === 'active') return c.status === 'pending' || c.status === 'progress';
@@ -85,6 +103,17 @@ export default function CAPAPage() {
     return '';
   };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
+
+  // Wraps a state updater in the View Transitions API when available so
+  // kanban cards animate between lanes (FLIP) instead of snapping. Falls
+  // back to a plain update on unsupported browsers — current behaviour.
+  const transitionUpdate = (updater) => {
+    if (typeof document !== 'undefined' && typeof document.startViewTransition === 'function') {
+      document.startViewTransition(() => { flushSync(updater); });
+    } else {
+      updater();
+    }
+  };
 
   const handleDragStart = (e, capa) => {
     if (capa.status === 'closed') { e.preventDefault(); return; }
@@ -129,23 +158,36 @@ export default function CAPAPage() {
 
     try {
       if (from === 'pending' && targetLane === 'progress') {
-        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c));
+        transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c)));
         await updateCapa(capaId, { status: 'progress' });
         showToast('CAPA started');
       } else if (from === 'progress' && targetLane === 'pending') {
-        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'pending' } : c));
+        transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'pending' } : c)));
         await updateCapa(capaId, { status: 'pending' });
         showToast('Moved back to pending');
       } else if (from === 'progress' && targetLane === 'verify') {
-        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'verify', progress: 100 } : c));
+        transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'verify', progress: 100 } : c)));
         await completeCapa(capaId, {});
         showToast('Submitted for verification');
       } else if (from === 'verify' && targetLane === 'progress') {
-        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c));
-        await rejectCapa(capaId, { notes: 'Needs more work' });
+        const note = await promptDialog({
+          title: 'Reject this CAPA?',
+          body: 'The CAPA will return to "In progress" and the owner will be notified. Please explain what needs more work — this becomes part of the audit trail.',
+          label: 'Reason for rejection',
+          placeholder: 'e.g. The verification evidence does not show the issue is resolved',
+          required: true,
+          confirmLabel: 'Reject and send back',
+          cancelLabel: 'Cancel',
+        });
+        if (note === null) {
+          setDragId(null);
+          return;
+        }
+        transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'progress' } : c)));
+        await rejectCapa(capaId, { notes: note });
         showToast('Rejected — sent back to progress');
       } else if (from === 'verify' && targetLane === 'closed') {
-        setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'closed' } : c));
+        transitionUpdate(() => setCapas(prev => prev.map(c => c.id === capaId ? { ...c, status: 'closed' } : c)));
         await verifyCapa(capaId, { result: 'effective' });
         showToast('CAPA verified & closed');
       }
@@ -172,15 +214,27 @@ export default function CAPAPage() {
           <p className="capa-subtitle">Corrective & preventive actions across all sites. The CAPA owner cannot close their own action — an independent verifier must confirm.</p>
         </div>
         <div className="capa-hero-right">
-          <div className="inv-view-toggle" role="tablist">
-            <button className={`inv-view-btn ${view === 'board' ? 'active' : ''}`} onClick={() => setView('board')}>
+          <div className="inv-view-toggle" role="tablist" aria-label="View mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'board'}
+              className={`inv-view-btn ${view === 'board' ? 'active' : ''}`}
+              onClick={() => { setView('board'); setPage(1); }}
+            >
               <Icon name="dashboard" size={13}/>Board
             </button>
-            <button className={`inv-view-btn ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'list'}
+              className={`inv-view-btn ${view === 'list' ? 'active' : ''}`}
+              onClick={() => { setView('list'); setPage(1); }}
+            >
               <Icon name="sort" size={13}/>List
             </button>
           </div>
-          <button className="inv-export-btn"><Icon name="export" size={14}/>Export</button>
+          <button type="button" className="inv-export-btn" aria-label="Export CAPAs" disabled><Icon name="export" size={14}/>Export</button>
           {canCreate && (
             <button className="ncap-new-btn" onClick={() => setShowNew(true)}>
               <Icon name="plus" size={14}/>New CAPA
@@ -226,28 +280,39 @@ export default function CAPAPage() {
       {/* Tabs */}
       <div className="capa-tabs">
         {tabs.map(t => (
-          <button key={t.id} className={`capa-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+          <button
+            key={t.id}
+            type="button"
+            className={`capa-tab ${tab === t.id ? 'active' : ''}`}
+            onClick={() => setTab(t.id)}
+            aria-pressed={tab === t.id}
+          >
             {t.label}
             <span className="tab-ct">{t.count}</span>
+            <span className="sr-only">{tab === t.id ? ' (current filter)' : ''}</span>
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div className="capa-skeleton">
+        <div className="capa-skeleton" role="status" aria-live="polite" aria-busy="true">
+          <span className="sr-only">Loading CAPAs</span>
           {[1,2,3,4].map(i => (
             <div key={i} className="capa-skeleton-col">
-              <div className="capa-skeleton-card" style={{ animationDelay: `${i * 100}ms` }}/>
-              <div className="capa-skeleton-card" style={{ height: 100, animationDelay: `${i * 100 + 50}ms` }}/>
+              <div className="skel capa-skeleton-card" style={{ animationDelay: `${i * 100}ms` }}/>
+              <div className="skel capa-skeleton-card" style={{ height: 100, animationDelay: `${i * 100 + 50}ms` }}/>
             </div>
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <div className="capa-empty">
-          <div className="capa-empty-icon"><Icon name="capa" size={26}/></div>
-          <h3>No CAPAs found</h3>
-          <p>{tab !== 'all' ? 'Try adjusting your filter' : 'Assign a CAPA from an investigation to get started'}</p>
-        </div>
+        <EmptyState
+          illustration={<EmptyCAPAsIllustration />}
+          accent={tab !== 'all' ? 'info' : 'success'}
+          title={tab !== 'all' ? 'No CAPAs in this view' : 'No corrective actions yet'}
+          body={tab !== 'all'
+            ? 'Switch tabs or clear your filter to see all CAPAs.'
+            : 'CAPAs are assigned from an investigation. Once one is created it will appear here.'}
+        />
       ) : view === 'board' ? (
         <div className="capa-kanban">
           {CAPA_LANES.map(lane => {
@@ -268,16 +333,30 @@ export default function CAPAPage() {
                   <span className="capa-kcol-count">{cards.length}</span>
                 </div>
                 <div className="capa-kcol-desc">{lane.desc}</div>
-                <div className="capa-kcol-cards">
+                <div className="capa-kcol-cards" aria-label={`${lane.title} column, drop zone`}>
                   {cards.map((c, idx) => (
                     <div
                       key={c.id}
-                      className={`capa-kcard kc-${c.type} ${c.overdue ? 'kc-overdue' : ''} ${dragId === c.id ? 'capa-dragging' : ''}`}
+                      className={`capa-kcard focus-ring kc-${c.type} ${c.overdue ? 'kc-overdue' : ''} ${dragId === c.id ? 'capa-dragging' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`CAPA ${c.capa_number}: ${c.title}. ${lane.title}.`}
+                      aria-grabbed={dragId === c.id}
                       draggable={c.status !== 'closed'}
                       onDragStart={(e) => handleDragStart(e, c)}
                       onDragEnd={handleDragEnd}
                       onClick={() => navigate(`/capas/${c.id}`)}
-                      style={{ animationDelay: `${idx * 50}ms`, cursor: c.status === 'closed' ? 'pointer' : 'grab' }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/capas/${c.id}`);
+                        }
+                      }}
+                      style={{
+                        animationDelay: `${idx * 50}ms`,
+                        cursor: c.status === 'closed' ? 'pointer' : 'grab',
+                        viewTransitionName: `capa-${c.id}`,
+                      }}
                     >
                       {c.status !== 'closed' && <div className="capa-kcard-grip"><Icon name="sort" size={12}/></div>}
                       <div className="capa-kcard-top">
@@ -293,18 +372,22 @@ export default function CAPAPage() {
                         ) : c.source_type === 'incident' && c.incident_id ? (
                           <>
                             <Icon name="incidents" size={11}/>From{' '}
-                            <a
+                            <button
+                              type="button"
                               className="capa-kcard-source-link"
                               onClick={e => { e.stopPropagation(); navigate(`/incidents/${c.incident_id}`); }}
-                            >{c.incident_number}</a>
+                              onKeyDown={e => { if (e.key === ' ') e.preventDefault(); }}
+                            >{c.incident_number}</button>
                           </>
                         ) : c.investigation_id ? (
                           <>
                             <Icon name="investigation" size={11}/>From{' '}
-                            <a
+                            <button
+                              type="button"
                               className="capa-kcard-source-link"
                               onClick={e => { e.stopPropagation(); navigate(`/investigations/${c.investigation_id}`); }}
-                            >{c.investigation_number}</a>
+                              onKeyDown={e => { if (e.key === ' ') e.preventDefault(); }}
+                            >{c.investigation_number}</button>
                           </>
                         ) : null}
                       </div>
@@ -332,10 +415,13 @@ export default function CAPAPage() {
                         </div>
                       </div>
                       <div className="capa-kcard-foot">
-                        <div className="capa-kcard-people">
-                          <span className="capa-kcard-av av-owner">{c.owner_initials}</span>
-                          <span className="capa-kcard-arrow">→</span>
-                          <span className="capa-kcard-av av-verifier">{c.verifier_initials}</span>
+                        <div
+                          className="capa-kcard-people"
+                          aria-label={`Owner: ${c.owner_name || 'unassigned'}, Verifier: ${c.verifier_name || 'unassigned'}`}
+                        >
+                          <span className="capa-kcard-av av-owner" aria-hidden="true">{c.owner_initials}</span>
+                          <span className="capa-kcard-arrow" aria-hidden="true">→</span>
+                          <span className="capa-kcard-av av-verifier" aria-hidden="true">{c.verifier_initials}</span>
                         </div>
                         {c.overdue
                           ? <span className="capa-kcard-flag kf-overdue"><span className="kf-dot"/>Overdue</span>
@@ -361,7 +447,20 @@ export default function CAPAPage() {
             <span>Own</span><span>Ver</span><span>Progress</span><span>Due</span><span>Status</span>
           </div>
           {rows.map(c => (
-            <div key={c.id} className="capa-list-row" onClick={() => navigate(`/capas/${c.id}`)}>
+            <div
+              key={c.id}
+              className="capa-list-row focus-ring"
+              role="button"
+              tabIndex={0}
+              aria-label={`CAPA ${c.capa_number}: ${c.title}. ${LANE_LABELS[c.status] || c.status}.`}
+              onClick={() => navigate(`/capas/${c.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  navigate(`/capas/${c.id}`);
+                }
+              }}
+            >
               <span className="capa-list-ref">{c.capa_number}</span>
               <span className="capa-list-title">{c.title}</span>
               <span>
@@ -373,19 +472,25 @@ export default function CAPAPage() {
                 {c.source_type === 'proactive' ? (
                   'Proactive'
                 ) : c.source_type === 'incident' && c.incident_id ? (
-                  <a
+                  <button
+                    type="button"
                     className="capa-list-source-link"
                     onClick={e => { e.stopPropagation(); navigate(`/incidents/${c.incident_id}`); }}
-                  >{c.incident_number}</a>
+                    onKeyDown={e => { if (e.key === ' ') e.preventDefault(); e.stopPropagation(); }}
+                  >{c.incident_number}</button>
                 ) : c.investigation_id ? (
-                  <a
+                  <button
+                    type="button"
                     className="capa-list-source-link"
                     onClick={e => { e.stopPropagation(); navigate(`/investigations/${c.investigation_id}`); }}
-                  >{c.investigation_number}</a>
+                    onKeyDown={e => { if (e.key === ' ') e.preventDefault(); e.stopPropagation(); }}
+                  >{c.investigation_number}</button>
                 ) : '—'}
               </span>
-              <span><span className="capa-kcard-av av-owner" style={{ width: 24, height: 24, fontSize: 9 }}>{c.owner_initials}</span></span>
-              <span><span className="capa-kcard-av av-verifier" style={{ width: 24, height: 24, fontSize: 9, marginLeft: 0 }}>{c.verifier_initials}</span></span>
+              <span aria-label={`Owner: ${c.owner_name || 'unassigned'}, Verifier: ${c.verifier_name || 'unassigned'}`}>
+                <span className="capa-kcard-av av-owner" style={{ width: 24, height: 24, fontSize: 9 }} aria-hidden="true">{c.owner_initials}</span>
+              </span>
+              <span><span className="capa-kcard-av av-verifier" style={{ width: 24, height: 24, fontSize: 9, marginLeft: 0 }} aria-hidden="true">{c.verifier_initials}</span></span>
               <span>
                 <div className="capa-progress-track" style={{ height: 4 }}>
                   <div className={`capa-progress-fill ${progressClass(c)}`} style={{ width: `${c.progress || 0}%` }}/>
@@ -402,6 +507,14 @@ export default function CAPAPage() {
           {rows.length === 0 && (
             <div style={{ padding: 40, textAlign: 'center', fontSize: 13, color: 'var(--sds-fg-tertiary)' }}>No CAPAs found</div>
           )}
+          <Pagination
+            page={page}
+            limit={LIST_LIMIT}
+            total={total}
+            loading={loading}
+            label="CAPA"
+            onPageChange={setPage}
+          />
         </div>
       )}
 

@@ -3,7 +3,7 @@ import { useState, useRef, useCallback } from 'react';
 const VIEWS = ['front', 'back', 'left', 'right'];
 const VIEW_LABELS = { front: 'Front', back: 'Back', left: 'Left side', right: 'Right side' };
 
-const PART_LABELS = {
+export const PART_LABELS = {
   head: 'Head', face: 'Face', neck: 'Neck',
   l_shoulder: 'Left shoulder', r_shoulder: 'Right shoulder',
   l_upper_arm: 'Left upper arm', r_upper_arm: 'Right upper arm',
@@ -230,8 +230,8 @@ export default function BodyMap3D({ selected = [], onToggle }) {
                 <feComposite in="SourceGraphic" in2="blur" operator="over" />
               </filter>
               <linearGradient id="bm3d-body-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#e8eaf0" />
-                <stop offset="100%" stopColor="#d1d5de" />
+                <stop offset="0%" stopColor="var(--sds-bg-surface-alt)" />
+                <stop offset="100%" stopColor="var(--sds-border)" />
               </linearGradient>
               <linearGradient id="bm3d-sel-fill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#f87171" />

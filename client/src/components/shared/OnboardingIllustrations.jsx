@@ -137,11 +137,11 @@ export function ComplianceIllustration({ className }) {
       <ellipse cx="90" cy="148" rx="50" ry="5" fill="#626DF9" opacity="0.07" />
 
       {/* Clipboard body */}
-      <rect x="50" y="24" width="80" height="120" rx="8" fill="#f0f1fe" stroke="#626DF9" strokeWidth="2" />
+      <rect x="50" y="24" width="80" height="120" rx="8" fill="var(--sds-brand-primary-tint)" stroke="#626DF9" strokeWidth="2" />
 
       {/* Clipboard clip */}
       <rect x="76" y="18" width="28" height="16" rx="4" fill="#626DF9" />
-      <rect x="82" y="22" width="16" height="8" rx="3" fill="#f0f1fe" />
+      <rect x="82" y="22" width="16" height="8" rx="3" fill="var(--sds-brand-primary-tint)" />
 
       {/* Row 1 */}
       <circle cx="72" cy="58" r="8" fill="#22c55e" opacity="0.12" />
@@ -218,8 +218,8 @@ export function FounderIllustration({ className }) {
       <rect x="65" y="72" width="40" height="50" rx="10" fill="#626DF9" /> {/* Torso */}
 
       {/* Person face details */}
-      <circle cx="79" cy="50" r="2" fill="#f0f1fe" /> {/* Left eye */}
-      <circle cx="91" cy="50" r="2" fill="#f0f1fe" /> {/* Right eye */}
+      <circle cx="79" cy="50" r="2" fill="var(--sds-brand-primary-tint)" /> {/* Left eye */}
+      <circle cx="91" cy="50" r="2" fill="var(--sds-brand-primary-tint)" /> {/* Right eye */}
       <path d="M81 57 Q85 60 89 57" stroke="#f0f1fe" strokeWidth="1.5" strokeLinecap="round" fill="none" /> {/* Smile */}
 
       {/* Person arm reaching out */}
@@ -335,13 +335,13 @@ export function SiteIllustration({ className }) {
       <circle className="site-smoke-3" cx="155" cy="28" r="3.5" fill="#626DF9" opacity="0.25" />
 
       {/* Factory windows */}
-      <rect x="100" y="78" width="14" height="12" rx="2" fill="#f0f1fe" opacity="0.8" />
-      <rect x="120" y="78" width="14" height="12" rx="2" fill="#f0f1fe" opacity="0.8" />
-      <rect x="140" y="78" width="14" height="12" rx="2" fill="#f0f1fe" opacity="0.8" />
+      <rect x="100" y="78" width="14" height="12" rx="2" fill="var(--sds-brand-primary-tint)" opacity="0.8" />
+      <rect x="120" y="78" width="14" height="12" rx="2" fill="var(--sds-brand-primary-tint)" opacity="0.8" />
+      <rect x="140" y="78" width="14" height="12" rx="2" fill="var(--sds-brand-primary-tint)" opacity="0.8" />
 
       {/* Factory door */}
       <rect x="110" y="108" width="22" height="32" rx="4" fill="#4338ca" />
-      <rect x="112" y="110" width="18" height="20" rx="3" fill="#f0f1fe" opacity="0.3" />
+      <rect x="112" y="110" width="18" height="20" rx="3" fill="var(--sds-brand-primary-tint)" opacity="0.3" />
 
       {/* Connecting dotted path from pin to factory */}
       <path d="M72 60 Q82 70 90 75" stroke="#626DF9" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.3" fill="none" />

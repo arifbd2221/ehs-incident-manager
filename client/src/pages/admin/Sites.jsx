@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { listSites, createSite, updateSite, deleteSite, importSites, siteImportTemplateUrl, importWorkHours, workHoursImportTemplateUrl } from '../../api/sites';
 import Icon from '../../components/shared/Icon';
+import { useConfirm, useAlert } from '../../components/shared/Dialog';
 import ComboBox from '../../components/shared/ComboBox';
 import ImportModal from '../../components/shared/ImportModal';
 import '../../styles/sites.css';
@@ -53,6 +54,8 @@ const SECTIONS = [
 export default function Sites() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const confirmDialog = useConfirm();
+  const alertDialog = useAlert();
   const canEdit = ELEVATED.has(user?.role);
 
   const [sites, setSites] = useState([]);
@@ -141,7 +144,13 @@ export default function Sites() {
   };
 
   const handleDelete = async (site) => {
-    if (!window.confirm(`Delete site "${site.name}"? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: `Delete site "${site.name}"?`,
+      body: 'This permanently removes the site. The audit log is preserved, but the site cannot be deleted if it still has dependent records (incidents, assets, work hours, sub-sites, or assigned users).',
+      confirmLabel: 'Delete site',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteSite(site.id);
       refresh();
@@ -152,9 +161,17 @@ export default function Sites() {
           .filter(([, c]) => c > 0)
           .map(([k, c]) => `${c} ${k}`)
           .join(', ');
-        alert(`Cannot delete: site has dependent records (${refs}).`);
+        await alertDialog({
+          title: "Couldn't delete site",
+          body: `Cannot delete: site has dependent records (${refs}).`,
+          tone: 'error',
+        });
       } else {
-        alert(data?.error || 'Delete failed');
+        await alertDialog({
+          title: "Couldn't delete site",
+          body: data?.error || 'Delete failed',
+          tone: 'error',
+        });
       }
     }
   };

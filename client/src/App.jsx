@@ -35,10 +35,11 @@ import RisksPage from './pages/risks/RisksPage';
 import RiskDetail from './pages/risks/RiskDetail';
 import ReportWizard from './pages/wizard/ReportWizard';
 import GlobalVoiceFab from './components/voice/GlobalVoiceFab';
+import NotFound from './pages/NotFound';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
-  const { wizardOpen, setWizardOpen, triggerRefresh } = useApp();
+  const { wizardOpen, wizardPrefill, closeWizard, triggerRefresh } = useApp();
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;
   if (!user) return <Navigate to="/login" />;
@@ -53,8 +54,9 @@ function ProtectedLayout() {
       </div>
       {wizardOpen && (
         <ReportWizard
-          onClose={() => setWizardOpen(false)}
-          onSubmit={() => { setWizardOpen(false); triggerRefresh(); }}
+          prefill={wizardPrefill}
+          onClose={closeWizard}
+          onSubmit={() => { closeWizard(); triggerRefresh(); }}
         />
       )}
       <GlobalVoiceFab />
@@ -96,6 +98,7 @@ export default function App() {
         <Route path="/learn" element={<LearnPage />} />
         <Route path="/profile" element={<Settings />} />
       </Route>
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

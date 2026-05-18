@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getInvestigation, addFiveWhy, closeInvestigation, assignCapa, updateInvestigation, addTeamMember } from '../../api/investigations';
+import { getInvestigation, addFiveWhy, suggestNextWhy, closeInvestigation, assignCapa, updateInvestigation, addTeamMember } from '../../api/investigations';
 import { listDocuments } from '../../api/documents';
 import { listFolders } from '../../api/folders';
 import { uploadAttachments, deleteAttachment } from '../../api/incidents';
@@ -10,6 +10,8 @@ import { createLink, deleteLink } from '../../api/links';
 import { useAuth } from '../../context/AuthContext';
 import { frameworkVisibility } from '../../utils/frameworks';
 import Icon from '../../components/shared/Icon';
+import EmptyState, { EmptyWhysIllustration } from '../../components/shared/EmptyState';
+import { useConfirm } from '../../components/shared/Dialog';
 import ComboBox from '../../components/shared/ComboBox';
 import SmartTextarea from '../../components/shared/SmartTextarea';
 import DatePicker from '../../components/shared/DatePicker';
@@ -96,6 +98,7 @@ export default function InvestigationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
   const { showOsha, showRiddor } = frameworkVisibility(user);
   const canEdit = ELEVATED.has(user?.role);
   const canManageLead = LEAD_ROLES.has(user?.role);
@@ -103,7 +106,12 @@ export default function InvestigationDetail() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
-  const [newWhy, setNewWhy] = useState({ question: '', answer: '', is_root_cause: false });
+  const [whyAnswer, setWhyAnswer] = useState('');
+  const [whySuggestion, setWhySuggestion] = useState(null);
+  const [whyLoading, setWhyLoading] = useState(false);
+  const [whySaving, setWhySaving] = useState(false);
+  const [whyEditing, setWhyEditing] = useState(false);
+  const [whyEditedQ, setWhyEditedQ] = useState('');
   const [findings, setFindings] = useState('');
   const [editingFindings, setEditingFindings] = useState(false);
   const [savingField, setSavingField] = useState(null); // 'findings' | 'due_date' | 'status'
@@ -162,6 +170,47 @@ export default function InvestigationDetail() {
     loadDocLibrary(linkFolderId, docSearch);
   }, [docModalOpen, linkFolderId, docSearch]);
 
+  // Derived flag — computed up-front so the effect below can list it as a
+  // dependency without a Temporal Dead Zone clash (later usages below still
+  // reference the same value via the existing `hasRootCause` const).
+  const whyHasRoot = (inv?.five_whys || []).some(w => w.is_root_cause);
+
+  useEffect(() => {
+    if (!inv || inv.status === 'closed') return;
+    const whys = inv.five_whys || [];
+    if (whys.length === 0 || whyHasRoot || whySuggestion || whyLoading) return;
+
+    // Sequence: flip loading + clear stale state FIRST, then fire the request.
+    // On a fast network the old order let the resolution beat setState(true),
+    // so the spinner either skipped or flashed after results landed.
+    let cancelled = false;
+    setWhyLoading(true);
+    setWhySuggestion(null);
+    setWhyEditing(false);
+
+    suggestNextWhy(inv.id)
+      .then(s => {
+        if (cancelled) return;
+        setWhySuggestion(s);
+        setWhyEditedQ(s.next_question);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        const lastWhy = whys[whys.length - 1];
+        const fallbackQ = lastWhy
+          ? `Why did "${lastWhy.answer.length > 60 ? lastWhy.answer.substring(0, 60) + '…' : lastWhy.answer}" happen?`
+          : 'Why did this incident occur?';
+        setWhySuggestion({ next_question: fallbackQ, likely_root_cause: false, root_cause_category: null, ai_unavailable: true, level: whys.length + 1 });
+        setWhyEditedQ(fallbackQ);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setWhyLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [inv?.id, inv?.five_whys?.length, whyHasRoot]);
+
   const navigateLinkFolder = (folder) => {
     if (!folder) { setLinkFolderId(null); setLinkCrumbs([]); return; }
     const byId = new Map(allFolders.map(f => [f.id, f]));
@@ -200,12 +249,18 @@ export default function InvestigationDetail() {
   };
 
   const handleUnlinkDoc = async (linkedDoc) => {
-    if (!window.confirm(`Unlink "${linkedDoc.name}" from this investigation?`)) return;
+    const ok = await confirmDialog({
+      title: `Unlink "${linkedDoc.name}"?`,
+      body: 'The document stays in the library — only its link to this investigation is removed.',
+      confirmLabel: 'Unlink',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteLink(linkedDoc.link_id);
       load();
     } catch (e) {
-      alert(e.response?.data?.error || 'Unlink failed');
+      showToast(e.response?.data?.error || 'Unlink failed');
     }
   };
 
@@ -219,7 +274,7 @@ export default function InvestigationDetail() {
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert(e.response?.data?.error || 'Download failed');
+      showToast(e.response?.data?.error || 'Download failed');
     }
   };
 
@@ -240,7 +295,13 @@ export default function InvestigationDetail() {
   };
 
   const handleDeleteAttachment = async (attachment) => {
-    if (!window.confirm(`Remove "${attachment.filename}"? This is logged in the activity timeline.`)) return;
+    const ok = await confirmDialog({
+      title: `Remove "${attachment.filename}"?`,
+      body: 'The file will be deleted from this investigation. The activity timeline keeps a record of the removal.',
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteAttachment(attachment.id);
       showToast('Attachment removed.');
@@ -278,11 +339,12 @@ export default function InvestigationDetail() {
   );
   if (!inv) return (
     <div className="page invd">
-      <div className="inv-empty">
-        <div className="inv-empty-icon"><Icon name="investigation" size={26}/></div>
-        <h3>Investigation not found</h3>
-        <p>It may have been removed or the ID is incorrect.</p>
-      </div>
+      <EmptyState
+        illustration={<EmptyWhysIllustration />}
+        title="Investigation not found"
+        body="It may have been removed or the ID is incorrect."
+        accent="warning"
+      />
     </div>
   );
 
@@ -304,7 +366,13 @@ export default function InvestigationDetail() {
     }
   };
   const handleUnassign = async () => {
-    if (!window.confirm('Remove the lead investigator? Their team membership stays — only the lead role is cleared.')) return;
+    const ok = await confirmDialog({
+      title: 'Remove the lead investigator?',
+      body: 'Their team membership stays — only the lead role is cleared. You can assign a new lead afterwards.',
+      confirmLabel: 'Remove lead',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await updateInvestigation(inv.id, { lead_investigator: null });
       showToast('Lead unassigned.');
@@ -333,13 +401,31 @@ export default function InvestigationDetail() {
       showToast(err.response?.data?.error || 'Failed to add member.');
     }
   };
-  const handleAddWhy = async () => {
-    if (!newWhy.question.trim() || !newWhy.answer.trim()) return;
+  const existingWhys = inv?.five_whys || [];
+  const nextWhyLevel = existingWhys.length + 1;
+  const hasRootCause = existingWhys.some(w => w.is_root_cause);
+  const isFirstWhy = existingWhys.length === 0;
+
+  const handleSubmitWhy = async (markAsRoot = false) => {
+    const question = isFirstWhy
+      ? 'Why did this incident occur?'
+      : (whyEditing ? whyEditedQ : whySuggestion?.next_question || '');
+    if (!question.trim() || !whyAnswer.trim()) return;
+    setWhySaving(true);
     try {
-      await addFiveWhy(inv.id, newWhy);
-      setNewWhy({ question: '', answer: '', is_root_cause: false });
-      load();
+      const updatedWhys = await addFiveWhy(inv.id, {
+        question: question.trim(),
+        answer: whyAnswer.trim(),
+        is_root_cause: markAsRoot,
+        ai_suggested: !isFirstWhy && !whyEditing,
+        root_cause_category: markAsRoot ? whySuggestion?.root_cause_category : undefined,
+      });
+      setInv(prev => ({ ...prev, five_whys: updatedWhys }));
+      setWhyAnswer('');
+      setWhySuggestion(null);
+      setWhyEditing(false);
     } catch { showToast('Failed to add.'); }
+    finally { setWhySaving(false); }
   };
   // Generic field-saver — surfaces BE errors (silent failure was hiding 403s
   // when a non-elevated worker tried to edit, and made the user think the
@@ -365,14 +451,14 @@ export default function InvestigationDetail() {
 
   const statusLabel = inv.status === 'closed' ? 'Closed' : inv.status === 'capa' ? 'Awaiting CAPA' : inv.status === 'progress' ? 'In progress' : 'Pending';
   const statusClass = `ln-${inv.status}`;
-  const statusColors = { pending: '#7E7E8C', progress: '#626DF9', capa: '#ED6C02', closed: '#2E7D32' };
-  const heroColor = statusColors[inv.status] || '#8b5cf6';
+  const statusColors = { pending: 'var(--sds-gray-500)', progress: 'var(--sds-brand-primary)', capa: 'var(--sds-warning)', closed: 'var(--sds-success)' };
+  const heroColor = statusColors[inv.status] || 'var(--sds-brand-primary)';
 
   return (
     <div className="page invd">
       {/* Breadcrumb */}
       <div className="invd-breadcrumb">
-        <button onClick={() => navigate('/investigations')}>
+        <button onClick={() => navigate('/investigations')} aria-label="Back to investigations">
           <Icon name="arrowL" size={13} /> Investigations
         </button>
         <span className="invd-bc-sep">/</span>
@@ -449,30 +535,120 @@ export default function InvestigationDetail() {
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: 13, color: 'var(--sds-fg-tertiary)', marginBottom: 8 }}>No root-cause analysis steps yet. Add the first "Why" below.</p>
+                <EmptyState
+                  compact
+                  illustration={<EmptyWhysIllustration />}
+                  title="Begin your root cause analysis"
+                  body={'Ask the first "Why" below. Each answer leads to the next question — keep going until you hit the underlying cause.'}
+                />
               )}
 
-              {inv.status !== 'closed' && (
-                <div className="invd-add-why">
-                  <div className="form-group">
-                    <label className="form-label">Question</label>
-                    <input className="form-input" value={newWhy.question} onChange={e => setNewWhy(w => ({ ...w, question: e.target.value }))} placeholder="Why did this happen?"/>
+              {inv.status !== 'closed' && !hasRootCause && (
+                <div className="invd-add-why invd-why-guided" role="form" aria-label={`Add Why ${nextWhyLevel}`}>
+                  <div className="invd-why-question-area">
+                    <label className="form-label" id="why-q-label" htmlFor="why-answer">
+                      Why {nextWhyLevel}
+                      {!isFirstWhy && whySuggestion && !whySuggestion.ai_unavailable && (
+                        <span className="invd-why-ai-badge" aria-label="AI suggested question">AI suggested</span>
+                      )}
+                      {whySuggestion?.ai_unavailable && (
+                        <span className="invd-why-ai-badge offline" aria-label="AI unavailable, generic question">Auto-generated</span>
+                      )}
+                    </label>
+
+                    {whyLoading ? (
+                      <div className="invd-why-thinking" role="status" aria-live="polite">
+                        <div className="invd-why-thinking-dots" aria-hidden="true"><span/><span/><span/></div>
+                        <span>Analyzing previous answer...</span>
+                      </div>
+                    ) : (
+                      <div className="invd-why-q-display">
+                        {whyEditing ? (
+                          <input
+                            className="form-input"
+                            value={whyEditedQ}
+                            onChange={e => setWhyEditedQ(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Escape') { setWhyEditing(false); } }}
+                            aria-label="Edit the suggested question"
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="invd-why-q-text" aria-describedby="why-q-label">
+                            {isFirstWhy ? 'Why did this incident occur?' : whySuggestion?.next_question || ''}
+                          </div>
+                        )}
+                        {!isFirstWhy && whySuggestion && (
+                          <button
+                            className="btn btn-text btn-sm invd-why-edit-q"
+                            onClick={() => {
+                              setWhyEditing(!whyEditing);
+                              if (!whyEditing) setWhyEditedQ(whySuggestion.next_question);
+                            }}
+                            aria-label={whyEditing ? 'Use AI suggested question' : 'Edit the question'}
+                          >
+                            <Icon name="edit" size={11}/>
+                            {whyEditing ? 'Use suggestion' : 'Edit question'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+
                   <div className="form-group">
-                    <label className="form-label">Answer</label>
+                    <label className="form-label" htmlFor="why-answer">Your answer</label>
                     <SmartTextarea
-                      value={newWhy.answer}
-                      onChange={v => setNewWhy(w => ({ ...w, answer: v }))}
+                      value={whyAnswer}
+                      onChange={setWhyAnswer}
                       rows={2}
+                      disabled={whyLoading}
+                      placeholder={whyLoading ? 'Waiting for AI question...' : ''}
                       examples={['Because the machine guard was removed during maintenance and not replaced.', 'Because the SOP did not include a step for verifying guard replacement.', 'Because the training programme did not cover post-maintenance safety checks.']}
                     />
                   </div>
+
+                  {whySuggestion?.likely_root_cause && whyAnswer.trim() && (
+                    <div className="invd-why-root-prompt" role="status" aria-live="polite">
+                      <div className="invd-why-root-icon" aria-hidden="true">★</div>
+                      <div className="invd-why-root-text">
+                        <strong>This looks like it could be the root cause.</strong>
+                        {whySuggestion.root_cause_category && (
+                          <span className="invd-why-root-cat">
+                            Category: {whySuggestion.root_cause_category.replace(/_/g, ' ')}
+                            {whySuggestion.root_cause_category === 'human_factors' && ' — skills, attention, fatigue'}
+                            {whySuggestion.root_cause_category === 'equipment_failure' && ' — mechanical, electrical, wear'}
+                            {whySuggestion.root_cause_category === 'procedure_gap' && ' — SOP missing or inadequate'}
+                            {whySuggestion.root_cause_category === 'training_gap' && ' — insufficient training or competency'}
+                            {whySuggestion.root_cause_category === 'management_oversight' && ' — supervision, resource allocation'}
+                            {whySuggestion.root_cause_category === 'design_flaw' && ' — engineering, ergonomic, layout'}
+                            {whySuggestion.root_cause_category === 'environmental' && ' — workplace conditions'}
+                            {whySuggestion.root_cause_category === 'communication' && ' — information flow, handover'}
+                          </span>
+                        )}
+                      </div>
+                      <button className="btn btn-primary btn-sm" onClick={() => handleSubmitWhy(true)} disabled={whySaving}>
+                        {whySaving ? 'Saving...' : 'Save as root cause'}
+                      </button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setWhySuggestion(s => ({ ...s, likely_root_cause: false }))}>
+                        Continue deeper
+                      </button>
+                    </div>
+                  )}
+
                   <div className="invd-add-why-foot">
-                    <label>
-                      <input type="checkbox" checked={newWhy.is_root_cause} onChange={e => setNewWhy(w => ({ ...w, is_root_cause: e.target.checked }))}/> Mark as root cause
-                    </label>
-                    <button className="invd-why-add-btn" onClick={handleAddWhy} disabled={!newWhy.question.trim() || !newWhy.answer.trim()}>
-                      <Icon name="plus" size={13}/>Add Why
+                    {!whySuggestion?.likely_root_cause && (
+                      <button
+                        type="button"
+                        className="invd-why-mark-root"
+                        onClick={() => handleSubmitWhy(true)}
+                        disabled={!whyAnswer.trim() || whySaving || whyLoading}
+                        aria-label="Save this answer as the root cause"
+                      >
+                        <Icon name="shield" size={12}/>
+                        Mark as root cause
+                      </button>
+                    )}
+                    <button className="invd-why-add-btn" onClick={() => handleSubmitWhy(false)} disabled={!whyAnswer.trim() || whySaving || whyLoading || (!isFirstWhy && !whySuggestion)}>
+                      <Icon name="plus" size={13}/>{whySaving ? 'Saving...' : `Add Why ${nextWhyLevel}`}
                     </button>
                   </div>
                 </div>
@@ -544,6 +720,7 @@ export default function InvestigationDetail() {
                 className="invd-attach-add"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
+                aria-label="Add attachment"
                 style={(inv.attachments || []).length + (inv.linked_documents || []).length === 0 ? { marginLeft: 'auto' } : undefined}
               >
                 {uploading ? (
@@ -568,6 +745,7 @@ export default function InvestigationDetail() {
                     className="invd-attach-add-empty"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
+                    aria-label="Add attachment"
                   >
                     {uploading ? 'Uploading…' : '+ Attach a file'}
                   </button>
@@ -586,6 +764,7 @@ export default function InvestigationDetail() {
                           className="invd-attach-del"
                           onClick={() => handleDeleteAttachment(a)}
                           title="Remove attachment"
+                          aria-label="Delete attachment"
                         >
                           <Icon name="close" size={14}/>
                         </button>
@@ -596,7 +775,7 @@ export default function InvestigationDetail() {
                     <div key={`doc-${d.id}`} className="invd-evidence-item invd-evidence-doc"
                       onClick={() => handleDownloadDoc(d)}
                       style={{ cursor: 'pointer' }}>
-                      <div className="invd-evidence-icon" style={{ background: 'rgba(98,109,249,0.1)', color: '#626DF9' }}>
+                      <div className="invd-evidence-icon" style={{ background: 'var(--sds-brand-primary-light)', color: 'var(--sds-brand-primary)' }}>
                         <Icon name="file" size={16}/>
                       </div>
                       <div className="invd-evidence-info">
@@ -638,7 +817,17 @@ export default function InvestigationDetail() {
               <div className="invd-card-body">
                 <div className="invd-capa-list">
                   {inv.capas.map(c => (
-                    <div key={c.id} className="invd-capa-card" onClick={() => navigate(`/capas/${c.id}`)}>
+                    <div
+                      key={c.id}
+                      className="invd-capa-card focus-ring"
+                      onClick={() => navigate(`/capas/${c.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); navigate(`/capas/${c.id}`); }
+                        else if (e.key === ' ') { e.preventDefault(); navigate(`/capas/${c.id}`); }
+                      }}
+                    >
                       <div className="invd-capa-top">
                         <span className="invd-capa-ref">{c.capa_number}</span>
                         <span className={`invd-capa-status ${capaStatusClass(c.status)}`}>
@@ -681,34 +870,29 @@ export default function InvestigationDetail() {
                   </span>
                 </div>
                 {canEdit && inv.status === 'pending' && (
-                  <div className="invd-summary-row">
-                    <span className="invd-summary-label"/>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => handleSaveField('status', 'progress')}
-                      disabled={savingField === 'status'}
-                    >
-                      <Icon name="arrow" size={12}/>{savingField === 'status' ? 'Starting…' : 'Start investigation'}
-                    </button>
-                  </div>
+                  <button
+                    className="invd-lifecycle-action btn btn-primary btn-sm"
+                    onClick={() => handleSaveField('status', 'progress')}
+                    disabled={savingField === 'status'}
+                  >
+                    <Icon name="arrow" size={12}/>{savingField === 'status' ? 'Starting…' : 'Start investigation'}
+                  </button>
                 )}
                 {canEdit && inv.status === 'progress' && (
-                  <div className="invd-summary-row">
-                    <span className="invd-summary-label"/>
-                    <button
-                      className="btn btn-tertiary btn-sm"
-                      onClick={() => setModal('close')}
-                    >
-                      <Icon name="check" size={12}/>Mark complete & close
-                    </button>
-                  </div>
+                  <button
+                    className="invd-lifecycle-action btn btn-tertiary btn-sm"
+                    onClick={() => setModal('close')}
+                  >
+                    <Icon name="check" size={12}/>Mark complete & close
+                  </button>
                 )}
+                <div className="invd-summary-divider"/>
                 <div className="invd-summary-row">
                   <span className="invd-summary-label">Opened</span>
                   <span className="invd-summary-val">{formatDate(inv.started_at || inv.created_at)}</span>
                 </div>
                 <div className="invd-summary-row">
-                  <span className="invd-summary-label">Target close</span>
+                  <span className="invd-summary-label">Due</span>
                   {inv.status === 'closed' ? (
                     <span className="invd-summary-val muted">{inv.due_date ? formatDate(inv.due_date) : '—'}</span>
                   ) : canEdit ? (
@@ -726,13 +910,13 @@ export default function InvestigationDetail() {
                   <span className="invd-summary-val">
                     {inv.closed_at
                       ? formatDate(inv.closed_at)
-                      : <span className="muted">Open</span>}
+                      : <span className="muted">—</span>}
                   </span>
                 </div>
                 {inv.closed_at && inv.closed_reason && (
-                  <div className="invd-summary-row" style={{ alignItems: 'flex-start' }}>
-                    <span className="invd-summary-label">Close reason</span>
-                    <span className="invd-summary-val" style={{ textAlign: 'right', maxWidth: '60%' }}>{inv.closed_reason}</span>
+                  <div className="invd-summary-row invd-summary-row-top">
+                    <span className="invd-summary-label">Reason</span>
+                    <span className="invd-summary-val invd-summary-val-wrap">{inv.closed_reason}</span>
                   </div>
                 )}
               </div>
@@ -778,7 +962,7 @@ export default function InvestigationDetail() {
                 {showOsha && (
                   <div className="invd-summary-row">
                     <span className="invd-summary-label">OSHA recordable</span>
-                    <span className={`inv-kflag ${inv.osha_recordable ? 'kf-capa' : ''}`} style={!inv.osha_recordable ? { background: '#f3f4f6', color: '#6b7280' } : {}}>
+                    <span className={`inv-kflag ${inv.osha_recordable ? 'kf-capa' : ''}`} style={!inv.osha_recordable ? { background: 'var(--sds-gray-100)', color: 'var(--sds-fg-tertiary)' } : {}}>
                       <span className="kf-dot"/>{inv.osha_recordable ? 'Yes' : 'No'}
                     </span>
                   </div>
@@ -959,8 +1143,19 @@ export default function InvestigationDetail() {
               ) : (
                 <div className="invd-doc-list">
                   {filteredDocs.map(d => (
-                    <div key={d.id} className="invd-doc-row"
-                      onClick={() => !docLinking && handleLinkDoc(d)}>
+                    <div
+                      key={d.id}
+                      className="invd-doc-row focus-ring"
+                      onClick={() => !docLinking && handleLinkDoc(d)}
+                      role="button"
+                      tabIndex={0}
+                      aria-disabled={docLinking || undefined}
+                      onKeyDown={(e) => {
+                        if (docLinking) return;
+                        if (e.key === 'Enter') { e.preventDefault(); handleLinkDoc(d); }
+                        else if (e.key === ' ') { e.preventDefault(); handleLinkDoc(d); }
+                      }}
+                    >
                       <div className="invd-doc-icon"><Icon name="file" size={16}/></div>
                       <div className="invd-doc-info">
                         <div className="invd-doc-name">{d.name}</div>

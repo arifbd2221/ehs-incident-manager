@@ -85,4 +85,29 @@ export function getFieldMeta(key) {
   return FIELD_META[key] || { label: key, prompt: `Please provide: ${key}`, input: 'text' };
 }
 
+// Stable list of required fields that the extraction did NOT provide. Unlike
+// `checkCompleteness().missing`, this does not flip as the user types into a
+// gap-fill input — so text inputs don't unmount mid-keystroke.
+export function getGapFields(extraction, gapValues, sites) {
+  const fields = extraction?.extracted_fields || {};
+  const type = fields.type || gapValues.type;
+  const required = getRequiredFields(type);
+  return required.filter(key => {
+    if (key === 'incident_datetime') return false;
+    if (key === 'site_id') {
+      if (fields.site_id) return false;
+      return !(sites && sites.length === 1);
+    }
+    if (key === 'title') return !fields.title;
+    if (key === 'type') return !fields.type;
+    if (key === 'injured_name')     return !(fields.injured_name || fields.witnesses?.some(w => w.name));
+    if (key === 'affected_name')    return !fields.affected_name;
+    if (key === 'illness_category') return !fields.illness_category;
+    if (key === 'primary_hazard')   return !fields.primary_hazard;
+    if (key === 'equipment_name')   return !(fields.equipment_name || fields.asset_match);
+    if (key === 'substance_name')   return !fields.substance_name;
+    return true;
+  });
+}
+
 export { UNIVERSAL_REQUIRED, TYPE_REQUIRED, ILLNESS_CATEGORIES, HAZARD_TYPES };

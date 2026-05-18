@@ -62,7 +62,7 @@ function nextInspectionNumber() {
 // GET / — list inspections
 // ---------------------------------------------------------------------------
 router.get('/', (req, res) => {
-  const { status, search, template_id, site_id } = req.query;
+  const { status, search, template_id, site_id, page = 1, limit = 50 } = req.query;
   const orgId = req.user.org_id;
 
   const where = ['i.org_id = ?'];
@@ -91,10 +91,24 @@ router.get('/', (req, res) => {
     `SELECT COUNT(*) as count FROM inspections i WHERE ${whereClause}`
   ).get(...params).count;
 
+  // Clamp pagination args so a hostile/odd value can't return everything or
+  // execute a negative offset.
+  const pageNum = Math.max(1, Number(page) || 1);
+  const limitNum = Math.min(200, Math.max(1, Number(limit) || 50));
+  const offset = (pageNum - 1) * limitNum;
+
   const inspections = db.prepare(`
-    SELECT i.*, t.name as template_name, u.name as started_by_name,
+    SELECT i.*, t.name as template_name, t.description as template_description,
+           u.name as started_by_name,
            tv.version_number as template_version_number,
-           s.name as site_name
+           s.name as site_name,
+           (SELECT COUNT(*) FROM inspection_items ii WHERE ii.inspection_id = i.id) as items_total,
+           (SELECT COUNT(*) FROM inspection_items ii
+              WHERE ii.inspection_id = i.id
+                AND (ii.selected_option_id IS NOT NULL OR (ii.response_text IS NOT NULL AND ii.response_text <> ''))
+           ) as items_answered,
+           (SELECT COUNT(*) FROM inspection_items ii WHERE ii.inspection_id = i.id AND ii.is_failed = 1) as items_failed,
+           (SELECT COUNT(*) FROM inspection_items ii WHERE ii.inspection_id = i.id AND ii.is_flagged = 1) as items_flagged
     FROM inspections i
     LEFT JOIN templates t ON t.id = i.template_id
     LEFT JOIN users u ON u.id = i.started_by
@@ -102,9 +116,10 @@ router.get('/', (req, res) => {
     LEFT JOIN sites s ON s.id = i.site_id
     WHERE ${whereClause}
     ORDER BY i.created_at DESC
-  `).all(...params);
+    LIMIT ? OFFSET ?
+  `).all(...params, limitNum, offset);
 
-  res.json({ inspections, total });
+  res.json({ inspections, total, page: pageNum, limit: limitNum });
 });
 
 // ---------------------------------------------------------------------------

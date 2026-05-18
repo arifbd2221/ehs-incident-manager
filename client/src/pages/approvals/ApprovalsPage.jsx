@@ -17,6 +17,7 @@ import {
 } from '../../api/override_requests';
 import { useAuth } from '../../context/AuthContext';
 import Icon from '../../components/shared/Icon';
+import SmartTextarea from '../../components/shared/SmartTextarea';
 import { timeAgo, formatDate } from '../../utils/time';
 import '../../styles/approvals.css';
 
@@ -159,12 +160,12 @@ export default function ApprovalsPage() {
                   </div>
                 ) : (
                   <div className="apr-decide">
-                    <textarea
-                      className="form-textarea"
-                      rows={2}
-                      placeholder="Optional decision note (visible in audit log)"
+                    <SmartTextarea
                       value={noteVal}
-                      onChange={e => setNoteDraft(prev => ({ ...prev, [r.id]: e.target.value }))}
+                      onChange={v => setNoteDraft(prev => ({ ...prev, [r.id]: v }))}
+                      rows={2}
+                      inputClassName="form-textarea"
+                      placeholder="Optional decision note (visible in audit log)"
                     />
                     <div className="apr-actions">
                       <button className="btn btn-primary btn-sm" disabled={busyId === r.id} onClick={() => decide(r.id, 'approve')}>

@@ -6,6 +6,7 @@ import { listActiveStopWorks, acknowledgeStopWork } from '../api/stop_work';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import Icon from '../components/shared/Icon';
+import { useAlert } from '../components/shared/Dialog';
 import { TYPES, typeOf } from '../components/shared/Badges';
 import { timeAgo, formatDate } from '../utils/time';
 import { frameworkVisibility } from '../utils/frameworks';
@@ -35,13 +36,17 @@ const DEFAULT_WIDGETS = [
 
 function mergeLayout(saved) {
   if (!saved?.widgets?.length) return DEFAULT_WIDGETS;
-  const map = new Map(saved.widgets.map(w => [w.id, w]));
   const merged = [];
   const seen = new Set();
   for (const sw of saved.widgets) {
     const def = DEFAULT_WIDGETS.find(d => d.id === sw.id);
     if (def) {
-      merged.push({ ...def, visible: sw.visible, zone: def.zone });
+      // KPI cards are sized for the KPI row only; their zone is fixed.
+      // Left/right widgets can be moved between columns by the user, so we
+      // honour the saved zone if it is one of the two main-grid columns.
+      const savedZone = sw.zone === 'left' || sw.zone === 'right' ? sw.zone : null;
+      const zone = def.zone === 'kpi' ? 'kpi' : (savedZone || def.zone);
+      merged.push({ ...def, visible: sw.visible, zone });
       seen.add(sw.id);
     }
   }
@@ -108,7 +113,7 @@ function DonutChart({ data, size = 160, strokeWidth = 22 }) {
 
 function MiniBar({ pct, color }) {
   return (
-    <div style={{ height: 4, background: '#f1f5f9', borderRadius: 4, flex: 1 }}>
+    <div style={{ height: 4, background: 'var(--sds-bg-surface-alt)', borderRadius: 4, flex: 1 }}>
       <div style={{ height: '100%', borderRadius: 4, background: color, width: `${Math.max(pct, 4)}%`, transition: 'width 500ms cubic-bezier(0.4,0,0.2,1)' }} />
     </div>
   );
@@ -143,68 +148,409 @@ function statusClass(status) {
 
 /* ================================================================
  * CUSTOMIZE DRAWER
+ *
+ * Live preview: the dashboard behind the drawer renders from the same
+ * draft state, so toggles/reorders are visible immediately. Save commits;
+ * Cancel/close discards.
+ *
+ * Drag-and-drop is pointer-based (not native HTML5 drag):
+ *   - Items shift via translateY when others are being dragged over them
+ *   - The dragged row lifts with a shadow + slight scale
+ *   - Settle uses a spring curve; a 6px movement threshold rejects taps
+ *   - Cross-zone drag is allowed between Main and Side columns; KPI is
+ *     isolated because those cards are sized for the KPI strip
  * ================================================================ */
-function CustomizeDrawer({ widgets, onChange, onSave, onClose, saving }) {
-  const dragItem = useRef(null);
-  const dragOver = useRef(null);
+const SECTION_META = {
+  kpi:   { name: 'KPI Row',     desc: 'Compact metrics across the top' },
+  left:  { name: 'Main Column', desc: 'Primary content area' },
+  right: { name: 'Side Column', desc: 'Supporting widgets on the right' },
+};
+const SECTION_ORDER = ['kpi', 'left', 'right'];
+
+// Layout presets — applied to draftWidgets when a chip is clicked. Each
+// returns a new widget array based on DEFAULT_WIDGETS so zones reset to
+// their default columns too (a preset should fully reset, not layer).
+const PRESETS = [
+  {
+    id: 'default',
+    name: 'Default',
+    desc: 'Everything on, default positions',
+    apply: () => DEFAULT_WIDGETS.map(w => ({ ...w })),
+  },
+  {
+    id: 'kpis_only',
+    name: 'KPIs only',
+    desc: 'Just the metric strip',
+    apply: () => DEFAULT_WIDGETS.map(w => ({ ...w, visible: w.zone === 'kpi' })),
+  },
+  {
+    id: 'minimal',
+    name: 'Minimal',
+    desc: 'TRIR, Open Incidents, Recent, Activity',
+    apply: () => {
+      const keep = new Set(['kpi_trir', 'kpi_open', 'recent', 'activity']);
+      return DEFAULT_WIDGETS.map(w => ({ ...w, visible: keep.has(w.id) }));
+    },
+  },
+];
+
+function CustomizeDrawer({ widgets, baselineWidgets, onChange, onSave, onClose, saving }) {
+  // drag = { fromIndex, toIndex, fromZone, toZone, startY, pointerY, height, started, pointerId }
+  const [drag, setDrag] = useState(null);
+  const [bouncing, setBouncing] = useState(null);   // widget id currently doing a toggle-bounce
+  const [showDiscard, setShowDiscard] = useState(false);
+  const [query, setQuery] = useState('');
+  const rowRefs = useRef(new Map());       // flatIdx -> HTMLElement
+  const emptyZoneRefs = useRef(new Map()); // zone -> HTMLElement (only mounted when zone has 0 rows)
+  const listRef = useRef(null);
+  const q = query.trim().toLowerCase();
+  const searching = q.length > 0;
+  const matches = (label) => !searching || label.toLowerCase().includes(q);
+
+  // True when the draft differs from the last saved layout.
+  const hasChanges = useMemo(() => {
+    if (!baselineWidgets || widgets.length !== baselineWidgets.length) return false;
+    for (let i = 0; i < widgets.length; i++) {
+      const a = widgets[i];
+      const b = baselineWidgets[i];
+      if (a.id !== b.id || a.visible !== b.visible || a.zone !== b.zone) return true;
+    }
+    return false;
+  }, [widgets, baselineWidgets]);
+
+  // Anything that would close the drawer goes through this so we can
+  // intercept and show a discard-confirm when there are unsaved changes.
+  const attemptClose = useCallback(() => {
+    if (hasChanges) setShowDiscard(true);
+    else onClose();
+  }, [hasChanges, onClose]);
+
+  const setRowRef = (idx) => (el) => {
+    if (el) rowRefs.current.set(idx, el);
+    else rowRefs.current.delete(idx);
+  };
+  const setEmptyZoneRef = (zone) => (el) => {
+    if (el) emptyZoneRefs.current.set(zone, el);
+    else emptyZoneRefs.current.delete(zone);
+  };
+
+  // Computes the flat-array insertion index for a widget being dropped
+  // into an empty Main or Side column.
+  const insertIdxForEmptyZone = (zone) => {
+    if (zone === 'left') {
+      const firstRight = widgets.findIndex(w => w.zone === 'right');
+      return firstRight >= 0 ? firstRight : widgets.length;
+    }
+    return widgets.length; // 'right' goes to the end
+  };
+
+  // Group widgets by zone, preserving flat-array order within each.
+  const sections = useMemo(() => {
+    const out = { kpi: [], left: [], right: [] };
+    widgets.forEach((w, idx) => {
+      if (out[w.zone]) out[w.zone].push({ ...w, flatIdx: idx });
+    });
+    return out;
+  }, [widgets]);
 
   const toggle = (id) => {
     onChange(widgets.map(w => w.id === id ? { ...w, visible: !w.visible } : w));
+    setBouncing(id);
+    setTimeout(() => setBouncing(prev => (prev === id ? null : prev)), 320);
   };
 
-  const handleDragStart = (idx) => { dragItem.current = idx; };
-  const handleDragEnter = (idx) => { dragOver.current = idx; };
-  const handleDragEnd = () => {
-    if (dragItem.current === null || dragOver.current === null || dragItem.current === dragOver.current) {
-      dragItem.current = null;
-      dragOver.current = null;
+  // Close on Escape so the user always has an escape route. Escape from
+  // the discard sheet dismisses the sheet, not the drawer.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (showDiscard) setShowDiscard(false);
+      else attemptClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [attemptClose, showDiscard]);
+
+  // Apply a preset's visibility/zone profile to the draft. The user still
+  // has to hit Save for it to persist.
+  const applyPreset = (preset) => {
+    onChange(preset.apply());
+    setQuery('');
+  };
+
+  // Keyboard nav on the row list: arrows move focus row-by-row across
+  // sections in DOM order, Space toggles the currently focused row.
+  const handleListKeyDown = (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== ' ') return;
+    const rows = Array.from(listRef.current?.querySelectorAll('.cust-item') || []);
+    if (rows.length === 0) return;
+    const active = document.activeElement;
+    const currentIdx = rows.indexOf(active);
+    if (e.key === ' ') {
+      if (currentIdx >= 0) {
+        e.preventDefault();
+        const id = rows[currentIdx].dataset.widgetId;
+        if (id) toggle(id);
+      }
       return;
     }
-    const updated = [...widgets];
-    const [moved] = updated.splice(dragItem.current, 1);
-    updated.splice(dragOver.current, 0, moved);
-    dragItem.current = null;
-    dragOver.current = null;
-    onChange(updated);
+    e.preventDefault();
+    let nextIdx;
+    if (currentIdx < 0) nextIdx = 0;
+    else if (e.key === 'ArrowDown') nextIdx = Math.min(currentIdx + 1, rows.length - 1);
+    else nextIdx = Math.max(currentIdx - 1, 0);
+    rows[nextIdx]?.focus();
+  };
+
+  // Pick the row whose center is nearest the pointer Y. Respects zone rules:
+  // KPI rows can only target KPI; Main/Side rows can target each other or
+  // an empty-zone placeholder.
+  const computeTarget = (pointerY, fromIdx) => {
+    const fromZone = widgets[fromIdx].zone;
+    const kpiOnly = fromZone === 'kpi';
+
+    let bestIdx = fromIdx;
+    let bestZone = fromZone;
+    let bestDist = Infinity;
+
+    rowRefs.current.forEach((el, idx) => {
+      if (idx === fromIdx) return;
+      const zone = widgets[idx].zone;
+      if (kpiOnly && zone !== 'kpi') return;
+      if (!kpiOnly && zone === 'kpi') return;
+      const r = el.getBoundingClientRect();
+      const center = r.top + r.height / 2;
+      const dist = Math.abs(pointerY - center);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = idx;
+        bestZone = zone;
+      }
+    });
+
+    // Empty-zone placeholders are valid drop targets for Main/Side widgets
+    // so a user can refill a column they previously drained.
+    if (!kpiOnly) {
+      emptyZoneRefs.current.forEach((el, zone) => {
+        if (zone === 'kpi' || zone === fromZone) return;
+        const r = el.getBoundingClientRect();
+        const center = r.top + r.height / 2;
+        const dist = Math.abs(pointerY - center);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = insertIdxForEmptyZone(zone);
+          bestZone = zone;
+        }
+      });
+    }
+
+    return { idx: bestIdx, zone: bestZone };
+  };
+
+  const handlePointerDown = (e, idx) => {
+    if (e.target.closest('.cust-toggle')) return;
+    const row = e.currentTarget;
+    const rect = row.getBoundingClientRect();
+    row.setPointerCapture(e.pointerId);
+    setDrag({
+      fromIndex: idx,
+      toIndex: idx,
+      fromZone: widgets[idx].zone,
+      toZone: widgets[idx].zone,
+      startY: e.clientY,
+      pointerY: e.clientY,
+      height: rect.height + 4, // include 4px row gap
+      started: false,
+      pointerId: e.pointerId,
+    });
+  };
+
+  const handlePointerMove = (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const dy = e.clientY - drag.startY;
+    if (!drag.started && Math.abs(dy) < 6) return;
+    const target = computeTarget(e.clientY, drag.fromIndex);
+    setDrag(prev => prev ? {
+      ...prev,
+      started: true,
+      pointerY: e.clientY,
+      toIndex: target.idx,
+      toZone: target.zone,
+    } : null);
+  };
+
+  const handlePointerUp = (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    if (drag.started && (drag.fromIndex !== drag.toIndex || drag.fromZone !== drag.toZone)) {
+      const next = [...widgets];
+      const [moved] = next.splice(drag.fromIndex, 1);
+      // After removal, indices > fromIndex shift down by 1.
+      const adjustedTo = drag.toIndex > drag.fromIndex ? drag.toIndex - 1 : drag.toIndex;
+      next.splice(adjustedTo, 0, { ...moved, zone: drag.toZone });
+      onChange(next);
+    }
+    setDrag(null);
+  };
+
+  // Visual offset for non-dragged rows so the list opens space for the
+  // dragged row and closes the gap it left behind.
+  const rowOffset = (idx) => {
+    if (!drag || !drag.started || idx === drag.fromIndex) return 0;
+    const { fromIndex, toIndex, fromZone, toZone, height } = drag;
+    const rowZone = widgets[idx].zone;
+
+    if (fromZone === toZone) {
+      // Same-zone reorder
+      if (rowZone !== fromZone) return 0;
+      if (fromIndex < toIndex && idx > fromIndex && idx <= toIndex) return -height;
+      if (fromIndex > toIndex && idx < fromIndex && idx >= toIndex) return height;
+      return 0;
+    }
+
+    // Cross-zone: source rows after fromIndex close the gap; target rows
+    // at or after toIndex open a gap for the incoming row.
+    if (rowZone === fromZone && idx > fromIndex) return -height;
+    if (rowZone === toZone && idx >= toIndex) return height;
+    return 0;
   };
 
   const reset = () => onChange(DEFAULT_WIDGETS);
   const visibleCount = widgets.filter(w => w.visible).length;
+  const activeZone = drag?.started ? drag.toZone : null;
+
+  // Detect whether any section has at least one matching row.
+  const anyMatches = !searching || SECTION_ORDER.some(zone =>
+    sections[zone].some(item => matches(item.label))
+  );
 
   return createPortal(
-    <div className="cust-backdrop" onClick={onClose}>
+    <div className="cust-backdrop cust-backdrop-live" onClick={attemptClose}>
       <div className="cust-drawer" onClick={e => e.stopPropagation()}>
         <div className="cust-header">
           <div>
             <div className="cust-title">Customize Dashboard</div>
-            <div className="cust-sub">Drag to reorder, toggle to show/hide</div>
+            <div className="cust-sub">Changes preview live — Save to keep them</div>
           </div>
-          <button className="icon-btn" onClick={onClose}><Icon name="close" size={18} /></button>
+          <button className="icon-btn" onClick={attemptClose}><Icon name="close" size={18} /></button>
         </div>
 
-        <div className="cust-list">
-          {widgets.map((w, idx) => (
-            <div
-              key={w.id}
-              className={`cust-item ${w.visible ? '' : 'cust-hidden'}`}
-              draggable
-              onDragStart={() => handleDragStart(idx)}
-              onDragEnter={() => handleDragEnter(idx)}
-              onDragEnd={handleDragEnd}
-              onDragOver={e => e.preventDefault()}
-            >
-              <div className="cust-grip"><Icon name="sort" size={14} /></div>
-              <div className="cust-icon"><Icon name={w.icon} size={14} /></div>
-              <span className="cust-label">{w.label}</span>
-              <span className="cust-zone">{w.zone === 'kpi' ? 'KPI' : w.zone === 'left' ? 'Main' : 'Side'}</span>
+        {/* Search + presets */}
+        <div className="cust-tools">
+          <div className="cust-search">
+            <Icon name="search" size={14} />
+            <input
+              type="text"
+              placeholder="Search widgets..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Search widgets"
+            />
+            {query && (
               <button
-                className={`cust-toggle ${w.visible ? 'on' : ''}`}
-                onClick={() => toggle(w.id)}
+                className="cust-search-clear"
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
               >
-                <span className="cust-toggle-dot" />
+                <Icon name="close" size={12} />
               </button>
+            )}
+          </div>
+          <div className="cust-presets">
+            {PRESETS.map(p => (
+              <button
+                key={p.id}
+                className="cust-preset"
+                onClick={() => applyPreset(p)}
+                title={p.desc}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div
+          className="cust-list"
+          ref={listRef}
+          onKeyDown={handleListKeyDown}
+        >
+          {!anyMatches && (
+            <div className="cust-no-matches">
+              <Icon name="search" size={20} />
+              <div className="cust-no-matches-t">No widgets match "{query}"</div>
+              <button className="btn btn-tertiary btn-sm" onClick={() => setQuery('')}>Clear search</button>
             </div>
-          ))}
+          )}
+          {anyMatches && SECTION_ORDER.map(zone => {
+            const items = sections[zone];
+            const filtered = searching ? items.filter(i => matches(i.label)) : items;
+            if (searching && filtered.length === 0) return null;
+            const visible = items.filter(i => i.visible).length;
+            const meta = SECTION_META[zone];
+            const isActiveTarget = activeZone === zone && drag?.fromZone !== zone;
+            return (
+              <div key={zone} className={`cust-section cust-section-${zone}${isActiveTarget ? ' cust-section-active' : ''}`}>
+                <div className="cust-section-h">
+                  <div className="cust-section-name">{meta.name}</div>
+                  <div className="cust-section-meta">
+                    <span className="cust-section-count">{visible} of {items.length}</span>
+                  </div>
+                </div>
+                <div className="cust-section-desc">{meta.desc}</div>
+                <div className="cust-section-rows">
+                  {!searching && items.length === 0 && (
+                    <div
+                      ref={setEmptyZoneRef(zone)}
+                      className={`cust-section-empty${isActiveTarget ? ' cust-section-empty-active' : ''}`}
+                    >
+                      Drop a widget here
+                    </div>
+                  )}
+                  {filtered.map((item, i) => {
+                    const idx = item.flatIdx;
+                    const isDragging = drag?.started && idx === drag.fromIndex;
+                    const ty = isDragging ? (drag.pointerY - drag.startY) : rowOffset(idx);
+                    // Stagger entrance per section (cap at 8 rows so a long
+                    // KPI list doesn't drag the last item in much later).
+                    const enterDelay = `${Math.min(i, 7) * 40}ms`;
+                    return (
+                      <div
+                        key={item.id}
+                        ref={setRowRef(idx)}
+                        data-widget-id={item.id}
+                        tabIndex={0}
+                        className={`cust-item${item.visible ? '' : ' cust-hidden'}${isDragging ? ' cust-dragging' : ''}`}
+                        style={{
+                          transform: `translateY(${ty}px)${isDragging ? ' scale(1.02)' : ''}`,
+                          transition: isDragging
+                            ? 'none'
+                            : 'transform 320ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 200ms ease, background 180ms ease',
+                          zIndex: isDragging ? 10 : 1,
+                          animationDelay: enterDelay,
+                        }}
+                        onPointerDown={(e) => handlePointerDown(e, idx)}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
+                        onPointerCancel={handlePointerUp}
+                      >
+                        <div className="cust-grip"><Icon name="sort" size={14} /></div>
+                        <div className="cust-icon"><Icon name={item.icon} size={14} /></div>
+                        <span className="cust-label">{item.label}</span>
+                        <button
+                          className={`cust-toggle${item.visible ? ' on' : ''}${bouncing === item.id ? ' cust-toggle-pop' : ''}`}
+                          onClick={() => toggle(item.id)}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          aria-label={item.visible ? `Hide ${item.label}` : `Show ${item.label}`}
+                        >
+                          <span className="cust-toggle-dot" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="cust-footer">
@@ -213,11 +559,23 @@ function CustomizeDrawer({ widgets, onChange, onSave, onClose, saving }) {
           </button>
           <div style={{ flex: 1 }} />
           <span className="cust-count">{visibleCount} of {widgets.length} visible</span>
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={onSave} disabled={saving}>
+          <button className="btn btn-secondary btn-sm" onClick={attemptClose}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={onSave} disabled={saving || !hasChanges}>
             {saving ? 'Saving...' : 'Save layout'}
           </button>
         </div>
+
+        {showDiscard && (
+          <div className="cust-discard-sheet" onClick={e => e.stopPropagation()}>
+            <div className="cust-discard-icon"><Icon name="warning" size={24} /></div>
+            <div className="cust-discard-title">Discard changes?</div>
+            <div className="cust-discard-body">You have unsaved changes to your dashboard layout. They will be lost.</div>
+            <div className="cust-discard-actions">
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowDiscard(false)}>Keep editing</button>
+              <button className="btn btn-danger btn-sm" onClick={() => { setShowDiscard(false); onClose(); }}>Discard</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>,
     document.body
@@ -229,6 +587,7 @@ function CustomizeDrawer({ widgets, onChange, onSave, onClose, saving }) {
  * ================================================================ */
 export default function Dashboard() {
   const navigate = useNavigate();
+  const alertDialog = useAlert();
   const { user, saveDashLayout } = useAuth();
   const { showOsha, showRiddor } = frameworkVisibility(user);
   const { setWizardOpen, refreshKey } = useApp();
@@ -239,9 +598,9 @@ export default function Dashboard() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [draftWidgets, setDraftWidgets] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [savedToast, setSavedToast] = useState(false);
 
   const widgets = useMemo(() => mergeLayout(user?.dashboard_layout), [user?.dashboard_layout]);
-  const vis = useCallback((id) => widgets.find(w => w.id === id)?.visible !== false, [widgets]);
 
   const loadStopWorks = useCallback(() => {
     listActiveStopWorks().then(setActiveStopWorks).catch(() => setActiveStopWorks([]));
@@ -256,11 +615,19 @@ export default function Dashboard() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await saveDashLayout(draftWidgets.map(w => ({ id: w.id, visible: w.visible })));
+      await saveDashLayout(draftWidgets.map(w => ({ id: w.id, visible: w.visible, zone: w.zone })));
       setDrawerOpen(false);
+      setSavedToast(true);
     } catch { }
     setSaving(false);
   };
+
+  // Auto-dismiss the "Layout saved" toast.
+  useEffect(() => {
+    if (!savedToast) return;
+    const t = setTimeout(() => setSavedToast(false), 2600);
+    return () => clearTimeout(t);
+  }, [savedToast]);
 
   const elevated = ['supervisor', 'ehs_officer', 'ehs_manager', 'admin'].includes(user?.role);
   const [ackingId, setAckingId] = useState(null);
@@ -280,7 +647,11 @@ export default function Dashboard() {
       }
       loadStopWorks();
     } catch (e) {
-      alert(e.response?.data?.error || 'Acknowledge failed');
+      await alertDialog({
+        title: "Couldn't acknowledge stop work",
+        body: e.response?.data?.error || 'Acknowledge failed',
+        tone: 'error',
+      });
     }
     setAckingId(null);
   };
@@ -331,9 +702,21 @@ export default function Dashboard() {
   const oshaCount = showOsha ? (recentIncidents || []).filter(r => r.osha_recordable).length : 0;
   const riddorCount = showRiddor ? (recentIncidents || []).filter(r => r.riddor_reportable).length : 0;
 
-  const kpiWidgets = widgets.filter(w => w.zone === 'kpi' && w.visible);
-  const leftWidgets = widgets.filter(w => w.zone === 'left' && w.visible);
-  const rightWidgets = widgets.filter(w => w.zone === 'right' && w.visible);
+  // Live-preview source: while the drawer is open we mirror the draft so
+  // toggles/reorders are visible behind the drawer. Hidden widgets stay
+  // mounted but get a ghost overlay; saving filters them out for real.
+  const previewSource = drawerOpen ? draftWidgets : widgets;
+  const includeAll = drawerOpen;
+  const kpiWidgets = previewSource.filter(w => w.zone === 'kpi' && (includeAll || w.visible));
+  const leftWidgets = previewSource.filter(w => w.zone === 'left' && (includeAll || w.visible));
+  const rightWidgets = previewSource.filter(w => w.zone === 'right' && (includeAll || w.visible));
+  const slotClass = (w) => `dash-slot${drawerOpen && !w.visible ? ' dash-slot-ghost' : ''}`;
+  // In preview mode, show an empty-zone placeholder if a column has been
+  // fully drained by cross-zone drag — gives the user a visible target.
+  const leftEmptyPreview = drawerOpen && leftWidgets.length === 0;
+  const rightEmptyPreview = drawerOpen && rightWidgets.length === 0;
+  const renderLeftCol = leftWidgets.length > 0 || leftEmptyPreview;
+  const renderRightCol = rightWidgets.length > 0 || rightEmptyPreview;
 
   const renderWidget = (id) => {
     switch (id) {
@@ -394,11 +777,11 @@ export default function Dashboard() {
             </div>
             <div className="kpi-val"><KpiValue value={kpis.openIncidents || 0} /></div>
             <div className="kpi-foot">
-              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: '#dc2626' }}>{tc.A || 0}</span> A</span>
+              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: 'var(--sds-error)' }}>{tc.A || 0}</span> A</span>
               <span className="kpi-track-sep">&middot;</span>
-              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: '#d97706' }}>{tc.B || 0}</span> B</span>
+              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: 'var(--sds-warning)' }}>{tc.B || 0}</span> B</span>
               <span className="kpi-track-sep">&middot;</span>
-              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: '#059669' }}>{tc.C || 0}</span> C</span>
+              <span className="kpi-track-group"><span className="kpi-track-count" style={{ color: 'var(--sds-success)' }}>{tc.C || 0}</span> C</span>
             </div>
           </div>
         );
@@ -623,8 +1006,6 @@ export default function Dashboard() {
     }
   };
 
-  const hasLeftPair = vis('by_type') && vis('track');
-
   return (
     <div className="page">
       {activeStopWorks.length > 0 && (
@@ -697,34 +1078,64 @@ export default function Dashboard() {
       {/* KPI Row */}
       {kpiWidgets.length > 0 && (
         <div className="kpi-row" style={{ gridTemplateColumns: `repeat(${kpiWidgets.length}, 1fr)` }}>
-          {kpiWidgets.map(w => <div key={w.id}>{renderWidget(w.id)}</div>)}
+          {kpiWidgets.map(w => (
+            <div key={w.id} className={slotClass(w)}>{renderWidget(w.id)}</div>
+          ))}
         </div>
       )}
 
       {/* Main grid */}
-      {(leftWidgets.length > 0 || rightWidgets.length > 0) && (
-        <div className="dash-grid" style={rightWidgets.length === 0 ? { gridTemplateColumns: '1fr' } : leftWidgets.length === 0 ? { gridTemplateColumns: '1fr' } : undefined}>
-          {leftWidgets.length > 0 && (
+      {(renderLeftCol || renderRightCol) && (
+        <div
+          className="dash-grid"
+          style={!renderRightCol ? { gridTemplateColumns: '1fr' } : !renderLeftCol ? { gridTemplateColumns: '1fr' } : undefined}
+        >
+          {renderLeftCol && (
             <div className="dash-left">
-              {hasLeftPair ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                  {renderWidget('by_type')}
-                  {renderWidget('track')}
+              {leftEmptyPreview ? (
+                <div className="dash-zone-empty">
+                  <Icon name="plus" size={18} />
+                  <div className="dash-zone-empty-t">Main column is empty</div>
+                  <div className="dash-zone-empty-s">Drag a widget here from the customize drawer</div>
                 </div>
-              ) : (
-                <>
-                  {vis('by_type') && renderWidget('by_type')}
-                  {vis('track') && renderWidget('track')}
-                </>
-              )}
-              {leftWidgets.filter(w => w.id !== 'by_type' && w.id !== 'track').map(w => (
-                <div key={w.id}>{renderWidget(w.id)}</div>
-              ))}
+              ) : (() => {
+                const byType = leftWidgets.find(w => w.id === 'by_type');
+                const track = leftWidgets.find(w => w.id === 'track');
+                const others = leftWidgets.filter(w => w.id !== 'by_type' && w.id !== 'track');
+                return (
+                  <>
+                    {byType && track ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                        <div className={slotClass(byType)}>{renderWidget('by_type')}</div>
+                        <div className={slotClass(track)}>{renderWidget('track')}</div>
+                      </div>
+                    ) : (
+                      <>
+                        {byType && <div className={slotClass(byType)}>{renderWidget('by_type')}</div>}
+                        {track && <div className={slotClass(track)}>{renderWidget('track')}</div>}
+                      </>
+                    )}
+                    {others.map(w => (
+                      <div key={w.id} className={slotClass(w)}>{renderWidget(w.id)}</div>
+                    ))}
+                  </>
+                );
+              })()}
             </div>
           )}
-          {rightWidgets.length > 0 && (
+          {renderRightCol && (
             <div className="dash-right">
-              {rightWidgets.map(w => <div key={w.id}>{renderWidget(w.id)}</div>)}
+              {rightEmptyPreview ? (
+                <div className="dash-zone-empty">
+                  <Icon name="plus" size={18} />
+                  <div className="dash-zone-empty-t">Side column is empty</div>
+                  <div className="dash-zone-empty-s">Drag a widget here from the customize drawer</div>
+                </div>
+              ) : (
+                rightWidgets.map(w => (
+                  <div key={w.id} className={slotClass(w)}>{renderWidget(w.id)}</div>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -734,11 +1145,23 @@ export default function Dashboard() {
       {drawerOpen && (
         <CustomizeDrawer
           widgets={draftWidgets}
+          baselineWidgets={widgets}
           onChange={setDraftWidgets}
           onSave={handleSave}
           onClose={() => setDrawerOpen(false)}
           saving={saving}
         />
+      )}
+
+      {/* Save-success toast */}
+      {savedToast && createPortal(
+        <div className="dash-saved-toast" role="status" aria-live="polite">
+          <svg className="dash-saved-toast-check" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M5 12.5l4.5 4.5L19 7" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Layout saved
+        </div>,
+        document.body
       )}
     </div>
   );
