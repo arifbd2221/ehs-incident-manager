@@ -86,6 +86,18 @@ function fmtTime(iso) {
   return { hhmm: `${hh12}:${m}`, ampm: h < 12 ? 'AM' : 'PM' };
 }
 
+// Draw a prominent X inside a checkbox by stroking two diagonals. PDFKit's
+// bundled Helvetica lacks a glyph for U+2717 (✗), so a `doc.text('✗', …)`
+// silently drops the mark and the box renders empty — exactly the bug the
+// 2026-05-18 review caught. Lines are font-independent and always visible.
+function drawCheckmark(doc, x, y, size = 8) {
+  doc.save();
+  doc.lineWidth(1.5).strokeColor('#000000');
+  doc.moveTo(x + 1.5, y + 1.5).lineTo(x + size - 1.5, y + size - 1.5).stroke();
+  doc.moveTo(x + size - 1.5, y + 1.5).lineTo(x + 1.5, y + size - 1.5).stroke();
+  doc.restore();
+}
+
 // Yes / No checkbox pair — used for 8) ER and 9) hospitalized.
 function drawYesNo(doc, x, y, value) {
   const yes = value === 1 || value === true || value === 'yes' || value === 'Yes';
@@ -96,15 +108,11 @@ function drawYesNo(doc, x, y, value) {
   doc.rect(x, y, 8, 8).stroke();
   doc.font(FONT_REG).fontSize(8).fillColor('#000000');
   doc.text('Yes', x + 12, y, { lineBreak: false });
-  if (yes) {
-    doc.font(FONT_BOLD).fontSize(10).text('✗', x + 0.5, y - 2, { lineBreak: false });
-  }
+  if (yes) drawCheckmark(doc, x, y);
   // No
   doc.rect(x + 36, y, 8, 8).stroke();
   doc.font(FONT_REG).fontSize(8).text('No', x + 48, y, { lineBreak: false });
-  if (no) {
-    doc.font(FONT_BOLD).fontSize(10).text('✗', x + 36.5, y - 2, { lineBreak: false });
-  }
+  if (no) drawCheckmark(doc, x + 36, y);
   doc.restore();
 }
 
@@ -285,14 +293,10 @@ function drawEmployeeSection(doc, x, y, w, employee) {
   doc.lineWidth(0.6).strokeColor('#000000');
   doc.rect(x + 60, cy, 8, 8).stroke();
   doc.font(FONT_REG).fontSize(8).text('Male', x + 72, cy, { lineBreak: false });
-  if (gender === 'male' || gender === 'm') {
-    doc.font(FONT_BOLD).fontSize(10).text('✗', x + 60.5, cy - 2, { lineBreak: false });
-  }
+  if (gender === 'male' || gender === 'm') drawCheckmark(doc, x + 60, cy);
   doc.rect(x + 110, cy, 8, 8).stroke();
   doc.font(FONT_REG).fontSize(8).text('Female', x + 122, cy, { lineBreak: false });
-  if (gender === 'female' || gender === 'f') {
-    doc.font(FONT_BOLD).fontSize(10).text('✗', x + 110.5, cy - 2, { lineBreak: false });
-  }
+  if (gender === 'female' || gender === 'f') drawCheckmark(doc, x + 110, cy);
   cy += 14;
 
   return cy;
