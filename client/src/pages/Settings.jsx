@@ -46,49 +46,9 @@ function frameworkLabels(codes) {
   return codes.map(c => FRAMEWORK_LABELS[c] || c).join(', ');
 }
 
-const IdBadgeIllust = () => (
-  <svg className="prof-illust" width="64" height="64" viewBox="0 0 52 52" fill="none">
-    <rect x="10" y="7" width="32" height="38" rx="4" stroke="currentColor" strokeWidth="1.5"/>
-    <circle cx="26" cy="20" r="6" stroke="currentColor" strokeWidth="1.5"/>
-    <line x1="18" y1="32" x2="34" y2="32" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    <line x1="21" y1="37" x2="31" y2="37" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    <rect x="22" y="3" width="8" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
-  </svg>
-);
-
-const BuildingIllust = () => (
-  <svg className="prof-illust prof-illust-alt" width="64" height="64" viewBox="0 0 52 52" fill="none">
-    <rect x="14" y="14" width="24" height="28" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-    <rect x="18" y="18" width="5" height="4" rx="1" fill="currentColor" opacity="0.3"/>
-    <rect x="29" y="18" width="5" height="4" rx="1" fill="currentColor" opacity="0.3"/>
-    <rect x="18" y="26" width="5" height="4" rx="1" fill="currentColor" opacity="0.3"/>
-    <rect x="29" y="26" width="5" height="4" rx="1" fill="currentColor" opacity="0.3"/>
-    <rect x="22" y="36" width="8" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-    <path d="M26 10l-10 4h20l-10-4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-  </svg>
-);
-
-const LockIllust = () => (
-  <svg className="prof-illust" width="64" height="64" viewBox="0 0 52 52" fill="none">
-    <rect x="15" y="24" width="22" height="18" rx="3" stroke="currentColor" strokeWidth="1.5"/>
-    <path d="M20 24v-6a6 6 0 0112 0v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    <circle cx="26" cy="32" r="2.5" fill="currentColor" opacity="0.35"/>
-    <line x1="26" y1="34.5" x2="26" y2="37" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-  </svg>
-);
-
-const ShieldIllust = () => (
-  <svg className="prof-illust prof-illust-alt" width="64" height="64" viewBox="0 0 52 52" fill="none">
-    <path d="M26 6L10 14v12c0 11 7 20 16 24 9-4 16-13 16-24V14L26 6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-    <path d="M19 26l5 5 9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
-const InfoRow = ({ icon, color, label, children }) => (
+const InfoRow = ({ icon, label, children }) => (
   <div className="prof-row">
-    <div className="prof-row-icon" style={{ '--ri-color': color }}>
-      <Icon name={icon} size={14} />
-    </div>
+    <div className="prof-row-icon"><Icon name={icon} size={14} /></div>
     <span className="prof-lbl">{label}</span>
     <span className="prof-val">{children}</span>
   </div>
@@ -163,12 +123,12 @@ export default function Profile() {
 
   return (
     <div className="page prof-page">
-      {/* Hero header */}
+      {/* Hero — gradient cover with floating shapes, avatar overlaps cover */}
       <div className="prof-hero">
-        <div className="prof-hero-bg">
-          <div className="prof-hero-shape prof-hs-1" />
-          <div className="prof-hero-shape prof-hs-2" />
-          <div className="prof-hero-shape prof-hs-3" />
+        <div className="prof-cover">
+          <div className="prof-cover-shape prof-cover-shape-1" />
+          <div className="prof-cover-shape prof-cover-shape-2" />
+          <div className="prof-cover-shape prof-cover-shape-3" />
         </div>
         <div className="prof-hero-content">
           <div className="prof-avatar-ring">
@@ -178,11 +138,18 @@ export default function Profile() {
             <h1 className="prof-name">{user.name}</h1>
             <p className="prof-meta">
               <span className="prof-role-badge">{user.role?.replace('_', ' ')}</span>
-              {user.department && <span>· {user.department}</span>}
+              {user.department && (
+                <>
+                  <span className="prof-meta-dot">·</span>
+                  <span className="prof-meta-dept">{user.department}</span>
+                </>
+              )}
+              <span className="prof-meta-dot">·</span>
+              <span className="prof-meta-email">
+                <Icon name="mail" size={12} />{user.email}
+              </span>
             </p>
-            <p className="prof-email"><Icon name="mail" size={12} />{user.email}</p>
           </div>
-          <div style={{ flex: 1 }} />
           <button className="btn btn-secondary btn-sm prof-logout" onClick={logout}>
             <Icon name="logout" size={16} />Sign out
           </button>
@@ -191,22 +158,22 @@ export default function Profile() {
 
       {/* Quick stats */}
       <div className="prof-stats">
-        <div className="prof-stat">
-          <div className="prof-stat-icon" style={{ '--ps-color': 'var(--sds-brand-primary)' }}><Icon name="clock" size={18} /></div>
+        <div className="prof-stat prof-stat-primary">
+          <div className="prof-stat-icon"><Icon name="clock" size={16} /></div>
           <div>
             <div className="prof-stat-val">{joined}</div>
             <div className="prof-stat-lbl">Member since</div>
           </div>
         </div>
-        <div className="prof-stat">
-          <div className="prof-stat-icon" style={{ '--ps-color': 'var(--sds-success)' }}><Icon name="check" size={18} /></div>
+        <div className="prof-stat prof-stat-success">
+          <div className="prof-stat-icon"><Icon name="check" size={16} /></div>
           <div>
             <div className="prof-stat-val"><span className="prof-active-dot" />Active</div>
             <div className="prof-stat-lbl">Account status</div>
           </div>
         </div>
-        <div className="prof-stat">
-          <div className="prof-stat-icon" style={{ '--ps-color': '#F57C00' }}><Icon name="factory" size={18} /></div>
+        <div className="prof-stat prof-stat-warning">
+          <div className="prof-stat-icon"><Icon name="factory" size={16} /></div>
           <div>
             <div className="prof-stat-val">{siteName || '—'}</div>
             <div className="prof-stat-lbl">Assigned site</div>
@@ -214,11 +181,13 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="prof-tabs">
+      {/* Tabs */}
+      <div className="prof-tabs" role="tablist">
         {TABS.map(t => (
           <button
             key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
             className={`prof-tab ${tab === t.id ? 'active' : ''}`}
             onClick={() => { setTab(t.id); setMsg({ type: '', text: '' }); setPwMsg({ type: '', text: '' }); }}
           >
@@ -228,15 +197,18 @@ export default function Profile() {
         ))}
       </div>
 
-      {msg.text && <div className={`prof-msg ${msg.type}`}><Icon name={msg.type === 'ok' ? 'check' : 'warning'} size={14} />{msg.text}</div>}
+      {msg.text && (
+        <div className={`prof-msg ${msg.type}`}>
+          <Icon name={msg.type === 'ok' ? 'check' : 'warning'} size={14} />{msg.text}
+        </div>
+      )}
 
-      {/* Profile tab */}
+      {/* Profile tab — Profile + Organization sections */}
       {tab === 'profile' && (
         <div className="prof-tab-content" key="profile">
           <section className="prof-section">
-            <IdBadgeIllust />
             <div className="prof-sec-h">
-              <div className="prof-sec-icon" style={{ '--si-color': '#626DF9' }}><Icon name="person" size={18} /></div>
+              <div className="prof-sec-icon prof-sec-icon-primary"><Icon name="person" size={18} /></div>
               <div className="prof-sec-title">
                 <span>Personal information</span>
                 <span className="prof-sec-sub">Your profile details and contact info</span>
@@ -250,31 +222,22 @@ export default function Profile() {
 
             {editing ? (
               <div className="prof-fields">
-                <div className="prof-field">
-                  <label>Full name <span className="req">*</span></label>
-                  <div className="auth-input-wrap">
-                    <Icon name="person" size={16} />
-                    <input className="auth-input" value={form.name} onChange={e => set('name', e.target.value)} />
+                <div className="field">
+                  <label className="label">Full name <span className="req">*</span></label>
+                  <input className="input" value={form.name} onChange={e => set('name', e.target.value)} />
+                </div>
+                <div className="field-row">
+                  <div className="field">
+                    <label className="label">Job title</label>
+                    <input className="input" value={form.job_title} onChange={e => set('job_title', e.target.value)} />
+                  </div>
+                  <div className="field">
+                    <label className="label">Department</label>
+                    <input className="input" value={form.department} onChange={e => set('department', e.target.value)} />
                   </div>
                 </div>
-                <div className="prof-field-row">
-                  <div className="prof-field">
-                    <label>Job title</label>
-                    <div className="auth-input-wrap">
-                      <Icon name="briefcase" size={16} />
-                      <input className="auth-input" value={form.job_title} onChange={e => set('job_title', e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="prof-field">
-                    <label>Department</label>
-                    <div className="auth-input-wrap">
-                      <Icon name="factory" size={16} />
-                      <input className="auth-input" value={form.department} onChange={e => set('department', e.target.value)} />
-                    </div>
-                  </div>
-                </div>
-                <div className="prof-field">
-                  <label>Site</label>
+                <div className="field">
+                  <label className="label">Site</label>
                   <ComboBox options={siteOpts} value={String(form.site_id || '')} onChange={v => set('site_id', v)} placeholder="Search sites…" />
                 </div>
                 <div className="prof-actions">
@@ -286,32 +249,31 @@ export default function Profile() {
               </div>
             ) : (
               <div className="prof-info">
-                <InfoRow icon="person" color="#626DF9" label="Name">{user.name}</InfoRow>
-                <InfoRow icon="mail" color="#0DB4F0" label="Email">{user.email}</InfoRow>
-                <InfoRow icon="briefcase" color="#F57C00" label="Job title">{user.job_title || '—'}</InfoRow>
-                <InfoRow icon="factory" color="#E91E63" label="Department">{user.department || '—'}</InfoRow>
-                <InfoRow icon="location" color="#2E7D32" label="Site">{siteName || '—'}</InfoRow>
-                <InfoRow icon="shield" color="#7C3AED" label="Role"><span className="prof-role">{user.role?.replace('_', ' ')}</span></InfoRow>
+                <InfoRow icon="person" label="Name">{user.name}</InfoRow>
+                <InfoRow icon="mail" label="Email">{user.email}</InfoRow>
+                <InfoRow icon="briefcase" label="Job title">{user.job_title || '—'}</InfoRow>
+                <InfoRow icon="factory" label="Department">{user.department || '—'}</InfoRow>
+                <InfoRow icon="location" label="Site">{siteName || '—'}</InfoRow>
+                <InfoRow icon="shield" label="Role"><span className="prof-role">{user.role?.replace('_', ' ')}</span></InfoRow>
               </div>
             )}
           </section>
 
-          <section className="prof-section" style={{ animationDelay: '100ms' }}>
-            <BuildingIllust />
+          <section className="prof-section">
             <div className="prof-sec-h">
-              <div className="prof-sec-icon" style={{ '--si-color': '#E91E63' }}><Icon name="factory" size={18} /></div>
+              <div className="prof-sec-icon prof-sec-icon-info"><Icon name="factory" size={18} /></div>
               <div className="prof-sec-title">
                 <span>Organization</span>
                 <span className="prof-sec-sub">Company and compliance details</span>
               </div>
             </div>
             <div className="prof-info">
-              <InfoRow icon="factory" color="#626DF9" label="Name">{user.org_name || '—'}</InfoRow>
-              <InfoRow icon="globe" color="#0DB4F0" label="Country">{user.country || '—'}</InfoRow>
-              <InfoRow icon="gear" color="#F57C00" label="Industry">{user.industry_sector || '—'}</InfoRow>
-              <InfoRow icon="clipboard" color="#E91E63" label="Frameworks">{frameworkLabels(user.compliance_frameworks) || '—'}</InfoRow>
-              <InfoRow icon="people" color="#2E7D32" label="Company size">{user.company_size || '—'}</InfoRow>
-              {user.naics_code && <InfoRow icon="info" color="#7C3AED" label="NAICS">{user.naics_code}</InfoRow>}
+              <InfoRow icon="factory" label="Name">{user.org_name || '—'}</InfoRow>
+              <InfoRow icon="globe" label="Country">{user.country || '—'}</InfoRow>
+              <InfoRow icon="gear" label="Industry">{user.industry_sector || '—'}</InfoRow>
+              <InfoRow icon="clipboard" label="Frameworks">{frameworkLabels(user.compliance_frameworks) || '—'}</InfoRow>
+              <InfoRow icon="people" label="Company size">{user.company_size || '—'}</InfoRow>
+              {user.naics_code && <InfoRow icon="info" label="NAICS">{user.naics_code}</InfoRow>}
             </div>
             {user.role === 'admin' && <OrgLogoWidget user={user} />}
           </section>
@@ -323,7 +285,7 @@ export default function Profile() {
         <div className="prof-tab-content" key="appearance">
           <section className="prof-section">
             <div className="prof-sec-h">
-              <div className="prof-sec-icon" style={{ '--si-color': '#626DF9' }}><Icon name="eye" size={18} /></div>
+              <div className="prof-sec-icon prof-sec-icon-primary"><Icon name="eye" size={18} /></div>
               <div className="prof-sec-title">
                 <span>Theme</span>
                 <span className="prof-sec-sub">
@@ -364,44 +326,58 @@ export default function Profile() {
       {tab === 'security' && (
         <div className="prof-tab-content" key="security">
           <section className="prof-section">
-            <LockIllust />
             <div className="prof-sec-h">
-              <div className="prof-sec-icon" style={{ '--si-color': '#F57C00' }}><Icon name="shield" size={18} /></div>
+              <div className="prof-sec-icon prof-sec-icon-warning"><Icon name="shield" size={18} /></div>
               <div className="prof-sec-title">
                 <span>Change password</span>
                 <span className="prof-sec-sub">Keep your account secure with a strong password</span>
               </div>
             </div>
 
-            {pwMsg.text && <div className={`prof-msg sm ${pwMsg.type}`}><Icon name={pwMsg.type === 'ok' ? 'check' : 'warning'} size={14} />{pwMsg.text}</div>}
+            {pwMsg.text && (
+              <div className={`prof-msg sm ${pwMsg.type}`}>
+                <Icon name={pwMsg.type === 'ok' ? 'check' : 'warning'} size={14} />{pwMsg.text}
+              </div>
+            )}
 
             <form className="prof-pw" onSubmit={handlePwSubmit}>
-              <div className="prof-field">
-                <label>Current password</label>
-                <div className="auth-input-wrap">
-                  <Icon name="shield" size={16} />
-                  <input className="auth-input" type={showCurrent ? 'text' : 'password'} value={pw.current} onChange={e => setPw(p => ({ ...p, current: e.target.value }))} />
-                  <button type="button" className="auth-pw-toggle" onClick={() => setShowCurrent(v => !v)}>
+              <div className="field">
+                <label className="label">Current password</label>
+                <div className="prof-pw-input">
+                  <input
+                    className="input"
+                    type={showCurrent ? 'text' : 'password'}
+                    value={pw.current}
+                    onChange={e => setPw(p => ({ ...p, current: e.target.value }))}
+                  />
+                  <button type="button" className="prof-pw-toggle" onClick={() => setShowCurrent(v => !v)}>
                     <Icon name={showCurrent ? 'eyeOff' : 'eye'} size={16} />
                   </button>
                 </div>
               </div>
-              <div className="prof-field">
-                <label>New password</label>
-                <div className="auth-input-wrap">
-                  <Icon name="shield" size={16} />
-                  <input className="auth-input" type={showNew ? 'text' : 'password'} value={pw.next} onChange={e => setPw(p => ({ ...p, next: e.target.value }))} placeholder="Min. 8 characters" />
-                  <button type="button" className="auth-pw-toggle" onClick={() => setShowNew(v => !v)}>
+              <div className="field">
+                <label className="label">New password</label>
+                <div className="prof-pw-input">
+                  <input
+                    className="input"
+                    type={showNew ? 'text' : 'password'}
+                    value={pw.next}
+                    onChange={e => setPw(p => ({ ...p, next: e.target.value }))}
+                    placeholder="Min. 8 characters"
+                  />
+                  <button type="button" className="prof-pw-toggle" onClick={() => setShowNew(v => !v)}>
                     <Icon name={showNew ? 'eyeOff' : 'eye'} size={16} />
                   </button>
                 </div>
               </div>
-              <div className="prof-field">
-                <label>Confirm new password</label>
-                <div className="auth-input-wrap">
-                  <Icon name="shield" size={16} />
-                  <input className="auth-input" type="password" value={pw.confirm} onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))} />
-                </div>
+              <div className="field">
+                <label className="label">Confirm new password</label>
+                <input
+                  className="input"
+                  type="password"
+                  value={pw.confirm}
+                  onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))}
+                />
               </div>
               <div className="prof-actions">
                 <button className={`btn btn-primary btn-sm ${pwSaving ? 'auth-loading' : ''}`} type="submit" disabled={pwSaving}>
@@ -411,19 +387,18 @@ export default function Profile() {
             </form>
           </section>
 
-          <section className="prof-section" style={{ animationDelay: '100ms' }}>
-            <ShieldIllust />
+          <section className="prof-section">
             <div className="prof-sec-h">
-              <div className="prof-sec-icon" style={{ '--si-color': '#2E7D32' }}><Icon name="info" size={18} /></div>
+              <div className="prof-sec-icon prof-sec-icon-success"><Icon name="info" size={18} /></div>
               <div className="prof-sec-title">
                 <span>Account details</span>
                 <span className="prof-sec-sub">Your account information and access level</span>
               </div>
             </div>
             <div className="prof-info">
-              <InfoRow icon="clock" color="#626DF9" label="Account created">{joined}</InfoRow>
-              <InfoRow icon="check" color="#2E7D32" label="Account status"><span className="prof-active-dot" />Active</InfoRow>
-              <InfoRow icon="shield" color="#7C3AED" label="Role"><span className="prof-role">{user.role?.replace('_', ' ')}</span></InfoRow>
+              <InfoRow icon="clock" label="Account created">{joined}</InfoRow>
+              <InfoRow icon="check" label="Account status"><span className="prof-active-dot" />Active</InfoRow>
+              <InfoRow icon="shield" label="Role"><span className="prof-role">{user.role?.replace('_', ' ')}</span></InfoRow>
             </div>
           </section>
         </div>
@@ -432,10 +407,6 @@ export default function Profile() {
   );
 }
 
-// WI-01 carry-forward: organisation logo upload widget. Admin-only —
-// rendered inside the Organization section by the parent. Posts to
-// /api/auth/organization/logo (multer single file) and re-applies the
-// returned JWT so the new logo_path is reflected immediately.
 function OrgLogoWidget({ user }) {
   const { updateUserFromToken } = useAuth();
   const fileRef = useRef(null);
@@ -497,16 +468,22 @@ function OrgLogoWidget({ user }) {
   };
 
   return (
-    <div className="prof-info" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--sds-border)' }}>
-      <div className="prof-row" style={{ alignItems: 'center' }}>
+    <div className="prof-logo-block">
+      <div className="prof-row">
         <span className="prof-lbl">Logo on PDFs</span>
-        <span className="prof-val" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span className="prof-val prof-logo-val">
           {logoUrl ? (
-            <img src={logoUrl} alt="Organisation logo" style={{ maxHeight: 36, maxWidth: 120, objectFit: 'contain', border: '1px solid var(--sds-border)', borderRadius: 4, padding: 2 }} />
+            <img className="prof-logo-img" src={logoUrl} alt="Organisation logo" />
           ) : (
-            <span style={{ fontSize: 12, color: 'var(--sds-fg-tertiary)' }}>No logo set — PDFs use the org name only.</span>
+            <span className="prof-logo-empty">No logo set — PDFs use the org name only.</span>
           )}
-          <input ref={fileRef} type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={e => upload(e.target.files?.[0])} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg"
+            className="prof-logo-input"
+            onChange={e => upload(e.target.files?.[0])}
+          />
           <button className="btn btn-secondary btn-sm" type="button" disabled={busy} onClick={() => fileRef.current?.click()}>
             <Icon name="upload" size={13} />{logoUrl ? 'Replace' : 'Upload'}
           </button>
@@ -516,7 +493,7 @@ function OrgLogoWidget({ user }) {
         </span>
       </div>
       {msg.text && (
-        <div className={`prof-msg sm ${msg.type}`} style={{ marginTop: 8 }}>
+        <div className={`prof-msg sm ${msg.type}`}>
           <Icon name={msg.type === 'ok' ? 'check' : 'warning'} size={14} />{msg.text}
         </div>
       )}
